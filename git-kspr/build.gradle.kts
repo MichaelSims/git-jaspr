@@ -3,11 +3,11 @@
 import com.expediagroup.graphql.plugin.gradle.config.GraphQLSerializer
 
 plugins {
-    id("org.jetbrains.kotlin.jvm") version "1.9.10"
+    alias(libs.plugins.kotlin)
     kotlin("plugin.serialization") version "1.9.10"
     application
-    id("com.expediagroup.graphql") version "6.4.1"
-    id("com.diffplug.spotless") version "6.21.0"
+    alias(libs.plugins.graphql)
+    alias(libs.plugins.spotless)
 }
 
 repositories {
@@ -39,21 +39,21 @@ graphql {
 // }
 
 dependencies {
-    implementation("com.github.ajalt.clikt:clikt:4.2.0")
-    implementation("com.expediagroup:graphql-kotlin-ktor-client:6.4.1")
-    implementation("io.ktor:ktor-client-auth:2.3.0")
-    implementation("org.slf4j:slf4j-api:2.0.5")
-    implementation("ch.qos.logback:logback-classic:1.4.6")
-    implementation("org.eclipse.jgit:org.eclipse.jgit:6.3.0.202209071007-r")
-    implementation("org.eclipse.jgit:org.eclipse.jgit.ssh.jsch:6.3.0.202209071007-r")
-    implementation("org.zeroturnaround:zt-exec:1.11")
-    implementation("org.jetbrains.kotlinx:kotlinx-serialization-json:1.5.1")
+    implementation(libs.clikt)
+    implementation(libs.graphql.kotlin.ktor.client)
+    implementation(libs.ktor.client.auth)
+    implementation(libs.slf4j.api)
+    implementation(libs.logback.classic)
+    implementation(libs.jgit)
+    implementation(libs.jgit.ssh)
+    implementation(libs.zt.exec)
+    implementation(libs.kotlinx.serialization.json)
 
-    testImplementation("org.jetbrains.kotlin:kotlin-test-junit5")
-    testImplementation("org.junit.jupiter:junit-jupiter-engine:5.9.1")
-    testImplementation("org.eclipse.jgit:org.eclipse.jgit.junit:6.3.0.202209071007-r")
-    testImplementation("com.nhaarman.mockitokotlin2:mockito-kotlin:2.2.0")
-    testImplementation("org.mockito:mockito-inline:2.23.0")
+    testImplementation(libs.kotlin.test.junit5)
+    testImplementation(libs.junit.jupiter.engine)
+    testImplementation(libs.jgit.junit)
+    testImplementation(libs.mockito.kotlin)
+    testImplementation(libs.mockito.inline)
 }
 
 // Apply a specific Java toolchain to ease working on different environments.
