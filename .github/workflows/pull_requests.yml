@@ -1,0 +1,73 @@
+name: Pull Request
+
+on:
+  pull_request:
+    branches:
+      - 'main'
+
+jobs:
+
+  cancel-previous-runs:
+    name: Cancel Previous Runs
+    runs-on: [ ubuntu-20.04 ]
+
+    steps:
+      - name: Cancel Previous Runs
+        uses: styfle/cancel-workflow-action@b173b6ec0100793626c2d9e6b90435061f4fc3e5  # v0.11.0
+        with:
+          access_token: ${{ github.token }}
+
+  check-commit-message:
+    name: Check Commit Message
+    runs-on: [ ubuntu-20.04 ]
+    steps:
+      - name: Check commit message line length
+        uses: gsactions/commit-message-checker@16fa2d5de096ae0d35626443bcd24f1e756cafee  # v2.0.0
+        with:
+          pattern: "^.{0,74}(\n.*)*$"
+          error: 'Your commit subject should not be longer than 74 characters.'
+          excludeDescription: 'true'
+          excludeTitle: 'true'
+          checkAllCommitMessages: 'true'
+          accessToken: ${{ secrets.GITHUB_TOKEN }}
+      - name: Check commit subject does not end with a period
+        uses: gsactions/commit-message-checker@16fa2d5de096ae0d35626443bcd24f1e756cafee
+        with:
+          pattern: '.+[^\.]$'
+          error: 'Your commit subject should not end in a period.'
+          excludeDescription: 'true'
+          excludeTitle: 'true'
+          checkAllCommitMessages: 'true'
+          accessToken: ${{ secrets.GITHUB_TOKEN }}
+
+  gradle:
+    name: Gradle Build
+    needs: cancel-previous-runs
+    runs-on: [ ubuntu-20.04 ]
+    steps:
+      - uses: actions/checkout@v3
+        with:
+          fetch-depth: 0
+
+      - name: Setup Java
+        uses: actions/setup-java@v3
+        with:
+          distribution: 'zulu'
+          java-version: |
+            11
+          java-package: jdk
+          architecture: x64
+
+      - name: Setup Gradle
+        uses: gradle/gradle-build-action@ef76a971e2fa3f867b617efd72f2fbd72cf6f8bc # v2.8.0
+
+      - name: Run Tests
+        run: ./gradlew build --configure-on-demand --max-workers=4
+        shell: bash
+
+      - name: Publish Unit Test Results
+        uses: EnricoMi/publish-unit-test-result-action@713caf1dd6f1c273144546ed2d79ca24a01f4623  # v2.1.0
+        if: always()
+        with:
+          junit_files: "**/build/test-results/**/*.xml"
+          check_run_annotations: none
