@@ -18,10 +18,6 @@ repositories {
     }
 }
 
-// val graphqlDownloadSDL by tasks.getting(GraphQLDownloadSDLTask::class) {
-//    endpoint.set("https://docs.github.com/public/schema.docs.graphql")
-// }
-
 graphql {
     client {
         sdlEndpoint = "https://docs.github.com/public/schema.docs.graphql"
@@ -30,13 +26,6 @@ graphql {
         serializer = GraphQLSerializer.KOTLINX
     }
 }
-
-// val graphqlGenerateClient by tasks.getting(GraphQLGenerateClientTask::class) {
-//    // we need to overwrite default behavior of using Jackson data model
-//    serializer.set(GraphQLSerializer.KOTLINX)
-//    packageName.set("com.expediagroup.graphql.generated")
-// //    parserOptions.set(GraphQLParserOptions(maxTokens = Int.MAX_VALUE))
-// }
 
 dependencies {
     implementation(libs.clikt)
@@ -67,11 +56,6 @@ application {
     // Define the main class for the application.
     mainClass.set("sims.michael.gitkspr.Cli")
 }
-
-// tasks.named<Test>("test") {
-//    // Use JUnit Platform for unit tests.
-//    useJUnitPlatform()
-// }
 
 val nonDefaultTestTags = mapOf(
     "functional" to "Functional tests",
