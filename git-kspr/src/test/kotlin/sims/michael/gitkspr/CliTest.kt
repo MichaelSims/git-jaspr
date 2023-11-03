@@ -124,12 +124,12 @@ class CliTest {
 
     @Test
     fun `trace logs are written`() {
-                        val scratchDir = createTempDir()
-                        val expected = config(
-                            workingDirectory = scratchDir.repoDir(),
-                            gitHubInfo = GitHubInfo("host", "owner", "name"),
-                            logsDirectory = scratchDir.logsDir(),
-                        )
+        val scratchDir = createTempDir()
+        val expected = config(
+            workingDirectory = scratchDir.repoDir(),
+            gitHubInfo = GitHubInfo("host", "owner", "name"),
+            logsDirectory = scratchDir.logsDir(),
+        )
         executeCli(
             scratchDir,
             "git@host:owner/name.git",
