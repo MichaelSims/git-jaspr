@@ -1,5 +1,6 @@
 plugins {
     alias(libs.plugins.kotlin)
+    alias(libs.plugins.kotlin.kapt)
     alias(libs.plugins.spotless)
 }
 
@@ -17,6 +18,12 @@ repositories {
 dependencies {
     implementation(libs.slf4j.api)
     implementation(libs.logback.classic)
+
+    implementation(libs.kotlinpoet)
+    implementation(libs.kotlinpoet.metadata)
+    kapt(libs.auto.service)
+    annotationProcessor(libs.auto.service)
+    compileOnly(libs.auto.service)
 
     testImplementation(libs.kotlin.test.junit5)
     testImplementation(libs.junit.jupiter.engine)

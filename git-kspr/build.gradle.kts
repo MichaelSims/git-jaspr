@@ -5,6 +5,7 @@ import com.expediagroup.graphql.plugin.gradle.config.GraphQLSerializer
 plugins {
     alias(libs.plugins.kotlin)
     alias(libs.plugins.kotlin.serialization)
+    alias(libs.plugins.kotlin.kapt)
     alias(libs.plugins.graphql)
     alias(libs.plugins.spotless)
     application
@@ -29,7 +30,13 @@ dependencies {
     implementation(libs.jgit.ssh)
     implementation(libs.zt.exec)
     implementation(libs.kotlinx.serialization.json)
+    implementation(project(":data-class-fragment"))
 
+    annotationProcessor(libs.auto.service)
+    implementation(libs.auto.service)
+    kapt(libs.auto.service)
+
+    kaptTest(project(":data-class-fragment"))
     testImplementation(libs.kotlin.test.junit5)
     testImplementation(libs.junit.jupiter.engine)
     testImplementation(libs.jgit.junit)

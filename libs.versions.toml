@@ -1,13 +1,16 @@
 [versions]
 kotlin = "1.9.10"
+kotlinpoet = "1.13.2"
 
 [plugins]
 kotlin = { id = "org.jetbrains.kotlin.jvm", version.ref = "kotlin" }
+kotlin-kapt = { id = "org.jetbrains.kotlin.kapt", version.ref = "kotlin" }
 kotlin-serialization = { id = "org.jetbrains.kotlin.plugin.serialization", version.ref = "kotlin" }
 graphql = { id = "com.expediagroup.graphql", version = "6.4.1" }
 spotless = { id = "com.diffplug.spotless", version = "6.21.0" }
 
 [libraries]
+auto-service = { module = "com.google.auto.service:auto-service", version = "1.0.1" }
 clikt = { module = "com.github.ajalt.clikt:clikt", version = "4.2.0" }
 graphql-kotlin-ktor-client = { module = "com.expediagroup:graphql-kotlin-ktor-client", version = "6.4.1" }
 jgit = { module = "org.eclipse.jgit:org.eclipse.jgit", version = "6.3.0.202209071007-r" }
@@ -15,6 +18,8 @@ jgit-junit = { module = "org.eclipse.jgit:org.eclipse.jgit.junit", version = "6.
 jgit-ssh = { module = "org.eclipse.jgit:org.eclipse.jgit.ssh.jsch", version = "6.3.0.202209071007-r" }
 junit-jupiter-engine = { module = "org.junit.jupiter:junit-jupiter-engine", version = "5.9.1" }
 kotlin-test-junit5 = { module = "org.jetbrains.kotlin:kotlin-test-junit5", version.ref = "kotlin" }
+kotlinpoet = { module = "com.squareup:kotlinpoet", version.ref = "kotlinpoet" }
+kotlinpoet-metadata = { module = "com.squareup:kotlinpoet-metadata", version.ref = "kotlinpoet" }
 kotlinx-serialization-json = { module = "org.jetbrains.kotlinx:kotlinx-serialization-json", version = "1.5.1" }
 ktor-client-auth = { module = "io.ktor:ktor-client-auth", version = "2.3.0" }
 logback-classic = { module = "ch.qos.logback:logback-classic", version = "1.4.6" }
