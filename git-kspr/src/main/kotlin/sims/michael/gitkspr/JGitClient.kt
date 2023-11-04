@@ -72,6 +72,8 @@ class JGitClient(val workingDirectory: File, val remoteBranchPrefix: String = DE
         }
     }
 
+    fun log(): List<Commit> = useGit { git -> git.log().call().map { it.toCommit(git) }.reversed() }
+
     fun getRemoteBranches(): List<RemoteBranch> = useGit { git ->
         git
             .branchList()
@@ -101,7 +103,14 @@ class JGitClient(val workingDirectory: File, val remoteBranchPrefix: String = DE
     fun checkout(refName: String, createBranch: Boolean = false) = apply {
         logger.trace("checkout {}{}", refName, if (createBranch) " (create)" else "")
         useGit { git ->
-            val name = if (createBranch) refName else git.repository.resolve(refName).name
+            val name = if (createBranch) {
+                refName
+            } else {
+                val objectId = requireNotNull(git.repository.resolve(refName)) {
+                    "Ref named $refName was not found"
+                }
+                objectId.name
+            }
             git.checkout().setName(name).setCreateBranch(createBranch).call()
         }
     }
