@@ -43,8 +43,10 @@ class JGitClient(val workingDirectory: File, val remoteBranchPrefix: String = DE
     fun logRange(since: String, until: String): List<Commit> = useGit { git ->
         val r = git.repository
         val commits = git.log().addRange(r.resolve(since), r.resolve(until)).call().toList()
-        commits.map { revCommit -> revCommit.toCommit(git) }
+        commits.map { revCommit -> revCommit.toCommit(git) }.reversed()
     }
+
+    fun log(): List<Commit> = useGit { git -> git.log().call().map { it.toCommit(git) }.reversed() }
 
     fun isWorkingDirectoryClean(): Boolean {
         logger.trace("isWorkingDirectoryClean")
@@ -72,7 +74,7 @@ class JGitClient(val workingDirectory: File, val remoteBranchPrefix: String = DE
         }
     }
 
-    fun log(): List<Commit> = useGit { git -> git.log().call().map { it.toCommit(git) }.reversed() }
+    fun refExists(ref: String) = useGit { git -> git.repository.resolve(ref) != null }
 
     fun getRemoteBranches(): List<RemoteBranch> = useGit { git ->
         git
@@ -103,7 +105,7 @@ class JGitClient(val workingDirectory: File, val remoteBranchPrefix: String = DE
     fun checkout(refName: String, createBranch: Boolean = false) = apply {
         logger.trace("checkout {}{}", refName, if (createBranch) " (create)" else "")
         useGit { git ->
-            val name = if (createBranch) {
+            val name = if (createBranch && !refExists(refName)) {
                 refName
             } else {
                 val objectId = requireNotNull(git.repository.resolve(refName)) {
@@ -113,6 +115,10 @@ class JGitClient(val workingDirectory: File, val remoteBranchPrefix: String = DE
             }
             git.checkout().setName(name).setCreateBranch(createBranch).call()
         }
+    }
+
+    fun branch(name: String) {
+        useGit { git -> git.branchCreate().setName(name).call() }
     }
 
     fun init(): JGitClient = apply {

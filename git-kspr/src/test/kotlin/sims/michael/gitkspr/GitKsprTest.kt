@@ -73,8 +73,8 @@ class GitKsprTest {
     fun `push adds commit IDs`(): List<DynamicTest> {
         data class Test(val name: String, val expected: List<String>, val collectCommits: CommitCollector.() -> Unit)
         return listOf(
-            Test("all commits missing IDs", listOf("2", "1", "0")) { (0..2).forEach(::addCommit) },
-            Test("only recent commits missing IDs", listOf("2", "1", "0", "B", "A")) {
+            Test("all commits missing IDs", listOf("0", "1", "2")) { (0..2).forEach(::addCommit) },
+            Test("only recent commits missing IDs", listOf("A", "B", "0", "1", "2")) {
                 addCommit(1, "A")
                 addCommit(2, "B")
 
@@ -83,7 +83,7 @@ class GitKsprTest {
                     addCommit(num, null)
                 }
             },
-            Test("only commits in the middle missing IDs", listOf("D", "C", "2", "1", "0", "B", "A")) {
+            Test("only commits in the middle missing IDs", listOf("A", "B", "0", "1", "2", "C", "D")) {
                 addCommit(1, "A")
                 addCommit(2, "B")
 
