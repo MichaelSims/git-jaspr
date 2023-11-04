@@ -10,14 +10,6 @@ plugins {
     application
 }
 
-repositories {
-    mavenCentral()
-    maven {
-        name = "jgit-repository"
-        url = uri("https://repo.eclipse.org/content/groups/releases/")
-    }
-}
-
 graphql {
     client {
         sdlEndpoint = "https://docs.github.com/public/schema.docs.graphql"

@@ -1,5 +1,6 @@
 rootProject.name = "git-kspr"
 include("git-kspr")
+include("data-class-fragment")
 
 dependencyResolutionManagement {
     versionCatalogs {
