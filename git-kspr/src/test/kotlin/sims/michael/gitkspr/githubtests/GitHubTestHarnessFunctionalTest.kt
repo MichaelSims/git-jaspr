@@ -59,21 +59,21 @@ class GitHubTestHarnessFunctionalTest {
         val harness = GitHubTestHarness(tempDir, REPO_URI)
         harness.createCommits(
             branch {
-                name = "main"
                 commit {
                     title = "Commit one"
                     branch {
-                        name = "one"
                         commit {
                             title = "Commit one.one"
                         }
                         commit {
                             title = "Commit one.two"
+                            localRefs += "one"
                         }
                     }
                 }
                 commit {
                     title = "Commit two"
+                    localRefs += "main"
                 }
             },
         )

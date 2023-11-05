@@ -18,8 +18,6 @@ interface Commit : DataClassFragment {
 
 @GenerateDataClassFragmentDataClass
 interface Branch : DataClassFragment {
-    val name: StringPropertyNotNull
-
     @GenerateDataClassFragmentDataClass.TestDataDslName("commit")
     val commits: ListOfNestedPropertyNotNull<Commit>
 }

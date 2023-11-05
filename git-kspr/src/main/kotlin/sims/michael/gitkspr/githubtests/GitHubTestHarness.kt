@@ -1,6 +1,7 @@
 package sims.michael.gitkspr.githubtests
 
 import org.slf4j.LoggerFactory
+import sims.michael.gitkspr.Commit
 import sims.michael.gitkspr.DEFAULT_TARGET_REF
 import sims.michael.gitkspr.JGitClient
 import sims.michael.gitkspr.JGitClient.CheckoutMode.CreateBranchIfNotExists
@@ -33,34 +34,31 @@ class GitHubTestHarness(workingDirectory: File, remoteUri: String? = null) {
 
     fun createCommits(branch: BranchData) {
         fun doCreateCommits(branch: BranchData) {
-            localGit.checkout(branch.nameOrDefault, CreateBranchIfNotExists)
             for (commit in branch.commits) {
-                commit.create()
+                val c = commit.create()
+                for (localRef in commit.localRefs) {
+                    localGit.branch(localRef, force = true)
+                }
+                for (remoteRef in commit.remoteRefs) {
+                    localGit.push(listOf(RefSpec("HEAD", remoteRef)))
+                }
                 if (commit.branches.isNotEmpty()) {
                     for (childBranch in commit.branches) {
                         doCreateCommits(childBranch)
                     }
-                    localGit.checkout(branch.name, CreateBranchIfNotExists)
+                    localGit.checkout(c.hash, CreateBranchIfNotExists)
                 }
             }
         }
 
         doCreateCommits(branch)
-        localGit.push(collectBranches(branch).map { branchName -> RefSpec(branchName, branchName) })
+        localGit.checkout(DEFAULT_TARGET_REF)
     }
 
-    private val BranchData.nameOrDefault get() = name.ifBlank { DEFAULT_TARGET_REF }
-
-    private fun collectBranches(branch: BranchData): List<String> {
-        return branch.commits.fold(listOf(branch.nameOrDefault)) { branchNames, commit ->
-            branchNames + commit.branches.flatMap(::collectBranches)
-        }
-    }
-
-    private fun CommitData.create() {
+    private fun CommitData.create(): Commit {
         val file = localRepo.resolve("${title.sanitize()}.txt")
         file.writeText("Title: $title\n")
-        localGit.add(file.name).commit(title)
+        return localGit.add(file.name).commit(title)
     }
 
     private val filenameSafeRegex = "\\W+".toRegex()

@@ -1,5 +1,6 @@
 package sims.michael.gitkspr
 
+import org.eclipse.jgit.api.CheckoutResult
 import org.eclipse.jgit.api.Git
 import org.eclipse.jgit.api.ListBranchCommand
 import org.eclipse.jgit.api.ResetCommand
@@ -43,7 +44,9 @@ class JGitClient(val workingDirectory: File, val remoteBranchPrefix: String = DE
 
     fun logRange(since: String, until: String): List<Commit> = useGit { git ->
         val r = git.repository
-        val commits = git.log().addRange(r.resolve(since), r.resolve(until)).call().toList()
+        val sinceObjectId = checkNotNull(r.resolve(since)) { "$since doesn't exist" }
+        val untilObjectId = checkNotNull(r.resolve(until)) { "$until doesn't exist" }
+        val commits = git.log().addRange(sinceObjectId, untilObjectId).call().toList()
         commits.map { revCommit -> revCommit.toCommit(git) }.reversed()
     }
 
@@ -76,6 +79,8 @@ class JGitClient(val workingDirectory: File, val remoteBranchPrefix: String = DE
     }
 
     fun refExists(ref: String) = useGit { git -> git.repository.resolve(ref) != null }
+
+    fun findCommit(ref: String) = useGit { git -> logRange("$ref~1", ref).single() }
 
     fun getRemoteBranches(): List<RemoteBranch> = useGit { git ->
         git
@@ -114,14 +119,15 @@ class JGitClient(val workingDirectory: File, val remoteBranchPrefix: String = DE
             } else if (mode == CreateBranch) {
                 require(!refExists) { "$refName already exists" }
             }
-            checkNotNull(git.checkout().setName(refName).setCreateBranch(!refExists).call()) {
-                "Result of checkout $refName was null"
+            git.checkout().setName(refName).setCreateBranch(!refExists).run {
+                call()
+                check(result.status == CheckoutResult.Status.OK) { "Checkout result was ${result.status}" }
             }
         }
     }
 
-    fun branch(name: String) {
-        useGit { git -> git.branchCreate().setName(name).call() }
+    fun branch(name: String, force: Boolean = false) {
+        useGit { git -> git.branchCreate().setName(name).setForce(force).call() }
     }
 
     fun init(): JGitClient = apply {
