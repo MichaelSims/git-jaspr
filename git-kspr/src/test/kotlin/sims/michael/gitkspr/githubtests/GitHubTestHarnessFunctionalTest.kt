@@ -53,6 +53,8 @@ class GitHubTestHarnessFunctionalTest {
             assertEquals(commitOne.copy(shortMessage = "Commit one"), commitOne)
             assertEquals(commitThree.copy(shortMessage = "Commit two"), commitThree)
         }
+
+        harness.rollbackRemoteChanges()
     }
 
     @Test
@@ -70,12 +72,14 @@ class GitHubTestHarnessFunctionalTest {
                         commit {
                             title = "Commit one.two"
                             localRefs += "one"
+                            remoteRefs += "one"
                         }
                     }
                 }
                 commit {
                     title = "Commit two"
                     localRefs += "main"
+                    remoteRefs += "main"
                 }
             },
         )
@@ -87,11 +91,13 @@ class GitHubTestHarnessFunctionalTest {
         assertEquals(commitOne.copy(shortMessage = "Commit one"), commitOne)
         assertEquals(commitThree.copy(shortMessage = "Commit two"), commitThree)
 
-        jGitClient.checkout("one")
-        jGitClient.logRange("HEAD~1", "HEAD")
+        jGitClient.logRange("one~1", "one")
         val (commitOneOne, commitOneTwo) = log
         assertEquals(commitOneOne.copy(shortMessage = "Commit one"), commitOneOne)
         assertEquals(commitOneTwo.copy(shortMessage = "Commit two"), commitOneTwo)
+
+        Thread.sleep(5_000)
+        harness.rollbackRemoteChanges()
     }
 
     private fun createTempDir() =

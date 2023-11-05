@@ -87,6 +87,8 @@ class GitHubTestHarnessTest {
             assertEquals(commitOneOne.copy(shortMessage = "Commit one.one"), commitOneOne)
             assertEquals(commitOneTwo.copy(shortMessage = "Commit one.two"), commitOneTwo)
         }
+
+        harness.rollbackRemoteChanges()
     }
 
     @Test

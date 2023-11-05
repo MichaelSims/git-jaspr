@@ -82,6 +82,16 @@ class JGitClient(val workingDirectory: File, val remoteBranchPrefix: String = DE
 
     fun findCommit(ref: String) = useGit { git -> logRange("$ref~1", ref).single() }
 
+    fun getBranchNames(): List<String> = useGit { git ->
+        git
+            .branchList()
+            .setListMode(ListBranchCommand.ListMode.ALL)
+            .call()
+            .map {
+                it.name.removePrefix(Constants.R_HEADS)
+            }
+    }
+
     fun getRemoteBranches(): List<RemoteBranch> = useGit { git ->
         git
             .branchList()
@@ -126,8 +136,14 @@ class JGitClient(val workingDirectory: File, val remoteBranchPrefix: String = DE
         }
     }
 
-    fun branch(name: String, force: Boolean = false) {
-        useGit { git -> git.branchCreate().setName(name).setForce(force).call() }
+    fun branch(name: String, startPoint: String = "HEAD", force: Boolean = false): Commit? {
+        val old = if (refExists(name)) log(name, maxCount = 1).single() else null
+        useGit { git -> git.branchCreate().setName(name).setForce(force).setStartPoint(startPoint).call() }
+        return old
+    }
+
+    fun deleteBranches(names: List<String>, force: Boolean = false) = useGit { git ->
+        git.branchDelete().setBranchNames(*names.toTypedArray()).setForce(force).call()
     }
 
     fun init(): JGitClient = apply {

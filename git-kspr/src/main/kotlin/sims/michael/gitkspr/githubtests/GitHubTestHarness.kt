@@ -41,7 +41,12 @@ class GitHubTestHarness(workingDirectory: File, remoteUri: String? = null) {
                 val c = commit.create().also { logger.info("Created {}", it) }
                 if (!iterator.hasNext()) requireNamedRef(commit)
                 for (localRef in commit.localRefs) {
-                    localGit.branch(localRef, force = true)
+                    val commit1 = localGit.branch(localRef, force = true)
+                    if (commit1 != null) {
+                        localGit.branch("${RESTORE_PREFIX}$localRef", startPoint = commit1.hash)
+                    } else {
+                        localGit.branch("${DELETE_PREFIX}$localRef")
+                    }
                 }
                 for (remoteRef in commit.remoteRefs) {
                     localGit.push(listOf(RefSpec("HEAD", remoteRef)))
@@ -57,6 +62,29 @@ class GitHubTestHarness(workingDirectory: File, remoteUri: String? = null) {
 
         doCreateCommits(branch)
         localGit.checkout(DEFAULT_TARGET_REF)
+    }
+
+    fun rollbackRemoteChanges() {
+        val restoreRegex = "${RESTORE_PREFIX}(.*?)".toRegex()
+        val toRestore = localGit
+            .getBranchNames()
+            .mapNotNull { name ->
+               restoreRegex.matchEntire(name)
+            }
+            .map {
+                RefSpec("+" + it.groupValues[0], it.groupValues[1])
+            }
+        val deleteRegex = "${DELETE_PREFIX}(.*?)".toRegex()
+        val toDelete = localGit.getBranchNames()
+            .mapNotNull { name -> deleteRegex.matchEntire(name) }
+            .map {
+                RefSpec("+", it.groupValues[1])
+            }
+        localGit.push(toRestore + toDelete)
+        localGit.deleteBranches(
+            names = toRestore.map(RefSpec::localRef) + toDelete.map(RefSpec::remoteRef),
+            force = true,
+        )
     }
 
     private fun CommitData.create(): Commit {
@@ -77,5 +105,7 @@ class GitHubTestHarness(workingDirectory: File, remoteUri: String? = null) {
     companion object {
         private const val LOCAL_REPO_SUBDIR = "local"
         private const val REMOTE_REPO_SUBDIR = "remote"
+        val RESTORE_PREFIX = "${GitHubTestHarness::class.java.simpleName.lowercase()}-restore/"
+        val DELETE_PREFIX = "${GitHubTestHarness::class.java.simpleName.lowercase()}-delete/"
     }
 }
