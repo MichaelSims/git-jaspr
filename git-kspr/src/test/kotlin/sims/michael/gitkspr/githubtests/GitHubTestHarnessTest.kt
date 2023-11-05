@@ -1,6 +1,8 @@
 package sims.michael.gitkspr.githubtests
 
 import org.junit.jupiter.api.Test
+import org.junit.jupiter.api.TestInfo
+import org.junit.jupiter.api.assertThrows
 import org.slf4j.LoggerFactory
 import sims.michael.gitkspr.DEFAULT_REMOTE_NAME
 import sims.michael.gitkspr.JGitClient
@@ -135,6 +137,33 @@ class GitHubTestHarnessTest {
             assertEquals(commitOneOne.copy(shortMessage = "Commit one.one"), commitOneOne)
             assertEquals(commitOneTwo.copy(shortMessage = "Commit one.two"), commitOneTwo)
         }
+    }
+
+    @Test
+    fun `creating commits without named refs fails`(info: TestInfo) {
+        val tempDir = createTempDir()
+        val harness = GitHubTestHarness(tempDir)
+        val exception = assertThrows<IllegalArgumentException> {
+            harness.createCommits(
+                branch {
+                    commit {
+                        title = "Commit one"
+                        branch {
+                            commit {
+                                title = "Commit one.one"
+                            }
+                            commit {
+                                title = "Commit one.two"
+                            }
+                        }
+                    }
+                    commit {
+                        title = "Commit two"
+                    }
+                },
+            )
+        }
+        logger.info("{}: {}", info.displayName, exception.message)
     }
 
     private fun createTempDir() =

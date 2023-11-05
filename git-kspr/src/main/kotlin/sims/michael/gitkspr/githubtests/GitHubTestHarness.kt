@@ -33,9 +33,13 @@ class GitHubTestHarness(workingDirectory: File, remoteUri: String? = null) {
     }
 
     fun createCommits(branch: BranchData) {
+        localGit.checkout("HEAD") // Go into detached head so as not to move the main ref as we create commits
         fun doCreateCommits(branch: BranchData) {
-            for (commit in branch.commits) {
-                val c = commit.create()
+            val iterator = branch.commits.iterator()
+            while (iterator.hasNext()) {
+                val commit = iterator.next()
+                val c = commit.create().also { logger.info("Created {}", it) }
+                if (!iterator.hasNext()) requireNamedRef(commit)
                 for (localRef in commit.localRefs) {
                     localGit.branch(localRef, force = true)
                 }
@@ -59,6 +63,12 @@ class GitHubTestHarness(workingDirectory: File, remoteUri: String? = null) {
         val file = localRepo.resolve("${title.sanitize()}.txt")
         file.writeText("Title: $title\n")
         return localGit.add(file.name).commit(title)
+    }
+
+    private fun requireNamedRef(commit: CommitData) {
+        require((commit.localRefs + commit.remoteRefs).isNotEmpty()) {
+            "\"${commit.title}\" is not connected to any branches. Assign a local or remote ref to fix this"
+        }
     }
 
     private val filenameSafeRegex = "\\W+".toRegex()
