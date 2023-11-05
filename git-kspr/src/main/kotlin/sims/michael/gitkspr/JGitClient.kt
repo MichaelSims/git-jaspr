@@ -8,6 +8,7 @@ import org.eclipse.jgit.revwalk.RevCommit
 import org.eclipse.jgit.transport.PushResult
 import org.eclipse.jgit.transport.RemoteRefUpdate.Status
 import org.slf4j.LoggerFactory
+import sims.michael.gitkspr.JGitClient.CheckoutMode.*
 import java.io.File
 import java.time.ZoneId
 import java.time.ZonedDateTime
@@ -102,18 +103,20 @@ class JGitClient(val workingDirectory: File, val remoteBranchPrefix: String = DE
         }
     }
 
-    fun checkout(refName: String, createBranch: Boolean = false) = apply {
-        logger.trace("checkout {}{}", refName, if (createBranch) " (create)" else "")
+    enum class CheckoutMode { CreateBranch, CreateBranchIfNotExists, Default }
+
+    fun checkout(refName: String, mode: CheckoutMode = Default) = apply {
+        logger.trace("checkout {} ({})", refName, mode)
         useGit { git ->
-            val name = if (createBranch && !refExists(refName)) {
-                refName
-            } else {
-                val objectId = requireNotNull(git.repository.resolve(refName)) {
-                    "Ref named $refName was not found"
-                }
-                objectId.name
+            val refExists = refExists(refName)
+            if (mode == Default) {
+                require(refExists) { "$refName does not exist" }
+            } else if (mode == CreateBranch) {
+                require(!refExists) { "$refName already exists" }
             }
-            git.checkout().setName(name).setCreateBranch(createBranch).call()
+            checkNotNull(git.checkout().setName(refName).setCreateBranch(!refExists).call()) {
+                "Result of checkout $refName was null"
+            }
         }
     }
 

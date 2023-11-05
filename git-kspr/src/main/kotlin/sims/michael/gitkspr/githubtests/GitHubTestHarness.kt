@@ -1,6 +1,8 @@
 package sims.michael.gitkspr.githubtests
 
+import sims.michael.gitkspr.DEFAULT_TARGET_REF
 import sims.michael.gitkspr.JGitClient
+import sims.michael.gitkspr.JGitClient.CheckoutMode.CreateBranchIfNotExists
 import java.io.File
 
 class GitHubTestHarness(private val repo: File) {
@@ -17,14 +19,14 @@ class GitHubTestHarness(private val repo: File) {
     }
 
     fun createCommits(branch: BranchData) {
-        git.checkout(branch.name.ifBlank { "main" }, createBranch = true)
+        git.checkout(branch.name.ifBlank { DEFAULT_TARGET_REF }, CreateBranchIfNotExists)
         for (commit in branch.commits) {
             commit.create()
             if (commit.branches.isNotEmpty()) {
                 for (childBranch in commit.branches) {
                     createCommits(childBranch)
                 }
-                git.checkout(branch.name)
+                git.checkout(branch.name, CreateBranchIfNotExists)
             }
         }
     }

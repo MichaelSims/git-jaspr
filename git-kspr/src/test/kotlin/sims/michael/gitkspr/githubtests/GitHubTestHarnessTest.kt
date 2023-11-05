@@ -56,7 +56,7 @@ class GitHubTestHarnessTest {
                 commit {
                     title = "Commit one"
                     branch {
-                        name = "One"
+                        name = "one"
                         commit {
                             title = "Commit one.one"
                         }
@@ -78,7 +78,7 @@ class GitHubTestHarnessTest {
         assertEquals(commitOne.copy(shortMessage = "Commit one"), commitOne)
         assertEquals(commitThree.copy(shortMessage = "Commit two"), commitThree)
 
-        jGitClient.checkout("One")
+        jGitClient.checkout("one")
         jGitClient.logRange("HEAD~1", "HEAD")
         val (commitOneOne, commitOneTwo) = log
         assertEquals(commitOneOne.copy(shortMessage = "Commit one"), commitOneOne)

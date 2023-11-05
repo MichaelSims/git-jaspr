@@ -9,6 +9,7 @@ import org.eclipse.jgit.util.SystemReader
 import org.junit.jupiter.api.*
 import org.junit.jupiter.api.DynamicTest.dynamicTest
 import org.slf4j.LoggerFactory
+import sims.michael.gitkspr.JGitClient.CheckoutMode.CreateBranch
 import sims.michael.gitkspr.JGitClient.Companion.HEAD
 import sims.michael.gitkspr.testing.toStringWithClickableURI
 import java.io.File
@@ -38,7 +39,8 @@ class GitKsprTest {
         val remoteRepoDir = tempDir.resolve("test-remote").apply(File::initRepoWithInitialCommit)
 
         val localRepoDir = tempDir.resolve("test-local")
-        val local = JGitClient(localRepoDir).clone(remoteRepoDir.toURI().toString()).checkout("development", true)
+        val local =
+            JGitClient(localRepoDir).clone(remoteRepoDir.toURI().toString()).checkout("development", CreateBranch)
         localRepoDir.resolve("README.txt").writeText("Change the file without committing it")
 
         assertThrows<IllegalStateException> {
@@ -58,7 +60,8 @@ class GitKsprTest {
         remote.add(readme).commit(messageA)
 
         val localRepoDir = tempDir.resolve("test-local")
-        val local = JGitClient(localRepoDir).clone(remoteRepoDir.toURI().toString()).checkout("development", true)
+        val local =
+            JGitClient(localRepoDir).clone(remoteRepoDir.toURI().toString()).checkout("development", CreateBranch)
 
         remoteReadMe.appendText("Commit 2\n")
         val messageB = "New remote commit"
@@ -101,7 +104,7 @@ class GitKsprTest {
                 val localRepoDir = tempDir.resolve("test-local")
                 val local = JGitClient(localRepoDir)
                     .clone(remoteRepoDir.toURI().toString())
-                    .checkout("development", true)
+                    .checkout("development", CreateBranch)
                 val collector = CommitCollector(local).apply(collectCommits)
                 val ids = uuidIterator()
                 runBlocking {
@@ -124,7 +127,8 @@ class GitKsprTest {
         remote.add(readme).commit(messageA)
 
         val localRepoDir = tempDir.resolve("test-local")
-        val local = JGitClient(localRepoDir).clone(remoteRepoDir.toURI().toString()).checkout("development", true)
+        val local =
+            JGitClient(localRepoDir).clone(remoteRepoDir.toURI().toString()).checkout("development", CreateBranch)
         for (num in (1..3)) {
             val filePattern = "$num.txt"
             localRepoDir.resolve(filePattern).writeText("This is file number $num.\n")
@@ -186,7 +190,9 @@ class GitKsprTest {
         remote.add(readme).commit(messageA)
 
         val localRepoDir = tempDir.resolve("test-local")
-        val local = JGitClient(localRepoDir).clone(remoteRepoDir.toURI().toString()).checkout("development", true)
+        val local =
+            JGitClient(localRepoDir).clone(remoteRepoDir.toURI().toString()).checkout("development", CreateBranch)
+
         fun addCommit(commitLabel: String): Commit {
             val testName = testInfo.displayName.substringBefore("(")
             val testFileName = "${testName.sanitize()}-$commitLabel.txt"
