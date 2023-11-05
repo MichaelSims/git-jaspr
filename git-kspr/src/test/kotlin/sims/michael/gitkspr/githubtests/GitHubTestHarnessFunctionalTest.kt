@@ -2,6 +2,7 @@ package sims.michael.gitkspr.githubtests
 
 import org.junit.jupiter.api.Test
 import org.slf4j.LoggerFactory
+import sims.michael.gitkspr.DEFAULT_TARGET_REF
 import sims.michael.gitkspr.JGitClient
 import sims.michael.gitkspr.githubtests.generatedtestdsl.branch
 import sims.michael.gitkspr.testing.FunctionalTest
@@ -41,15 +42,16 @@ class GitHubTestHarnessFunctionalTest {
                 }
                 commit {
                     title = "Commit two"
+                    remoteRefs += "main"
+                    localRefs += "main"
                 }
             },
         )
 
-        val log = JGitClient(harness.localRepo).logRange("HEAD~2", "HEAD")
-        val pairs = listOf("Commit one", "Commit two").zip(log)
-        assertEquals(pairs.size, log.size)
-        for ((expectedShortMessage, actual) in pairs) {
-            assertEquals(expectedShortMessage, actual.shortMessage)
+        JGitClient(harness.localRepo).logRange("${DEFAULT_TARGET_REF}~2", DEFAULT_TARGET_REF).let { log ->
+            val (commitOne, commitThree) = log
+            assertEquals(commitOne.copy(shortMessage = "Commit one"), commitOne)
+            assertEquals(commitThree.copy(shortMessage = "Commit two"), commitThree)
         }
     }
 
