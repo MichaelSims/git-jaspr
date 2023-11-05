@@ -15,7 +15,7 @@ class GitHubTestHarnessTest {
     @Test
     fun `can create repo with initial commit`() {
         val tempDir = createTempDir()
-        val harness = GitHubTestHarness(tempDir).also(GitHubTestHarness::createRepoWithInitialCommit)
+        val harness = GitHubTestHarness(tempDir)
         val log = JGitClient(harness.localRepo).log()
         assertEquals(1, log.size)
         val commit = log.single()
@@ -25,7 +25,7 @@ class GitHubTestHarnessTest {
     @Test
     fun `can create commits from model`() {
         val tempDir = createTempDir()
-        val harness = GitHubTestHarness(tempDir).also(GitHubTestHarness::createRepoWithInitialCommit)
+        val harness = GitHubTestHarness(tempDir)
         harness.createCommits(
             branch {
                 commit {
@@ -48,7 +48,7 @@ class GitHubTestHarnessTest {
     @Test
     fun `can create commits with a branch from model`() {
         val tempDir = createTempDir()
-        val harness = GitHubTestHarness(tempDir).also(GitHubTestHarness::createRepoWithInitialCommit)
+        val harness = GitHubTestHarness(tempDir)
         harness.createCommits(
             branch {
                 name = "main"
