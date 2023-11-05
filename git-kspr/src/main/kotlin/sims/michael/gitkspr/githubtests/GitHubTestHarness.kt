@@ -13,12 +13,11 @@ class GitHubTestHarness(workingDirectory: File, remoteUri: String? = null) {
     val localRepo by lazy { workingDirectory.resolve(LOCAL_REPO_SUBDIR).also(File::mkdir) }
 
     private val localGit: JGitClient = JGitClient(localRepo)
-    private val remoteGit: JGitClient
 
     init {
         val remoteRepo = workingDirectory.resolve(REMOTE_REPO_SUBDIR)
-        remoteGit = if (remoteUri != null) {
-            JGitClient(remoteRepo).clone(remoteUri)
+        if (remoteUri != null) {
+            localGit.clone(remoteUri)
         } else {
             JGitClient(remoteRepo).init().createInitialCommit().also { localGit.clone(remoteRepo.toURI().toString()) }
         }
