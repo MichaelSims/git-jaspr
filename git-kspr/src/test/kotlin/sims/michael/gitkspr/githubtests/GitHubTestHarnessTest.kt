@@ -36,6 +36,7 @@ class GitHubTestHarnessTest {
                 }
                 commit {
                     title = "Commit two"
+                    localRefs += "main"
                 }
             },
         )
