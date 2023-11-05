@@ -33,71 +33,73 @@ class GitHubTestHarnessFunctionalTest {
 
     @Test
     fun `can create commits from model`() {
-        val tempDir = createTempDir()
-        val harness = GitHubTestHarness(tempDir, REPO_URI)
-        harness.createCommits(
-            branch {
-                commit {
-                    title = "Commit one"
-                }
-                commit {
-                    title = "Commit two"
-                    remoteRefs += "main"
-                    localRefs += "main"
-                }
-            },
-        )
+        val harness = GitHubTestHarness(createTempDir(), REPO_URI)
+        try {
+            harness.createCommits(
+                branch {
+                    commit {
+                        title = "Commit one"
+                    }
+                    commit {
+                        title = "Commit two"
+                        remoteRefs += "main"
+                        localRefs += "main"
+                    }
+                },
+            )
 
-        JGitClient(harness.localRepo).logRange("${DEFAULT_TARGET_REF}~2", DEFAULT_TARGET_REF).let { log ->
-            val (commitOne, commitThree) = log
-            assertEquals(commitOne.copy(shortMessage = "Commit one"), commitOne)
-            assertEquals(commitThree.copy(shortMessage = "Commit two"), commitThree)
+            JGitClient(harness.localRepo).logRange("${DEFAULT_TARGET_REF}~2", DEFAULT_TARGET_REF).let { log ->
+                val (commitOne, commitThree) = log
+                assertEquals(commitOne.copy(shortMessage = "Commit one"), commitOne)
+                assertEquals(commitThree.copy(shortMessage = "Commit two"), commitThree)
+            }
+        } finally {
+            harness.rollbackRemoteChanges()
         }
-
-        harness.rollbackRemoteChanges()
     }
 
     @Test
     fun `can create commits with a branch from model`() {
         val tempDir = createTempDir()
         val harness = GitHubTestHarness(tempDir, REPO_URI)
-        harness.createCommits(
-            branch {
-                commit {
-                    title = "Commit one"
-                    branch {
-                        commit {
-                            title = "Commit one.one"
-                        }
-                        commit {
-                            title = "Commit one.two"
-                            localRefs += "one"
-                            remoteRefs += "one"
+        try {
+            harness.createCommits(
+                branch {
+                    commit {
+                        title = "Commit one"
+                        branch {
+                            commit {
+                                title = "Commit one.one"
+                            }
+                            commit {
+                                title = "Commit one.two"
+                                localRefs += "one"
+                                remoteRefs += "one"
+                            }
                         }
                     }
-                }
-                commit {
-                    title = "Commit two"
-                    localRefs += "main"
-                    remoteRefs += "main"
-                }
-            },
-        )
-        val jGitClient = JGitClient(harness.localRepo)
-        val log = jGitClient.logRange("HEAD~2", "HEAD")
+                    commit {
+                        title = "Commit two"
+                        localRefs += "main"
+                        remoteRefs += "main"
+                    }
+                },
+            )
+            val jGitClient = JGitClient(harness.localRepo)
+            val log = jGitClient.logRange("HEAD~2", "HEAD")
 
-        assertEquals(2, log.size)
-        val (commitOne, commitThree) = log
-        assertEquals(commitOne.copy(shortMessage = "Commit one"), commitOne)
-        assertEquals(commitThree.copy(shortMessage = "Commit two"), commitThree)
+            assertEquals(2, log.size)
+            val (commitOne, commitThree) = log
+            assertEquals(commitOne.copy(shortMessage = "Commit one"), commitOne)
+            assertEquals(commitThree.copy(shortMessage = "Commit two"), commitThree)
 
-        jGitClient.logRange("one~1", "one")
-        val (commitOneOne, commitOneTwo) = log
-        assertEquals(commitOneOne.copy(shortMessage = "Commit one"), commitOneOne)
-        assertEquals(commitOneTwo.copy(shortMessage = "Commit two"), commitOneTwo)
-
-        Thread.sleep(5_000)
-        harness.rollbackRemoteChanges()
+            jGitClient.logRange("one~1", "one")
+            val (commitOneOne, commitOneTwo) = log
+            assertEquals(commitOneOne.copy(shortMessage = "Commit one"), commitOneOne)
+            assertEquals(commitOneTwo.copy(shortMessage = "Commit two"), commitOneTwo)
+        } finally {
+            harness.rollbackRemoteChanges()
+        }
     }
 
     private fun createTempDir() =

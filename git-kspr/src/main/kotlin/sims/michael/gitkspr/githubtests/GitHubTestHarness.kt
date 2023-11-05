@@ -69,7 +69,7 @@ class GitHubTestHarness(workingDirectory: File, remoteUri: String? = null) {
         val toRestore = localGit
             .getBranchNames()
             .mapNotNull { name ->
-               restoreRegex.matchEntire(name)
+                restoreRegex.matchEntire(name)
             }
             .map {
                 RefSpec("+" + it.groupValues[0], it.groupValues[1])
