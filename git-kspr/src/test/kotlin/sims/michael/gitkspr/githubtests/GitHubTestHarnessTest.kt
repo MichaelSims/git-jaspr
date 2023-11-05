@@ -5,7 +5,6 @@ import org.slf4j.LoggerFactory
 import sims.michael.gitkspr.JGitClient
 import sims.michael.gitkspr.githubtests.generatedtestdsl.branch
 import sims.michael.gitkspr.testing.toStringWithClickableURI
-import java.io.File
 import java.nio.file.Files
 import kotlin.test.assertEquals
 
@@ -15,9 +14,9 @@ class GitHubTestHarnessTest {
 
     @Test
     fun `can create repo with initial commit`() {
-        val repo = createTempDir().resolve("repo").also(File::mkdir)
-        GitHubTestHarness(repo).createRepoWithInitialCommit()
-        val log = JGitClient(repo).log()
+        val tempDir = createTempDir()
+        val harness = GitHubTestHarness(tempDir).also(GitHubTestHarness::createRepoWithInitialCommit)
+        val log = JGitClient(harness.localRepo).log()
         assertEquals(1, log.size)
         val commit = log.single()
         assertEquals(commit.copy(shortMessage = "Initial commit"), commit)
@@ -25,8 +24,8 @@ class GitHubTestHarnessTest {
 
     @Test
     fun `can create commits from model`() {
-        val repo = createTempDir().resolve("repo").also(File::mkdir)
-        val harness = GitHubTestHarness(repo).also(GitHubTestHarness::createRepoWithInitialCommit)
+        val tempDir = createTempDir()
+        val harness = GitHubTestHarness(tempDir).also(GitHubTestHarness::createRepoWithInitialCommit)
         harness.createCommits(
             branch {
                 commit {
@@ -38,7 +37,7 @@ class GitHubTestHarnessTest {
             },
         )
 
-        val log = JGitClient(repo).logRange("HEAD~2", "HEAD")
+        val log = JGitClient(harness.localRepo).logRange("HEAD~2", "HEAD")
         val pairs = listOf("Commit one", "Commit two").zip(log)
         assertEquals(pairs.size, log.size)
         for ((expectedShortMessage, actual) in pairs) {
@@ -48,8 +47,8 @@ class GitHubTestHarnessTest {
 
     @Test
     fun `can create commits with a branch from model`() {
-        val repo = createTempDir().resolve("repo").also(File::mkdir)
-        val harness = GitHubTestHarness(repo).also(GitHubTestHarness::createRepoWithInitialCommit)
+        val tempDir = createTempDir()
+        val harness = GitHubTestHarness(tempDir).also(GitHubTestHarness::createRepoWithInitialCommit)
         harness.createCommits(
             branch {
                 name = "main"
@@ -70,7 +69,7 @@ class GitHubTestHarnessTest {
                 }
             },
         )
-        val jGitClient = JGitClient(repo)
+        val jGitClient = JGitClient(harness.localRepo)
         val log = jGitClient.logRange("HEAD~2", "HEAD")
 
         assertEquals(2, log.size)
