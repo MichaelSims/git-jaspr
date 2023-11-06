@@ -1,14 +1,16 @@
 package sims.michael.gitkspr.githubtests
 
 import org.slf4j.LoggerFactory
+import sims.michael.gitkspr.*
 import sims.michael.gitkspr.Commit
-import sims.michael.gitkspr.DEFAULT_TARGET_REF
-import sims.michael.gitkspr.JGitClient
 import sims.michael.gitkspr.JGitClient.CheckoutMode.CreateBranchIfNotExists
-import sims.michael.gitkspr.RefSpec
 import java.io.File
 
-class GitHubTestHarness(workingDirectory: File, remoteUri: String? = null) {
+class GitHubTestHarness(
+    workingDirectory: File,
+    remoteUri: String? = null,
+    getGitHubClient: (File) -> GitHubClient? = { null },
+) {
     private val logger = LoggerFactory.getLogger(GitHubTestHarness::class.java)
 
     val localRepo by lazy { workingDirectory.resolve(LOCAL_REPO_SUBDIR).also(File::mkdir) }
