@@ -3,9 +3,19 @@ package sims.michael.gitkspr.githubtests
 import sims.michael.gitkspr.dataclassfragment.*
 
 @GenerateDataClassFragmentDataClass
+interface TestCase : DataClassFragment {
+    val repository: NestedPropertyNotNull<Branch>
+}
+
+@GenerateDataClassFragmentDataClass
+interface Branch : DataClassFragment {
+    @GenerateDataClassFragmentDataClass.TestDataDslName("commit")
+    val commits: ListOfNestedPropertyNotNull<Commit>
+}
+
+@GenerateDataClassFragmentDataClass
 interface Commit : DataClassFragment {
     val id: IntPropertyNotNull
-
     @GenerateDataClassFragmentDataClass.TestDataDslName("branch")
     val branches: ListOfNestedPropertyNotNull<Branch>
     val localRefs: SetPropertyNotNull<StringPropertyNotNull>
@@ -14,10 +24,4 @@ interface Commit : DataClassFragment {
     val prTitle: StringPropertyNotNull
     val prStartTitle: StringPropertyNotNull
     val prEndTitle: StringPropertyNotNull
-}
-
-@GenerateDataClassFragmentDataClass
-interface Branch : DataClassFragment {
-    @GenerateDataClassFragmentDataClass.TestDataDslName("commit")
-    val commits: ListOfNestedPropertyNotNull<Commit>
 }

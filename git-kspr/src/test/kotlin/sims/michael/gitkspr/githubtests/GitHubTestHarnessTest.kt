@@ -6,7 +6,7 @@ import org.junit.jupiter.api.assertThrows
 import org.slf4j.LoggerFactory
 import sims.michael.gitkspr.DEFAULT_REMOTE_NAME
 import sims.michael.gitkspr.JGitClient
-import sims.michael.gitkspr.githubtests.generatedtestdsl.branch
+import sims.michael.gitkspr.githubtests.generatedtestdsl.testCase
 import sims.michael.gitkspr.testing.toStringWithClickableURI
 import java.nio.file.Files
 import kotlin.test.assertEquals
@@ -30,13 +30,15 @@ class GitHubTestHarnessTest {
         val tempDir = createTempDir()
         val harness = GitHubTestHarness(tempDir)
         harness.createCommits(
-            branch {
-                commit {
-                    title = "Commit one"
-                }
-                commit {
-                    title = "Commit two"
-                    localRefs += "main"
+            testCase {
+                repository {
+                    commit {
+                        title = "Commit one"
+                    }
+                    commit {
+                        title = "Commit two"
+                        localRefs += "main"
+                    }
                 }
             },
         )
@@ -54,22 +56,24 @@ class GitHubTestHarnessTest {
         val tempDir = createTempDir()
         val harness = GitHubTestHarness(tempDir)
         harness.createCommits(
-            branch {
-                commit {
-                    title = "Commit one"
-                    branch {
-                        commit {
-                            title = "Commit one.one"
-                        }
-                        commit {
-                            title = "Commit one.two"
-                            localRefs += "one"
+            testCase {
+                repository {
+                    commit {
+                        title = "Commit one"
+                        branch {
+                            commit {
+                                title = "Commit one.one"
+                            }
+                            commit {
+                                title = "Commit one.two"
+                                localRefs += "one"
+                            }
                         }
                     }
-                }
-                commit {
-                    title = "Commit two"
-                    localRefs += "main"
+                    commit {
+                        title = "Commit two"
+                        localRefs += "main"
+                    }
                 }
             },
         )
@@ -97,24 +101,26 @@ class GitHubTestHarnessTest {
         val tempDir = createTempDir()
         val harness = GitHubTestHarness(tempDir)
         harness.createCommits(
-            branch {
-                commit {
-                    title = "Commit one"
-                    branch {
-                        commit {
-                            title = "Commit one.one"
-                            localRefs += "one"
-                        }
-                        commit {
-                            title = "Commit one.two"
-                            remoteRefs += "one"
+            testCase {
+                repository {
+                    commit {
+                        title = "Commit one"
+                        branch {
+                            commit {
+                                title = "Commit one.one"
+                                localRefs += "one"
+                            }
+                            commit {
+                                title = "Commit one.two"
+                                remoteRefs += "one"
+                            }
                         }
                     }
-                }
-                commit {
-                    title = "Commit two"
-                    localRefs += "main"
-                    remoteRefs += "main"
+                    commit {
+                        title = "Commit two"
+                        localRefs += "main"
+                        remoteRefs += "main"
+                    }
                 }
             },
         )
@@ -148,20 +154,22 @@ class GitHubTestHarnessTest {
         val harness = GitHubTestHarness(tempDir)
         val exception = assertThrows<IllegalArgumentException> {
             harness.createCommits(
-                branch {
-                    commit {
-                        title = "Commit one"
-                        branch {
-                            commit {
-                                title = "Commit one.one"
-                            }
-                            commit {
-                                title = "Commit one.two"
+                testCase {
+                    repository {
+                        commit {
+                            title = "Commit one"
+                            branch {
+                                commit {
+                                    title = "Commit one.one"
+                                }
+                                commit {
+                                    title = "Commit one.two"
+                                }
                             }
                         }
-                    }
-                    commit {
-                        title = "Commit two"
+                        commit {
+                            title = "Commit two"
+                        }
                     }
                 },
             )

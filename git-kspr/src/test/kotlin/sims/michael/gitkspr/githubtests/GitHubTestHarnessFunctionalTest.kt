@@ -8,7 +8,7 @@ import com.github.ajalt.clikt.sources.PropertiesValueSource
 import org.junit.jupiter.api.Test
 import org.slf4j.LoggerFactory
 import sims.michael.gitkspr.*
-import sims.michael.gitkspr.githubtests.generatedtestdsl.branch
+import sims.michael.gitkspr.githubtests.generatedtestdsl.testCase
 import sims.michael.gitkspr.testing.FunctionalTest
 import sims.michael.gitkspr.testing.toStringWithClickableURI
 import java.io.File
@@ -36,14 +36,16 @@ class GitHubTestHarnessFunctionalTest {
         val harness = GitHubTestHarness(createTempDir(), REPO_URI)
         try {
             harness.createCommits(
-                branch {
-                    commit {
-                        title = "Commit one"
-                    }
-                    commit {
-                        title = "Commit two"
-                        remoteRefs += "main"
-                        localRefs += "main"
+                testCase {
+                    repository {
+                        commit {
+                            title = "Commit one"
+                        }
+                        commit {
+                            title = "Commit two"
+                            remoteRefs += "main"
+                            localRefs += "main"
+                        }
                     }
                 },
             )
@@ -64,24 +66,26 @@ class GitHubTestHarnessFunctionalTest {
         val harness = GitHubTestHarness(tempDir, REPO_URI)
         try {
             harness.createCommits(
-                branch {
-                    commit {
-                        title = "Commit one"
-                        branch {
-                            commit {
-                                title = "Commit one.one"
-                            }
-                            commit {
-                                title = "Commit one.two"
-                                localRefs += "one"
-                                remoteRefs += "one"
+                testCase {
+                    repository {
+                        commit {
+                            title = "Commit one"
+                            branch {
+                                commit {
+                                    title = "Commit one.one"
+                                }
+                                commit {
+                                    title = "Commit one.two"
+                                    localRefs += "one"
+                                    remoteRefs += "one"
+                                }
                             }
                         }
-                    }
-                    commit {
-                        title = "Commit two"
-                        localRefs += "main"
-                        remoteRefs += "main"
+                        commit {
+                            title = "Commit two"
+                            localRefs += "main"
+                            remoteRefs += "main"
+                        }
                     }
                 },
             )
@@ -108,32 +112,34 @@ class GitHubTestHarnessFunctionalTest {
         val harness = GitHubTestHarness(tempDir, REPO_URI) { repoDir -> createAppWiring(repoDir).gitHubClient }
         try {
             harness.createCommits(
-                branch {
-                    commit { title = "A" }
-                    commit {
-                        title = "B"
-                        branch {
-                            commit { title = "f0 A" }
-                            commit {
-                                title = "f0 B"
-                                localRefs += "f0"
-                                remoteRefs += "f0"
-                                branch {
-                                    commit { title = "f1 A" }
-                                    commit {
-                                        title = "f1 B"
-                                        localRefs += "f1"
-                                        remoteRefs += "f1"
+                testCase {
+                    repository {
+                        commit { title = "A" }
+                        commit {
+                            title = "B"
+                            branch {
+                                commit { title = "f0 A" }
+                                commit {
+                                    title = "f0 B"
+                                    localRefs += "f0"
+                                    remoteRefs += "f0"
+                                    branch {
+                                        commit { title = "f1 A" }
+                                        commit {
+                                            title = "f1 B"
+                                            localRefs += "f1"
+                                            remoteRefs += "f1"
+                                        }
                                     }
                                 }
                             }
                         }
-                    }
-                    commit { title = "C" }
-                    commit {
-                        title = "D"
-                        localRefs += "main"
-                        remoteRefs += "main"
+                        commit { title = "C" }
+                        commit {
+                            title = "D"
+                            localRefs += "main"
+                            remoteRefs += "main"
+                        }
                     }
                 },
             )

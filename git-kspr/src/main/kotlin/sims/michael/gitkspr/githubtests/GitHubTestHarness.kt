@@ -34,7 +34,7 @@ class GitHubTestHarness(
         add(readme).commit("Initial commit")
     }
 
-    fun createCommits(branch: BranchData) {
+    fun createCommits(testCase: TestCaseData) {
         localGit.checkout("HEAD") // Go into detached head so as not to move the main ref as we create commits
         fun doCreateCommits(branch: BranchData) {
             val iterator = branch.commits.iterator()
@@ -62,7 +62,7 @@ class GitHubTestHarness(
             }
         }
 
-        doCreateCommits(branch)
+        doCreateCommits(testCase.repository)
         localGit.checkout(DEFAULT_TARGET_REF)
     }
 
