@@ -18,10 +18,29 @@ interface AppWiring {
 }
 
 class DefaultAppWiring(
-    private val githubToken: String,
+    githubToken: String,
     override val config: Config,
     override val gitClient: JGitClient,
 ) : AppWiring {
+
+    private val gitHubClientWiring = GitHubClientWiring(githubToken, config.gitHubInfo, config.remoteBranchPrefix)
+
+    val graphQLClient: GraphQLClient<*> get() = gitHubClientWiring.graphQLClient
+
+    val gitHubClient: GitHubClient get() = gitHubClientWiring.gitHubClient
+
+    override val json: Json = Json {
+        prettyPrint = true
+    }
+
+    override val gitKspr: GitKspr by lazy { GitKspr(gitHubClient, gitClient, config) }
+}
+
+class GitHubClientWiring(
+    private val githubToken: String,
+    private val gitHubInfo: GitHubInfo,
+    private val remoteBranchPrefix: String,
+) {
     private val bearerTokens by lazy {
         BearerTokens(githubToken, githubToken)
     }
@@ -44,12 +63,6 @@ class DefaultAppWiring(
     }
 
     val gitHubClient: GitHubClient by lazy {
-        GitHubClient(graphQLClient, config.gitHubInfo, config.remoteBranchPrefix)
+        GitHubClient(graphQLClient, gitHubInfo, remoteBranchPrefix)
     }
-
-    override val json: Json = Json {
-        prettyPrint = true
-    }
-
-    override val gitKspr: GitKspr by lazy { GitKspr(gitHubClient, gitClient, config) }
 }
