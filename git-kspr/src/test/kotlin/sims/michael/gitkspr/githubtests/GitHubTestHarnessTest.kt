@@ -1,5 +1,6 @@
 package sims.michael.gitkspr.githubtests
 
+import kotlinx.coroutines.runBlocking
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.TestInfo
 import org.junit.jupiter.api.assertThrows
@@ -26,7 +27,7 @@ class GitHubTestHarnessTest {
     }
 
     @Test
-    fun `can create commits from model`() {
+    fun `can create commits from model`() = runBlocking {
         val tempDir = createTempDir()
         val harness = GitHubTestHarness(tempDir)
         harness.createCommits(
@@ -52,7 +53,7 @@ class GitHubTestHarnessTest {
     }
 
     @Test
-    fun `can create commits with a branch from model`() {
+    fun `can create commits with a branch from model`() = runBlocking {
         val tempDir = createTempDir()
         val harness = GitHubTestHarness(tempDir)
         harness.createCommits(
@@ -97,7 +98,7 @@ class GitHubTestHarnessTest {
     }
 
     @Test
-    fun `localRefs and remoteRefs test`() {
+    fun `localRefs and remoteRefs test`() = runBlocking {
         val tempDir = createTempDir()
         val harness = GitHubTestHarness(tempDir)
         harness.createCommits(
@@ -149,7 +150,7 @@ class GitHubTestHarnessTest {
     }
 
     @Test
-    fun `creating commits without named refs fails`(info: TestInfo) {
+    fun `creating commits without named refs fails`(info: TestInfo) = runBlocking {
         val tempDir = createTempDir()
         val harness = GitHubTestHarness(tempDir)
         val exception = assertThrows<IllegalArgumentException> {

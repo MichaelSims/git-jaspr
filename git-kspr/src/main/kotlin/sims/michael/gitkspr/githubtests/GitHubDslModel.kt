@@ -5,6 +5,9 @@ import sims.michael.gitkspr.dataclassfragment.*
 @GenerateDataClassFragmentDataClass
 interface TestCase : DataClassFragment {
     val repository: NestedPropertyNotNull<Branch>
+
+    @GenerateDataClassFragmentDataClass.TestDataDslName("pullRequest")
+    val pullRequests: ListOfNestedPropertyNotNull<PullRequest>
 }
 
 @GenerateDataClassFragmentDataClass
@@ -16,6 +19,7 @@ interface Branch : DataClassFragment {
 @GenerateDataClassFragmentDataClass
 interface Commit : DataClassFragment {
     val id: IntPropertyNotNull
+
     @GenerateDataClassFragmentDataClass.TestDataDslName("branch")
     val branches: ListOfNestedPropertyNotNull<Branch>
     val localRefs: SetPropertyNotNull<StringPropertyNotNull>
@@ -24,4 +28,12 @@ interface Commit : DataClassFragment {
     val prTitle: StringPropertyNotNull
     val prStartTitle: StringPropertyNotNull
     val prEndTitle: StringPropertyNotNull
+}
+
+@GenerateDataClassFragmentDataClass
+interface PullRequest : DataClassFragment {
+    val baseRef: StringPropertyNotNull
+    val headRef: StringPropertyNotNull
+    val title: StringPropertyNotNull
+    val body: StringPropertyNotNull
 }

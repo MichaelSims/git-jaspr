@@ -5,6 +5,7 @@ import com.github.ajalt.clikt.core.context
 import com.github.ajalt.clikt.parameters.options.option
 import com.github.ajalt.clikt.parameters.options.required
 import com.github.ajalt.clikt.sources.PropertiesValueSource
+import kotlinx.coroutines.runBlocking
 import org.junit.jupiter.api.Test
 import org.slf4j.LoggerFactory
 import sims.michael.gitkspr.*
@@ -32,7 +33,7 @@ class GitHubTestHarnessFunctionalTest {
     }
 
     @Test
-    fun `can create commits from model`() {
+    fun `can create commits from model`() = runBlocking {
         val harness = GitHubTestHarness(createTempDir(), REPO_URI)
         try {
             harness.createCommits(
@@ -61,7 +62,7 @@ class GitHubTestHarnessFunctionalTest {
     }
 
     @Test
-    fun `can create commits with a branch from model`() {
+    fun `can create commits with a branch from model`() = runBlocking {
         val tempDir = createTempDir()
         val harness = GitHubTestHarness(tempDir, REPO_URI)
         try {
@@ -107,7 +108,7 @@ class GitHubTestHarnessFunctionalTest {
     }
 
     @Test
-    fun `can open PRs from created commits`() {
+    fun `can open PRs from created commits`() = runBlocking {
         val tempDir = createTempDir()
         val harness = GitHubTestHarness(tempDir, REPO_URI) { repoDir -> createAppWiring(repoDir).gitHubClient }
         try {
@@ -141,11 +142,25 @@ class GitHubTestHarnessFunctionalTest {
                             remoteRefs += "main"
                         }
                     }
+                    pullRequest {
+                        baseRef = "main"
+                        headRef = "f0"
+                        title = "thisun"
+                    }
+                    pullRequest {
+                        baseRef = "f0"
+                        headRef = "f1"
+                        title = "anothern"
+                    }
+                    pullRequest {
+                        baseRef = "main"
+                        headRef = "f1"
+                        title = "yet anothern"
+                    }
                 },
             )
             val jGitClient = JGitClient(harness.localRepo)
             val log = jGitClient.logRange("HEAD~2", "HEAD")
-
         } finally {
             harness.rollbackRemoteChanges()
         }
@@ -175,11 +190,9 @@ class GitHubTestHarnessFunctionalTest {
 
         ReadToken().apply { main(arrayOf()) }.githubToken
     }
-
 }
 
 private const val REPO_HOST = "github.com"
 private const val REPO_OWNER = "MichaelSims"
 private const val REPO_NAME = "git-spr-demo"
 private const val REPO_URI = "git@${REPO_HOST}:${REPO_OWNER}/${REPO_NAME}.git"
-

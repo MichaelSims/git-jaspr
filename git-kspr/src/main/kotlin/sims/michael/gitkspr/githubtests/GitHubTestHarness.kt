@@ -17,6 +17,8 @@ class GitHubTestHarness(
 
     private val localGit: JGitClient = JGitClient(localRepo)
 
+    private val gitHubClient = getGitHubClient(workingDirectory)
+
     init {
         val remoteRepo = workingDirectory.resolve(REMOTE_REPO_SUBDIR)
         if (remoteUri != null) {
@@ -34,7 +36,7 @@ class GitHubTestHarness(
         add(readme).commit("Initial commit")
     }
 
-    fun createCommits(testCase: TestCaseData) {
+    suspend fun createCommits(testCase: TestCaseData) {
         localGit.checkout("HEAD") // Go into detached head so as not to move the main ref as we create commits
         fun doCreateCommits(branch: BranchData) {
             val iterator = branch.commits.iterator()
@@ -64,6 +66,12 @@ class GitHubTestHarness(
 
         doCreateCommits(testCase.repository)
         localGit.checkout(DEFAULT_TARGET_REF)
+
+        if (gitHubClient != null) {
+            for (pr in testCase.pullRequests) {
+                gitHubClient.createPullRequest(PullRequest(null, null, null, pr.headRef, pr.baseRef, pr.title, pr.body))
+            }
+        }
     }
 
     fun rollbackRemoteChanges() {
