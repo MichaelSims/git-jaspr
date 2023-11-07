@@ -53,8 +53,7 @@ class GitHubTestHarnessTest {
             assertEquals(
                 commitOne.copy(
                     shortMessage = "Commit one",
-                    committerName = GitHubTestHarness.DEFAULT_COMMITTER_NAME,
-                    committerEmail = GitHubTestHarness.DEFAULT_COMMITTER_EMAIL,
+                    committer = GitHubTestHarness.DEFAULT_COMMITTER,
                 ),
                 commitOne,
             )
