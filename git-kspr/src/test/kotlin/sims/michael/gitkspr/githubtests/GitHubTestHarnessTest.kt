@@ -1,14 +1,17 @@
 package sims.michael.gitkspr.githubtests
 
+import com.nhaarman.mockitokotlin2.mock
 import kotlinx.coroutines.runBlocking
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.TestInfo
 import org.junit.jupiter.api.assertThrows
 import org.slf4j.LoggerFactory
 import sims.michael.gitkspr.DEFAULT_REMOTE_NAME
+import sims.michael.gitkspr.GitHubClient
 import sims.michael.gitkspr.JGitClient
 import sims.michael.gitkspr.githubtests.generatedtestdsl.testCase
 import sims.michael.gitkspr.testing.toStringWithClickableURI
+import java.io.File
 import java.nio.file.Files
 import kotlin.test.assertEquals
 
@@ -18,9 +21,9 @@ class GitHubTestHarnessTest {
 
     @Test
     fun `can create repo with initial commit`() {
-        val tempDir = createTempDir()
-        val harness = GitHubTestHarness(tempDir)
-        val log = JGitClient(harness.localRepo).log()
+        val (localRepo, remoteRepo) = createTempDir().createRepoDirs()
+        GitHubTestHarness(localRepo, remoteRepo, mock<GitHubClient>())
+        val log = JGitClient(localRepo).log()
         assertEquals(1, log.size)
         val commit = log.single()
         assertEquals(commit.copy(shortMessage = "Initial commit"), commit)
@@ -28,8 +31,8 @@ class GitHubTestHarnessTest {
 
     @Test
     fun `can create commits from model`() = runBlocking {
-        val tempDir = createTempDir()
-        val harness = GitHubTestHarness(tempDir)
+        val (localRepo, remoteRepo) = createTempDir().createRepoDirs()
+        val harness = GitHubTestHarness(localRepo, remoteRepo, mock<GitHubClient>())
         harness.createCommits(
             testCase {
                 repository {
@@ -44,7 +47,7 @@ class GitHubTestHarnessTest {
             },
         )
 
-        JGitClient(harness.localRepo).logRange("main~2", "main").let { log ->
+        JGitClient(localRepo).logRange("main~2", "main").let { log ->
             assertEquals(2, log.size)
             val (commitOne, commitThree) = log
             assertEquals(commitOne.copy(shortMessage = "Commit one"), commitOne)
@@ -54,8 +57,8 @@ class GitHubTestHarnessTest {
 
     @Test
     fun `can create commits with a branch from model`() = runBlocking {
-        val tempDir = createTempDir()
-        val harness = GitHubTestHarness(tempDir)
+        val (localRepo, remoteRepo) = createTempDir().createRepoDirs()
+        val harness = GitHubTestHarness(localRepo, remoteRepo, mock<GitHubClient>())
         harness.createCommits(
             testCase {
                 repository {
@@ -78,7 +81,7 @@ class GitHubTestHarnessTest {
                 }
             },
         )
-        val jGitClient = JGitClient(harness.localRepo)
+        val jGitClient = JGitClient(localRepo)
 
         jGitClient.logRange("main~2", "main").let { log ->
             assertEquals(2, log.size)
@@ -99,8 +102,8 @@ class GitHubTestHarnessTest {
 
     @Test
     fun `localRefs and remoteRefs test`() = runBlocking {
-        val tempDir = createTempDir()
-        val harness = GitHubTestHarness(tempDir)
+        val (localRepo, remoteRepo) = createTempDir().createRepoDirs()
+        val harness = GitHubTestHarness(localRepo, remoteRepo, mock<GitHubClient>())
         harness.createCommits(
             testCase {
                 repository {
@@ -125,7 +128,7 @@ class GitHubTestHarnessTest {
                 }
             },
         )
-        val jGitClient = JGitClient(harness.localRepo)
+        val jGitClient = JGitClient(localRepo)
 
         jGitClient.logRange("main~2", "main").let { log ->
             assertEquals(2, log.size)
@@ -151,8 +154,8 @@ class GitHubTestHarnessTest {
 
     @Test
     fun `creating commits without named refs fails`(info: TestInfo) = runBlocking {
-        val tempDir = createTempDir()
-        val harness = GitHubTestHarness(tempDir)
+        val (localRepo, remoteRepo) = createTempDir().createRepoDirs()
+        val harness = GitHubTestHarness(localRepo, remoteRepo, mock<GitHubClient>())
         val exception = assertThrows<IllegalArgumentException> {
             harness.createCommits(
                 testCase {
@@ -182,3 +185,6 @@ class GitHubTestHarnessTest {
         checkNotNull(Files.createTempDirectory(GitHubTestHarnessTest::class.java.simpleName).toFile())
             .also { logger.info("Temp dir created in {}", it.toStringWithClickableURI()) }
 }
+
+fun File.createRepoDirs() =
+    resolve(GitHubTestHarness.LOCAL_REPO_SUBDIR) to resolve(GitHubTestHarness.REMOTE_REPO_SUBDIR)

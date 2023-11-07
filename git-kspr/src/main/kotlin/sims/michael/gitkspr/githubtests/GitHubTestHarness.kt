@@ -7,20 +7,16 @@ import sims.michael.gitkspr.JGitClient.CheckoutMode.CreateBranchIfNotExists
 import java.io.File
 
 class GitHubTestHarness(
-    workingDirectory: File,
+    private val localRepo: File,
+    private val remoteRepo: File,
+    private val gitHubClient: GitHubClient,
     remoteUri: String? = null,
-    getGitHubClient: (File) -> GitHubClient? = { null },
 ) {
     private val logger = LoggerFactory.getLogger(GitHubTestHarness::class.java)
 
-    val localRepo by lazy { workingDirectory.resolve(LOCAL_REPO_SUBDIR).also(File::mkdir) }
-
     private val localGit: JGitClient = JGitClient(localRepo)
 
-    private val gitHubClient = getGitHubClient(workingDirectory)
-
     init {
-        val remoteRepo = workingDirectory.resolve(REMOTE_REPO_SUBDIR)
         if (remoteUri != null) {
             localGit.clone(remoteUri)
         } else {
@@ -67,10 +63,8 @@ class GitHubTestHarness(
         doCreateCommits(testCase.repository)
         localGit.checkout(DEFAULT_TARGET_REF)
 
-        if (gitHubClient != null) {
-            for (pr in testCase.pullRequests) {
-                gitHubClient.createPullRequest(PullRequest(null, null, null, pr.headRef, pr.baseRef, pr.title, pr.body))
-            }
+        for (pr in testCase.pullRequests) {
+            gitHubClient.createPullRequest(PullRequest(null, null, null, pr.headRef, pr.baseRef, pr.title, pr.body))
         }
     }
 
@@ -113,8 +107,8 @@ class GitHubTestHarness(
     private fun String.sanitize() = replace(filenameSafeRegex, "_").lowercase()
 
     companion object {
-        private const val LOCAL_REPO_SUBDIR = "local"
-        private const val REMOTE_REPO_SUBDIR = "remote"
+        const val LOCAL_REPO_SUBDIR = "local"
+        const val REMOTE_REPO_SUBDIR = "remote"
         val RESTORE_PREFIX = "${GitHubTestHarness::class.java.simpleName.lowercase()}-restore/"
         val DELETE_PREFIX = "${GitHubTestHarness::class.java.simpleName.lowercase()}-delete/"
     }

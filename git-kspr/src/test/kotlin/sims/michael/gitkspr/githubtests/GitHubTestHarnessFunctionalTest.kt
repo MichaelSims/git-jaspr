@@ -5,6 +5,7 @@ import com.github.ajalt.clikt.core.context
 import com.github.ajalt.clikt.parameters.options.option
 import com.github.ajalt.clikt.parameters.options.required
 import com.github.ajalt.clikt.sources.PropertiesValueSource
+import com.nhaarman.mockitokotlin2.mock
 import kotlinx.coroutines.runBlocking
 import org.junit.jupiter.api.Test
 import org.slf4j.LoggerFactory
@@ -24,9 +25,9 @@ class GitHubTestHarnessFunctionalTest {
 
     @Test
     fun `can create repo with initial commit`() {
-        val tempDir = createTempDir()
-        val harness = GitHubTestHarness(tempDir)
-        val log = JGitClient(harness.localRepo).log()
+        val (localRepo, remoteRepo) = createTempDir().createRepoDirs()
+        GitHubTestHarness(localRepo, remoteRepo, mock<GitHubClient>())
+        val log = JGitClient(localRepo).log()
         assertEquals(1, log.size)
         val commit = log.single()
         assertEquals(commit.copy(shortMessage = "Initial commit"), commit)
@@ -34,7 +35,8 @@ class GitHubTestHarnessFunctionalTest {
 
     @Test
     fun `can create commits from model`() = runBlocking {
-        val harness = GitHubTestHarness(createTempDir(), REPO_URI)
+        val (localRepo, remoteRepo) = createTempDir().createRepoDirs()
+        val harness = GitHubTestHarness(localRepo, remoteRepo, mock<GitHubClient>(), REPO_URI)
         try {
             harness.createCommits(
                 testCase {
@@ -51,7 +53,7 @@ class GitHubTestHarnessFunctionalTest {
                 },
             )
 
-            JGitClient(harness.localRepo).logRange("${DEFAULT_TARGET_REF}~2", DEFAULT_TARGET_REF).let { log ->
+            JGitClient(localRepo).logRange("${DEFAULT_TARGET_REF}~2", DEFAULT_TARGET_REF).let { log ->
                 val (commitOne, commitThree) = log
                 assertEquals(commitOne.copy(shortMessage = "Commit one"), commitOne)
                 assertEquals(commitThree.copy(shortMessage = "Commit two"), commitThree)
@@ -63,8 +65,8 @@ class GitHubTestHarnessFunctionalTest {
 
     @Test
     fun `can create commits with a branch from model`() = runBlocking {
-        val tempDir = createTempDir()
-        val harness = GitHubTestHarness(tempDir, REPO_URI)
+        val (localRepo, remoteRepo) = createTempDir().createRepoDirs()
+        val harness = GitHubTestHarness(localRepo, remoteRepo, mock<GitHubClient>(), REPO_URI)
         try {
             harness.createCommits(
                 testCase {
@@ -90,7 +92,7 @@ class GitHubTestHarnessFunctionalTest {
                     }
                 },
             )
-            val jGitClient = JGitClient(harness.localRepo)
+            val jGitClient = JGitClient(localRepo)
             val log = jGitClient.logRange("HEAD~2", "HEAD")
 
             assertEquals(2, log.size)
@@ -109,8 +111,9 @@ class GitHubTestHarnessFunctionalTest {
 
     @Test
     fun `can open PRs from created commits`() = runBlocking {
-        val tempDir = createTempDir()
-        val harness = GitHubTestHarness(tempDir, REPO_URI) { repoDir -> createAppWiring(repoDir).gitHubClient }
+        val (localRepo, remoteRepo) = createTempDir().createRepoDirs()
+        val gitHubClient = createAppWiring(localRepo).gitHubClient
+        val harness = GitHubTestHarness(localRepo, remoteRepo, gitHubClient, REPO_URI)
         try {
             harness.createCommits(
                 testCase {
@@ -159,8 +162,6 @@ class GitHubTestHarnessFunctionalTest {
                     }
                 },
             )
-            val jGitClient = JGitClient(harness.localRepo)
-            val log = jGitClient.logRange("HEAD~2", "HEAD")
         } finally {
             harness.rollbackRemoteChanges()
         }
