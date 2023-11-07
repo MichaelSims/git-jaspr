@@ -346,8 +346,8 @@ class GitKsprTest {
             label.toString(),
             "",
             id ?: "$label",
-            ZonedDateTime.of(2023, 10, 29, 7, 56, 0, 0, ZoneId.systemDefault()),
-            ZonedDateTime.of(2023, 10, 29, 7, 56, 0, 0, ZoneId.systemDefault()),
+            authorDate = ZonedDateTime.of(2023, 10, 29, 7, 56, 0, 0, ZoneId.systemDefault()),
+            commitDate = ZonedDateTime.of(2023, 10, 29, 7, 56, 0, 0, ZoneId.systemDefault()),
         )
 
     private fun Config.prFactory() = PullRequestFactory(remoteBranchPrefix)

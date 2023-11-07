@@ -39,7 +39,7 @@ dependencies {
     kapt(project(":data-class-fragment"))
     testImplementation(libs.kotlin.test.junit5)
     testImplementation(libs.junit.jupiter.engine)
-    testImplementation(libs.jgit.junit)
+    implementation(libs.jgit.junit) // TODO explain why
     testImplementation(libs.mockito.kotlin)
     testImplementation(libs.mockito.inline)
 }

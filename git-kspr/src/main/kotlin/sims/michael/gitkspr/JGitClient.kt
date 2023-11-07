@@ -238,6 +238,8 @@ class JGitClient(val workingDirectory: File, val remoteBranchPrefix: String = DE
             shortMessage,
             fullMessage,
             getFooterLines(COMMIT_ID_LABEL).firstOrNull(),
+            committerIdent.name,
+            committerIdent.emailAddress,
             ZonedDateTime.ofInstant(committerIdent.`when`.toInstant(), ZoneId.systemDefault()),
             ZonedDateTime.ofInstant(authorIdent.`when`.toInstant(), ZoneId.systemDefault()),
         )

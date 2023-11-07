@@ -19,6 +19,10 @@ interface Branch : DataClassFragment {
 @GenerateDataClassFragmentDataClass
 interface Commit : DataClassFragment {
     val id: IntPropertyNotNull
+    val committerName: StringProperty
+    val committerEmail: StringProperty
+    val authorName: StringProperty
+    val authorEmail: StringProperty
 
     @GenerateDataClassFragmentDataClass.TestDataDslName("branch")
     val branches: ListOfNestedPropertyNotNull<Branch>

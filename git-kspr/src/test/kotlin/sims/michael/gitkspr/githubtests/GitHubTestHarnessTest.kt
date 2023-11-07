@@ -50,7 +50,14 @@ class GitHubTestHarnessTest {
         JGitClient(localRepo).logRange("main~2", "main").let { log ->
             assertEquals(2, log.size)
             val (commitOne, commitThree) = log
-            assertEquals(commitOne.copy(shortMessage = "Commit one"), commitOne)
+            assertEquals(
+                commitOne.copy(
+                    shortMessage = "Commit one",
+                    committerName = GitHubTestHarness.DEFAULT_COMMITTER_NAME,
+                    committerEmail = GitHubTestHarness.DEFAULT_COMMITTER_EMAIL,
+                ),
+                commitOne,
+            )
             assertEquals(commitThree.copy(shortMessage = "Commit two"), commitThree)
         }
     }

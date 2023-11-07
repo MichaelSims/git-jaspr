@@ -1,5 +1,8 @@
 package sims.michael.gitkspr.githubtests
 
+import org.eclipse.jgit.junit.MockSystemReader
+import org.eclipse.jgit.lib.Constants
+import org.eclipse.jgit.util.SystemReader
 import org.slf4j.LoggerFactory
 import sims.michael.gitkspr.*
 import sims.michael.gitkspr.Commit
@@ -38,6 +41,7 @@ class GitHubTestHarness(
             val iterator = branch.commits.iterator()
             while (iterator.hasNext()) {
                 val commit = iterator.next()
+                setGitCommitterInfo(commit.committerName, commit.committerEmail)
                 val c = commit.create().also { logger.info("Created {}", it) }
                 if (!iterator.hasNext()) requireNamedRef(commit)
                 for (localRef in commit.localRefs) {
@@ -103,6 +107,17 @@ class GitHubTestHarness(
         }
     }
 
+    private fun setGitCommitterInfo(name: String?, email: String?) {
+        SystemReader
+            .setInstance(
+                MockSystemReader()
+                    .apply {
+                        setProperty(Constants.GIT_COMMITTER_NAME_KEY, name ?: DEFAULT_COMMITTER_NAME)
+                        setProperty(Constants.GIT_COMMITTER_EMAIL_KEY, email ?: DEFAULT_COMMITTER_EMAIL)
+                    },
+            )
+    }
+
     private val filenameSafeRegex = "\\W+".toRegex()
     private fun String.sanitize() = replace(filenameSafeRegex, "_").lowercase()
 
@@ -111,5 +126,7 @@ class GitHubTestHarness(
         const val REMOTE_REPO_SUBDIR = "remote"
         val RESTORE_PREFIX = "${GitHubTestHarness::class.java.simpleName.lowercase()}-restore/"
         val DELETE_PREFIX = "${GitHubTestHarness::class.java.simpleName.lowercase()}-delete/"
+        const val DEFAULT_COMMITTER_NAME: String = "Frank Grimes"
+        const val DEFAULT_COMMITTER_EMAIL: String = "grimey@springfield.example.com"
     }
 }
