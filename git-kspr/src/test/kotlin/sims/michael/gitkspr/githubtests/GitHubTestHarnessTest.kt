@@ -1,13 +1,11 @@
 package sims.michael.gitkspr.githubtests
 
-import com.nhaarman.mockitokotlin2.mock
 import kotlinx.coroutines.runBlocking
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.TestInfo
 import org.junit.jupiter.api.assertThrows
 import org.slf4j.LoggerFactory
 import sims.michael.gitkspr.DEFAULT_REMOTE_NAME
-import sims.michael.gitkspr.GitHubClient
 import sims.michael.gitkspr.JGitClient
 import sims.michael.gitkspr.githubtests.generatedtestdsl.testCase
 import sims.michael.gitkspr.testing.toStringWithClickableURI
@@ -22,7 +20,7 @@ class GitHubTestHarnessTest {
     @Test
     fun `can create repo with initial commit`() {
         val (localRepo, remoteRepo) = createTempDir().createRepoDirs()
-        GitHubTestHarness(localRepo, remoteRepo, mock<GitHubClient>())
+        GitHubTestHarness(localRepo, remoteRepo)
         val log = JGitClient(localRepo).log()
         assertEquals(1, log.size)
         val commit = log.single()
@@ -32,7 +30,7 @@ class GitHubTestHarnessTest {
     @Test
     fun `can create commits from model`() = runBlocking {
         val (localRepo, remoteRepo) = createTempDir().createRepoDirs()
-        val harness = GitHubTestHarness(localRepo, remoteRepo, mock<GitHubClient>())
+        val harness = GitHubTestHarness(localRepo, remoteRepo)
         harness.createCommits(
             testCase {
                 repository {
@@ -64,7 +62,7 @@ class GitHubTestHarnessTest {
     @Test
     fun `can create commits with a branch from model`() = runBlocking {
         val (localRepo, remoteRepo) = createTempDir().createRepoDirs()
-        val harness = GitHubTestHarness(localRepo, remoteRepo, mock<GitHubClient>())
+        val harness = GitHubTestHarness(localRepo, remoteRepo, emptyMap())
         harness.createCommits(
             testCase {
                 repository {
@@ -109,7 +107,7 @@ class GitHubTestHarnessTest {
     @Test
     fun `localRefs and remoteRefs test`() = runBlocking {
         val (localRepo, remoteRepo) = createTempDir().createRepoDirs()
-        val harness = GitHubTestHarness(localRepo, remoteRepo, mock<GitHubClient>())
+        val harness = GitHubTestHarness(localRepo, remoteRepo)
         harness.createCommits(
             testCase {
                 repository {
@@ -161,7 +159,7 @@ class GitHubTestHarnessTest {
     @Test
     fun `creating commits without named refs fails`(info: TestInfo) = runBlocking {
         val (localRepo, remoteRepo) = createTempDir().createRepoDirs()
-        val harness = GitHubTestHarness(localRepo, remoteRepo, mock<GitHubClient>())
+        val harness = GitHubTestHarness(localRepo, remoteRepo)
         val exception = assertThrows<IllegalArgumentException> {
             harness.createCommits(
                 testCase {

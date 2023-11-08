@@ -14,7 +14,7 @@ import java.io.File
 class GitHubTestHarness(
     private val localRepo: File,
     private val remoteRepo: File,
-    private val gitHubClient: GitHubClient,
+    private val gitHubClients: Map<String, GitHubClient> = emptyMap(),
     remoteUri: String? = null,
 ) {
     private val logger = LoggerFactory.getLogger(GitHubTestHarness::class.java)
@@ -70,6 +70,9 @@ class GitHubTestHarness(
         localGit.checkout(DEFAULT_TARGET_REF)
 
         for (pr in testCase.pullRequests) {
+            val gitHubClient = requireNotNull(gitHubClients[pr.userKey]) {
+                "Can't find GitHubClient for user key '${pr.userKey}'"
+            }
             gitHubClient.createPullRequest(PullRequest(null, null, null, pr.headRef, pr.baseRef, pr.title, pr.body))
         }
     }

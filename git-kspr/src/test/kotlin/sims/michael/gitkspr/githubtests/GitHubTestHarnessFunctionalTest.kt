@@ -1,11 +1,5 @@
 package sims.michael.gitkspr.githubtests
 
-import com.github.ajalt.clikt.core.NoOpCliktCommand
-import com.github.ajalt.clikt.core.context
-import com.github.ajalt.clikt.parameters.options.option
-import com.github.ajalt.clikt.parameters.options.required
-import com.github.ajalt.clikt.sources.PropertiesValueSource
-import com.nhaarman.mockitokotlin2.mock
 import kotlinx.coroutines.runBlocking
 import org.junit.jupiter.api.Test
 import org.slf4j.LoggerFactory
@@ -15,6 +9,7 @@ import sims.michael.gitkspr.testing.FunctionalTest
 import sims.michael.gitkspr.testing.toStringWithClickableURI
 import java.io.File
 import java.nio.file.Files
+import java.util.*
 import kotlin.test.assertEquals
 
 // TODO extract a common superclass from this and the other one?
@@ -23,10 +18,25 @@ class GitHubTestHarnessFunctionalTest {
 
     private val logger = LoggerFactory.getLogger(GitHubTestHarnessFunctionalTest::class.java)
 
+    private val alice: GitHubClient
+    private val bob: GitHubClient
+
+    init {
+        val properties = Properties().apply {
+            val configFile = File(System.getenv("HOME")).resolve(CONFIG_FILE_NAME)
+            configFile.inputStream().use { inputStream -> load(inputStream) }
+        }
+
+        fun gitHubToken(name: String) = properties.getProperty("github-token.$name")
+        val gitHubInfo = GitHubInfo(REPO_HOST, REPO_OWNER, REPO_NAME)
+        alice = GitHubClientWiring(gitHubToken("alice"), gitHubInfo, DEFAULT_REMOTE_BRANCH_PREFIX).gitHubClient
+        bob = GitHubClientWiring(gitHubToken("bob"), gitHubInfo, DEFAULT_REMOTE_BRANCH_PREFIX).gitHubClient
+    }
+
     @Test
     fun `can create repo with initial commit`() {
         val (localRepo, remoteRepo) = createTempDir().createRepoDirs()
-        GitHubTestHarness(localRepo, remoteRepo, mock<GitHubClient>())
+        GitHubTestHarness(localRepo, remoteRepo)
         val log = JGitClient(localRepo).log()
         assertEquals(1, log.size)
         val commit = log.single()
@@ -36,7 +46,7 @@ class GitHubTestHarnessFunctionalTest {
     @Test
     fun `can create commits from model`() = runBlocking {
         val (localRepo, remoteRepo) = createTempDir().createRepoDirs()
-        val harness = GitHubTestHarness(localRepo, remoteRepo, mock<GitHubClient>(), REPO_URI)
+        val harness = GitHubTestHarness(localRepo, remoteRepo, emptyMap(), REPO_URI)
         try {
             harness.createCommits(
                 testCase {
@@ -66,7 +76,7 @@ class GitHubTestHarnessFunctionalTest {
     @Test
     fun `can create commits with a branch from model`() = runBlocking {
         val (localRepo, remoteRepo) = createTempDir().createRepoDirs()
-        val harness = GitHubTestHarness(localRepo, remoteRepo, mock<GitHubClient>(), REPO_URI)
+        val harness = GitHubTestHarness(localRepo, remoteRepo, emptyMap(), REPO_URI)
         try {
             harness.createCommits(
                 testCase {
@@ -112,8 +122,7 @@ class GitHubTestHarnessFunctionalTest {
     @Test
     fun `can open PRs from created commits`() = runBlocking {
         val (localRepo, remoteRepo) = createTempDir().createRepoDirs()
-        val gitHubClient = createAppWiring(localRepo).gitHubClient
-        val harness = GitHubTestHarness(localRepo, remoteRepo, gitHubClient, REPO_URI)
+        val harness = GitHubTestHarness(localRepo, remoteRepo, mapOf("alice" to alice), REPO_URI)
         try {
             harness.createCommits(
                 testCase {
@@ -149,16 +158,19 @@ class GitHubTestHarnessFunctionalTest {
                         baseRef = "main"
                         headRef = "f0"
                         title = "thisun"
+                        userKey = "alice"
                     }
                     pullRequest {
                         baseRef = "f0"
                         headRef = "f1"
                         title = "anothern"
+                        userKey = "alice"
                     }
                     pullRequest {
                         baseRef = "main"
                         headRef = "f1"
                         title = "yet anothern"
+                        userKey = "alice"
                     }
                 },
             )
@@ -170,27 +182,6 @@ class GitHubTestHarnessFunctionalTest {
     private fun createTempDir() =
         checkNotNull(Files.createTempDirectory(GitHubTestHarnessFunctionalTest::class.java.simpleName).toFile())
             .also { logger.info("Temp dir created in {}", it.toStringWithClickableURI()) }
-
-    // TODO quick and dirty way to get a similar app wiring to the production app. Revisit this
-    private fun createAppWiring(dir: File): DefaultAppWiring = DefaultAppWiring(
-        githubToken,
-        Config(dir, "origin", GitHubInfo(REPO_HOST, REPO_OWNER, REPO_NAME), DEFAULT_REMOTE_BRANCH_PREFIX),
-        JGitClient(dir),
-    )
-
-    private val githubToken by lazy {
-        class ReadToken : NoOpCliktCommand() {
-            init {
-                context {
-                    valueSource = PropertiesValueSource.from(File(System.getenv("HOME")).resolve(CONFIG_FILE_NAME))
-                }
-            }
-
-            val githubToken by option().required()
-        }
-
-        ReadToken().apply { main(arrayOf()) }.githubToken
-    }
 }
 
 private const val REPO_HOST = "github.com"
