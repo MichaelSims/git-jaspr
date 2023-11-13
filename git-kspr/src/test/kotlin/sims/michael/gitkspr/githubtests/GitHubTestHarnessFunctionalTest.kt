@@ -122,7 +122,7 @@ class GitHubTestHarnessFunctionalTest {
     @Test
     fun `can open PRs from created commits`() = runBlocking {
         val (localRepo, remoteRepo) = createTempDir().createRepoDirs()
-        val harness = GitHubTestHarness(localRepo, remoteRepo, mapOf("alice" to alice), REPO_URI)
+        val harness = GitHubTestHarness(localRepo, remoteRepo, mapOf("alice" to alice, "bob" to bob), REPO_URI)
         try {
             harness.createCommits(
                 testCase {
@@ -170,7 +170,7 @@ class GitHubTestHarnessFunctionalTest {
                         baseRef = "main"
                         headRef = "f1"
                         title = "yet anothern"
-                        userKey = "alice"
+                        userKey = "bob"
                     }
                 },
             )
