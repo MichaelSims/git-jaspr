@@ -42,20 +42,34 @@ class GitHubTestHarness(
 
     suspend fun createCommits(testCase: TestCaseData) {
         requireNoDuplicatedTitles(testCase)
-        localGit.checkout("HEAD") // Go into detached head so as not to move the main ref as we create commits
+        val titleToCommitHashMap = localGit.logAll().associate { it.shortMessage to it.hash }
+        localGit.checkout(localGit.logAll().last().hash)
         fun doCreateCommits(branch: BranchData) {
             val iterator = branch.commits.iterator()
             while (iterator.hasNext()) {
                 val commit = iterator.next()
                 setGitCommitterInfo(commit.committer.toIdent())
-                val c = commit.create().also { logger.info("Created {}", it) }
+                val existingHash = titleToCommitHashMap[commit.title]
+                val c = if (existingHash != null) {
+                    localGit.cherryPick(localGit.log(existingHash, maxCount = 1).single())
+                } else {
+                    commit.create().also { logger.info("Created {}", it) }
+                }
                 if (!iterator.hasNext()) requireNamedRef(commit)
                 for (localRef in commit.localRefs) {
-                    val commit1 = localGit.branch(localRef, force = true)
-                    if (commit1 != null) {
-                        localGit.branch("${RESTORE_PREFIX}$localRef", startPoint = commit1.hash)
+                    val oldCommit = localGit.branch(localRef, force = true)
+                    if (oldCommit != null) {
+                        val restore = "${RESTORE_PREFIX}$localRef"
+                        val branchNames = localGit.getBranchNames()
+                        if (!branchNames.contains(restore)) {
+                            if (branchNames.none { it.startsWith("${DELETE_PREFIX}$localRef") }) {
+                                localGit.branch(restore, startPoint = oldCommit.hash)
+                            } else {
+                                localGit.branch("${DELETE_PREFIX}$localRef-${generateUuid(20)}")
+                            }
+                        }
                     } else {
-                        localGit.branch("${DELETE_PREFIX}$localRef")
+                        localGit.branch("${DELETE_PREFIX}$localRef-${generateUuid(20)}")
                     }
                 }
                 val remoteName = remoteUris[commit.committer.userKey] ?: DEFAULT_REMOTE_NAME

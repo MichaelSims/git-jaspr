@@ -52,6 +52,8 @@ class JGitClient(val workingDirectory: File, val remoteBranchPrefix: String = DE
 
     fun log(): List<Commit> = useGit { git -> git.log().call().map { it.toCommit(git) }.reversed() }
 
+    fun logAll(): List<Commit> = useGit { git -> git.log().all().call().map { it.toCommit(git) }.reversed() }
+
     fun isWorkingDirectoryClean(): Boolean {
         logger.trace("isWorkingDirectoryClean")
         return useGit { git -> git.status().call().isClean }

@@ -216,6 +216,52 @@ class GitHubTestHarnessTest {
         logger.info("{}: {}", info.displayName, exception.message)
     }
 
+    @Test
+    fun `can rewrite history`(info: TestInfo) = runBlocking {
+        val (localRepo, remoteRepo) = createTempDir().createRepoDirs()
+        val harness = GitHubTestHarness(localRepo, remoteRepo)
+        harness.createCommits(
+            testCase {
+                repository {
+                    commit {
+                        title = "one"
+                    }
+                    commit {
+                        title = "two"
+                    }
+                    commit {
+                        title = "three"
+                        localRefs += "one"
+                    }
+                }
+            },
+        )
+        harness.createCommits(
+            testCase {
+                repository {
+                    commit {
+                        title = "one"
+                    }
+                    commit {
+                        title = "three"
+                    }
+                    commit {
+                        title = "four"
+                        localRefs += "one"
+                    }
+                }
+            },
+        )
+        val jGitClient = JGitClient(localRepo)
+
+        jGitClient.logRange("one~3", "one").let { log ->
+            assertEquals(3, log.size)
+            val (commitOne, commitTwo, commitThree) = log
+            assertEquals(commitOne.copy(shortMessage = "one"), commitOne)
+            assertEquals(commitTwo.copy(shortMessage = "three"), commitTwo)
+            assertEquals(commitThree.copy(shortMessage = "four"), commitThree)
+        }
+    }
 
     private fun createTempDir() =
         checkNotNull(Files.createTempDirectory(GitHubTestHarnessTest::class.java.simpleName).toFile())
