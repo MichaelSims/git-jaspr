@@ -67,16 +67,16 @@ class GitHubTestHarness(
                             if (branchNames.none { it.startsWith("${DELETE_PREFIX}$localRef") }) {
                                 localGit.branch(restore, startPoint = oldCommit.hash)
                             } else {
-                                localGit.branch("${DELETE_PREFIX}$localRef-${generateUuid(20)}")
+                                localGit.branch("${DELETE_PREFIX}$localRef/${generateUuid(20)}")
                             }
                         }
                     } else {
-                        localGit.branch("${DELETE_PREFIX}$localRef-${generateUuid(20)}")
+                        localGit.branch("${DELETE_PREFIX}$localRef/${generateUuid(20)}")
                     }
                 }
                 val remoteName = remoteUris[commit.committer.userKey] ?: DEFAULT_REMOTE_NAME
                 for (remoteRef in commit.remoteRefs) {
-                    localGit.push(listOf(RefSpec("HEAD", remoteRef)), remoteName)
+                    localGit.push(listOf(RefSpec("+HEAD", remoteRef)), remoteName)
                 }
                 if (commit.branches.isNotEmpty()) {
                     for (childBranch in commit.branches) {
@@ -94,8 +94,8 @@ class GitHubTestHarness(
         if (prs.isNotEmpty()) {
             val existingPrsByTitle = gitHubClients.values.first().getPullRequests().associateBy(PullRequest::title)
             for (pr in prs) {
-                val gitHubClient = requireNotNull(gitHubClients[pr.userKey]) {
-                    "Can't find GitHubClient for user key '${pr.userKey}'"
+                val gitHubClient = requireNotNull(gitHubClients[pr.userKey] ?: gitHubClients.values.firstOrNull()) {
+                    "No github client available!"
                 }
                 val newPullRequest = PullRequest(null, null, null, pr.headRef, pr.baseRef, pr.title, pr.body)
                 val existingPr = existingPrsByTitle[pr.title]
@@ -109,22 +109,26 @@ class GitHubTestHarness(
     }
 
     fun rollbackRemoteChanges() {
+        logger.trace("rollbackRemoteChanges")
         val restoreRegex = "${RESTORE_PREFIX}(.*?)".toRegex()
         val toRestore = localGit
             .getBranchNames()
+            .also { branchNames -> logger.trace("getBranchNames {}", branchNames) }
             .mapNotNull { name ->
                 restoreRegex.matchEntire(name)
             }
             .map {
                 RefSpec("+" + it.groupValues[0], it.groupValues[1])
             }
-        val deleteRegex = "${DELETE_PREFIX}(.*?)".toRegex()
+        val deleteRegex = "${DELETE_PREFIX}(.*?)/.*".toRegex()
         val toDelete = localGit.getBranchNames()
             .mapNotNull { name -> deleteRegex.matchEntire(name) }
             .map {
                 RefSpec("+", it.groupValues[1])
             }
-        localGit.push(toRestore + toDelete)
+        val refSpecs = (toRestore + toDelete).distinct()
+        logger.debug("Pushing {}", refSpecs)
+        localGit.push(refSpecs)
         localGit.deleteBranches(
             names = toRestore.map(RefSpec::localRef) + toDelete.map(RefSpec::remoteRef),
             force = true,

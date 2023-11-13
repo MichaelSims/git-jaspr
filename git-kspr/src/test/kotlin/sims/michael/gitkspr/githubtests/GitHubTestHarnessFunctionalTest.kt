@@ -2,8 +2,11 @@ package sims.michael.gitkspr.githubtests
 
 import kotlinx.coroutines.runBlocking
 import org.junit.jupiter.api.Test
+import org.junit.jupiter.api.TestInfo
 import org.slf4j.LoggerFactory
 import sims.michael.gitkspr.*
+import sims.michael.gitkspr.githubtests.generatedtestdsl.ident
+import sims.michael.gitkspr.githubtests.generatedtestdsl.pullRequest
 import sims.michael.gitkspr.githubtests.generatedtestdsl.testCase
 import sims.michael.gitkspr.testing.FunctionalTest
 import sims.michael.gitkspr.testing.toStringWithClickableURI
@@ -18,8 +21,8 @@ class GitHubTestHarnessFunctionalTest {
 
     private val logger = LoggerFactory.getLogger(GitHubTestHarnessFunctionalTest::class.java)
 
-    private val alice: GitHubClient
-    private val bob: GitHubClient
+    private val derelictMan: GitHubClient
+    private val michael: GitHubClient
 
     init {
         val properties = Properties().apply {
@@ -29,8 +32,8 @@ class GitHubTestHarnessFunctionalTest {
 
         fun gitHubToken(name: String) = properties.getProperty("github-token.$name")
         val gitHubInfo = GitHubInfo(REPO_HOST, REPO_OWNER, REPO_NAME)
-        alice = GitHubClientWiring(gitHubToken("alice"), gitHubInfo, DEFAULT_REMOTE_BRANCH_PREFIX).gitHubClient
-        bob = GitHubClientWiring(gitHubToken("bob"), gitHubInfo, DEFAULT_REMOTE_BRANCH_PREFIX).gitHubClient
+        derelictMan = GitHubClientWiring(gitHubToken("derelictMan"), gitHubInfo, DEFAULT_REMOTE_BRANCH_PREFIX).gitHubClient
+        michael = GitHubClientWiring(gitHubToken("michael"), gitHubInfo, DEFAULT_REMOTE_BRANCH_PREFIX).gitHubClient
     }
 
     @Test
@@ -46,7 +49,7 @@ class GitHubTestHarnessFunctionalTest {
     @Test
     fun `can create commits from model`() = runBlocking {
         val (localRepo, remoteRepo) = createTempDir().createRepoDirs()
-        val harness = GitHubTestHarness(localRepo, remoteRepo, emptyMap(), mapOf("bob" to REPO_URI_BOB, "alice" to REPO_URI_ALICE))
+        val harness = GitHubTestHarness(localRepo, remoteRepo, emptyMap(), mapOf("michael" to REPO_URI_MICHAEL, "derelictMan" to REPO_URI_DERELICTMAN))
         try {
             harness.createCommits(
                 testCase {
@@ -76,7 +79,7 @@ class GitHubTestHarnessFunctionalTest {
     @Test
     fun `can create commits with a branch from model`() = runBlocking {
         val (localRepo, remoteRepo) = createTempDir().createRepoDirs()
-        val harness = GitHubTestHarness(localRepo, remoteRepo, emptyMap(), mapOf("bob" to REPO_URI_BOB, "alice" to REPO_URI_ALICE))
+        val harness = GitHubTestHarness(localRepo, remoteRepo, emptyMap(), mapOf("michael" to REPO_URI_MICHAEL, "derelictMan" to REPO_URI_DERELICTMAN))
         try {
             harness.createCommits(
                 testCase {
@@ -122,7 +125,7 @@ class GitHubTestHarnessFunctionalTest {
     @Test
     fun `can open PRs from created commits`() = runBlocking {
         val (localRepo, remoteRepo) = createTempDir().createRepoDirs()
-        val harness = GitHubTestHarness(localRepo, remoteRepo, mapOf("alice" to alice, "bob" to bob), mapOf("bob" to REPO_URI_BOB, "alice" to REPO_URI_ALICE))
+        val harness = GitHubTestHarness(localRepo, remoteRepo, mapOf("derelictMan" to derelictMan, "michael" to michael), mapOf("michael" to REPO_URI_MICHAEL, "derelictMan" to REPO_URI_DERELICTMAN))
         try {
             harness.createCommits(
                 testCase {
@@ -158,19 +161,19 @@ class GitHubTestHarnessFunctionalTest {
                         baseRef = "main"
                         headRef = "f0"
                         title = "thisun"
-                        userKey = "alice"
+                        userKey = "derelictMan"
                     }
                     pullRequest {
                         baseRef = "f0"
                         headRef = "f1"
                         title = "anothern"
-                        userKey = "alice"
+                        userKey = "derelictMan"
                     }
                     pullRequest {
                         baseRef = "main"
                         headRef = "f1"
                         title = "yet anothern"
-                        userKey = "bob"
+                        userKey = "michael"
                     }
                 },
             )
@@ -179,6 +182,77 @@ class GitHubTestHarnessFunctionalTest {
         }
     }
 
+    @Test
+    fun `can update existing PRs`(testInfo: TestInfo) = runBlocking {
+        val (localRepo, remoteRepo) = createTempDir().createRepoDirs()
+        val harness = GitHubTestHarness(localRepo, remoteRepo, mapOf("derelictMan" to derelictMan, "michael" to michael), mapOf("michael" to REPO_URI_MICHAEL, "derelictMan" to REPO_URI_DERELICTMAN))
+        try {
+            val m = ident {
+                userKey = "michael"
+                email = "michael.h.sims@gmail.com"
+                name = "Michael Sims"
+            }
+            val d = ident {
+                userKey = "derelictMan"
+                email = "derelictman@gmail.com"
+                name = "Frank Grimes"
+            }
+            harness.createCommits(
+                testCase {
+                    repository {
+                        commit {
+                            title = "one"
+                            committer.from(m)
+                        }
+                        commit {
+                            title = "two"
+                            committer.from(m)
+                        }
+                        commit {
+                            title = "three"
+                            committer.from(m)
+                            localRefs += "one"
+                            remoteRefs += "one"
+                        }
+                    }
+                    pullRequest {
+                        title = testInfo.displayName
+                        baseRef = "main"
+                        headRef = "one"
+                        userKey = "michael"
+                    }
+                },
+            )
+            harness.createCommits(
+                testCase {
+                    repository {
+                        commit {
+                            title = "one"
+                            committer.from(d)
+                        }
+                        commit {
+                            title = "three"
+                            committer.from(d)
+                        }
+                        commit {
+                            title = "four"
+                            committer.from(d)
+                            localRefs += "one"
+                            remoteRefs += "one"
+                        }
+                    }
+                    pullRequest {
+                        title = testInfo.displayName
+                        baseRef = "main"
+                        headRef = "one"
+                        userKey = "derelictMan"
+                    }
+                },
+            )
+        } finally {
+            harness.rollbackRemoteChanges()
+        }
+    }
     private fun createTempDir() =
         checkNotNull(Files.createTempDirectory(GitHubTestHarnessFunctionalTest::class.java.simpleName).toFile())
             .also { logger.info("Temp dir created in {}", it.toStringWithClickableURI()) }
@@ -187,5 +261,5 @@ class GitHubTestHarnessFunctionalTest {
 private const val REPO_HOST = "github.com"
 private const val REPO_OWNER = "MichaelSims"
 private const val REPO_NAME = "git-spr-demo"
-private const val REPO_URI_BOB = "git@${REPO_HOST}:${REPO_OWNER}/${REPO_NAME}.git"
-private const val REPO_URI_ALICE = "git@${REPO_HOST}-derelictman:${REPO_OWNER}/${REPO_NAME}.git"
+private const val REPO_URI_MICHAEL = "git@${REPO_HOST}:${REPO_OWNER}/${REPO_NAME}.git"
+private const val REPO_URI_DERELICTMAN = "git@${REPO_HOST}-derelictman:${REPO_OWNER}/${REPO_NAME}.git"
