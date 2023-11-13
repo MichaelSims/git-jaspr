@@ -46,7 +46,7 @@ class GitHubTestHarnessFunctionalTest {
     @Test
     fun `can create commits from model`() = runBlocking {
         val (localRepo, remoteRepo) = createTempDir().createRepoDirs()
-        val harness = GitHubTestHarness(localRepo, remoteRepo, emptyMap(), REPO_URI)
+        val harness = GitHubTestHarness(localRepo, remoteRepo, emptyMap(), mapOf("bob" to REPO_URI_BOB, "alice" to REPO_URI_ALICE))
         try {
             harness.createCommits(
                 testCase {
@@ -76,7 +76,7 @@ class GitHubTestHarnessFunctionalTest {
     @Test
     fun `can create commits with a branch from model`() = runBlocking {
         val (localRepo, remoteRepo) = createTempDir().createRepoDirs()
-        val harness = GitHubTestHarness(localRepo, remoteRepo, emptyMap(), REPO_URI)
+        val harness = GitHubTestHarness(localRepo, remoteRepo, emptyMap(), mapOf("bob" to REPO_URI_BOB, "alice" to REPO_URI_ALICE))
         try {
             harness.createCommits(
                 testCase {
@@ -122,7 +122,7 @@ class GitHubTestHarnessFunctionalTest {
     @Test
     fun `can open PRs from created commits`() = runBlocking {
         val (localRepo, remoteRepo) = createTempDir().createRepoDirs()
-        val harness = GitHubTestHarness(localRepo, remoteRepo, mapOf("alice" to alice, "bob" to bob), REPO_URI)
+        val harness = GitHubTestHarness(localRepo, remoteRepo, mapOf("alice" to alice, "bob" to bob), mapOf("bob" to REPO_URI_BOB, "alice" to REPO_URI_ALICE))
         try {
             harness.createCommits(
                 testCase {
@@ -187,4 +187,5 @@ class GitHubTestHarnessFunctionalTest {
 private const val REPO_HOST = "github.com"
 private const val REPO_OWNER = "MichaelSims"
 private const val REPO_NAME = "git-spr-demo"
-private const val REPO_URI = "git@${REPO_HOST}:${REPO_OWNER}/${REPO_NAME}.git"
+private const val REPO_URI_BOB = "git@${REPO_HOST}:${REPO_OWNER}/${REPO_NAME}.git"
+private const val REPO_URI_ALICE = "git@${REPO_HOST}-derelictman:${REPO_OWNER}/${REPO_NAME}.git"

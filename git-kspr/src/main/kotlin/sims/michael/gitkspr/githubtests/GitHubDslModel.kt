@@ -35,6 +35,7 @@ interface Commit : DataClassFragment {
 interface Ident : DataClassFragment {
     val name: StringPropertyNotNull
     val email: StringPropertyNotNull
+    val userKey: StringPropertyNotNull
 }
 
 @GenerateDataClassFragmentDataClass

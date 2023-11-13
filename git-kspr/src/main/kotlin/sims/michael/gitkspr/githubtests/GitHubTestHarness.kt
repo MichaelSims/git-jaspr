@@ -15,15 +15,18 @@ class GitHubTestHarness(
     private val localRepo: File,
     private val remoteRepo: File,
     private val gitHubClients: Map<String, GitHubClient> = emptyMap(),
-    remoteUri: String? = null,
+    private val remoteUris: Map<String, String> = emptyMap(),
 ) {
     private val logger = LoggerFactory.getLogger(GitHubTestHarness::class.java)
 
     private val localGit: JGitClient = JGitClient(localRepo)
 
     init {
-        if (remoteUri != null) {
-            localGit.clone(remoteUri)
+        // Remote URIs are a mechanism to allow pushes to the same repo with different SSH keys. As such, they are all
+        // the "same" repo thus we can use any of them.
+        val firstOrNull = remoteUris.values.firstOrNull()
+        if (firstOrNull != null) {
+            localGit.clone(firstOrNull)
         } else {
             JGitClient(remoteRepo).init().createInitialCommit().also { localGit.clone(remoteRepo.toURI().toString()) }
         }
@@ -54,8 +57,9 @@ class GitHubTestHarness(
                         localGit.branch("${DELETE_PREFIX}$localRef")
                     }
                 }
+                val remoteName = remoteUris[commit.committer.userKey] ?: DEFAULT_REMOTE_NAME
                 for (remoteRef in commit.remoteRefs) {
-                    localGit.push(listOf(RefSpec("HEAD", remoteRef)))
+                    localGit.push(listOf(RefSpec("HEAD", remoteRef)), remoteName)
                 }
                 if (commit.branches.isNotEmpty()) {
                     for (childBranch in commit.branches) {
