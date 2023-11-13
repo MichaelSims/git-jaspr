@@ -9,6 +9,7 @@ import sims.michael.gitkspr.*
 import sims.michael.gitkspr.Commit
 import sims.michael.gitkspr.Ident
 import sims.michael.gitkspr.JGitClient.CheckoutMode.CreateBranchIfNotExists
+import sims.michael.gitkspr.PullRequest
 import java.io.File
 
 class GitHubTestHarness(
@@ -41,7 +42,8 @@ class GitHubTestHarness(
     }
 
     suspend fun createCommits(testCase: TestCaseData) {
-        requireNoDuplicatedTitles(testCase)
+        requireNoDuplicatedCommitTitles(testCase)
+        requireNoDuplicatedPrTitles(testCase)
         val titleToCommitHashMap = localGit.logAll().associate { it.shortMessage to it.hash }
         localGit.checkout(localGit.logAll().last().hash)
         fun doCreateCommits(branch: BranchData) {
@@ -88,11 +90,21 @@ class GitHubTestHarness(
         doCreateCommits(testCase.repository)
         localGit.checkout(DEFAULT_TARGET_REF)
 
-        for (pr in testCase.pullRequests) {
-            val gitHubClient = requireNotNull(gitHubClients[pr.userKey]) {
-                "Can't find GitHubClient for user key '${pr.userKey}'"
+        val prs = testCase.pullRequests
+        if (prs.isNotEmpty()) {
+            val existingPrsByTitle = gitHubClients.values.first().getPullRequests().associateBy(PullRequest::title)
+            for (pr in prs) {
+                val gitHubClient = requireNotNull(gitHubClients[pr.userKey]) {
+                    "Can't find GitHubClient for user key '${pr.userKey}'"
+                }
+                val newPullRequest = PullRequest(null, null, null, pr.headRef, pr.baseRef, pr.title, pr.body)
+                val existingPr = existingPrsByTitle[pr.title]
+                if (existingPr != null) {
+                    gitHubClient.updatePullRequest(newPullRequest.copy(id = existingPr.id))
+                } else {
+                    gitHubClient.createPullRequest(newPullRequest)
+                }
             }
-            gitHubClient.createPullRequest(PullRequest(null, null, null, pr.headRef, pr.baseRef, pr.title, pr.body))
         }
     }
 
@@ -144,7 +156,7 @@ class GitHubTestHarness(
             )
     }
 
-    private fun requireNoDuplicatedTitles(testCase: TestCaseData) {
+    private fun requireNoDuplicatedCommitTitles(testCase: TestCaseData) {
         fun collectCommitTitles(branchData: BranchData): List<String> =
             branchData.commits.fold(emptyList()) { list, commit ->
                 list + commit.title + commit.branches.flatMap { collectCommitTitles(it) }
@@ -154,6 +166,19 @@ class GitHubTestHarness(
         val duplicatedTitles = titles.groupingBy { it }.eachCount().filterValues { count -> count > 1 }.keys
         require(duplicatedTitles.isEmpty()) {
             "All commit subjects in the repo should be unique as they are used as keys. " +
+                "The following were duplicated: $duplicatedTitles"
+        }
+    }
+
+    private fun requireNoDuplicatedPrTitles(testCase: TestCaseData) {
+        val duplicatedTitles = testCase
+            .pullRequests
+            .groupingBy(PullRequestData::title)
+            .eachCount()
+            .filterValues { count -> count > 1 }
+            .keys
+        require(duplicatedTitles.isEmpty()) {
+            "All pull request titles should be unique as they are used as keys. " +
                 "The following were duplicated: $duplicatedTitles"
         }
     }
