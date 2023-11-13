@@ -41,6 +41,7 @@ class GitHubTestHarness(
     }
 
     suspend fun createCommits(testCase: TestCaseData) {
+        requireNoDuplicatedTitles(testCase)
         localGit.checkout("HEAD") // Go into detached head so as not to move the main ref as we create commits
         fun doCreateCommits(branch: BranchData) {
             val iterator = branch.commits.iterator()
@@ -127,6 +128,20 @@ class GitHubTestHarness(
                         setProperty(GIT_COMMITTER_EMAIL_KEY, ident.email.ifBlank { DEFAULT_COMMITTER.email })
                     },
             )
+    }
+
+    private fun requireNoDuplicatedTitles(testCase: TestCaseData) {
+        fun collectCommitTitles(branchData: BranchData): List<String> =
+            branchData.commits.fold(emptyList()) { list, commit ->
+                list + commit.title + commit.branches.flatMap { collectCommitTitles(it) }
+            }
+
+        val titles = collectCommitTitles(testCase.repository)
+        val duplicatedTitles = titles.groupingBy { it }.eachCount().filterValues { count -> count > 1 }.keys
+        require(duplicatedTitles.isEmpty()) {
+            "All commit subjects in the repo should be unique as they are used as keys. " +
+                "The following were duplicated: $duplicatedTitles"
+        }
     }
 
     private val filenameSafeRegex = "\\W+".toRegex()

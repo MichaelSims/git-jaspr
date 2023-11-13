@@ -185,6 +185,38 @@ class GitHubTestHarnessTest {
         logger.info("{}: {}", info.displayName, exception.message)
     }
 
+    @Test
+    fun `duplicated titles is not allowed`(info: TestInfo) = runBlocking {
+        val (localRepo, remoteRepo) = createTempDir().createRepoDirs()
+        val harness = GitHubTestHarness(localRepo, remoteRepo)
+        val exception = assertThrows<IllegalArgumentException> {
+            harness.createCommits(
+                testCase {
+                    repository {
+                        commit {
+                            title = "Commit one"
+                            branch {
+                                commit {
+                                    title = "Commit one.one"
+                                }
+                                commit {
+                                    title = "Commit one.two"
+                                    localRefs += "feature-one"
+                                }
+                            }
+                        }
+                        commit {
+                            title = "Commit one"
+                            localRefs += "main"
+                        }
+                    }
+                },
+            )
+        }
+        logger.info("{}: {}", info.displayName, exception.message)
+    }
+
+
     private fun createTempDir() =
         checkNotNull(Files.createTempDirectory(GitHubTestHarnessTest::class.java.simpleName).toFile())
             .also { logger.info("Temp dir created in {}", it.toStringWithClickableURI()) }
