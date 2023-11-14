@@ -167,7 +167,7 @@ class GitKsprTest {
         val gitKspr = GitKspr(createDefaultGitHubClient(), jGitClient, config)
         gitKspr.push()
         argumentCaptor<List<RefSpec>> {
-            verify(jGitClient, times(1)).push(capture(), any())
+            verify(jGitClient, times(1)).push(capture())
 
             val expected = listOf(commitTwo, commitThree)
                 .map { commit -> RefSpec(commit.hash, "${config.remoteBranchPrefix}${commit.id}").forcePush() }

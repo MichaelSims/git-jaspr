@@ -198,7 +198,7 @@ class JGitClient(val workingDirectory: File, val remoteBranchPrefix: String = DE
         }
     }
 
-    fun push(refSpecs: List<RefSpec>, remoteName: String = DEFAULT_REMOTE_NAME) {
+    fun push(refSpecs: List<RefSpec>) {
         logger.trace("push {}", refSpecs)
         if (refSpecs.isNotEmpty()) {
             useGit { git ->
@@ -208,7 +208,6 @@ class JGitClient(val workingDirectory: File, val remoteBranchPrefix: String = DE
                 checkNoPushErrors(
                     git
                         .push()
-                        .setRemote(remoteName)
                         .setAtomic(true)
                         .setRefSpecs(specs)
                         .call(),
