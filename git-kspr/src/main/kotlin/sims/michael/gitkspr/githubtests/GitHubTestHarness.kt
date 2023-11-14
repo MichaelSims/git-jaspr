@@ -147,7 +147,9 @@ data class GitHubTestHarness(
 
     private fun gitLogLocalAndRemote() {
         gitLogGraphAll(localRepo, "LOCAL")
-        gitLogGraphAll(remoteRepo, "REMOTE")
+        if (remoteRepo.exists()) { // If we cloned from a remote URI there will be a "fake" remote
+            gitLogGraphAll(remoteRepo, "REMOTE")
+        }
     }
 
     private fun gitLogGraphAll(repo: File, label: String) {
@@ -178,11 +180,17 @@ data class GitHubTestHarness(
             .map {
                 RefSpec("+" + it.groupValues[0], it.groupValues[1])
             }
-        val deleteRegex = "${DELETE_PREFIX}(.*)".toRegex()
+
+        // TODO this currently deletes all "kspr/" branches indiscriminately. Much better would be to capture the ones
+        //  we created via our JGitClient and delete only those
+        val deleteRegex =
+            "($DELETE_PREFIX(.*)|${JGitClient.R_REMOTES}$DEFAULT_REMOTE_NAME/($DEFAULT_REMOTE_BRANCH_PREFIX.*))"
+                .toRegex()
+
         val toDelete = localGit.getBranchNames()
             .mapNotNull { name -> deleteRegex.matchEntire(name) }
-            .map {
-                RefSpec("+", it.groupValues[1])
+            .map { result ->
+                RefSpec("+", result.groupValues.last(String::isNotBlank))
             }
         val refSpecs = (toRestore + toDelete).distinct()
         logger.debug("Pushing {}", refSpecs)

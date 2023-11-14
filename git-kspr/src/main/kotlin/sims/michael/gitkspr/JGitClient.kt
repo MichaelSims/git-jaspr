@@ -101,9 +101,13 @@ class JGitClient(val workingDirectory: File, val remoteBranchPrefix: String = DE
             .branchList()
             .setListMode(ListBranchCommand.ListMode.REMOTE)
             .call()
+            .filter { it.name.startsWith(Constants.R_REMOTES) }
             .map { ref ->
                 val r = git.repository
-                RemoteBranch(r.shortenRemoteBranchName(ref.name), r.parseCommit(ref.objectId).toCommit(git))
+                val shortBranchName = checkNotNull(r.shortenRemoteBranchName(ref.name)) {
+                    "Short branch name was null for ${ref.name}"
+                }
+                RemoteBranch(shortBranchName, r.parseCommit(ref.objectId).toCommit(git))
             }
     }
 
@@ -255,6 +259,7 @@ class JGitClient(val workingDirectory: File, val remoteBranchPrefix: String = DE
     companion object {
         const val HEAD = Constants.HEAD
         const val R_HEADS = Constants.R_HEADS
+        const val R_REMOTES = Constants.R_REMOTES
         private val SUCCESSFUL_PUSH_STATUSES = setOf(Status.OK, Status.UP_TO_DATE, Status.NON_EXISTING)
     }
 }

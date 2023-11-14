@@ -9,6 +9,8 @@ import kotlinx.coroutines.runBlocking
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.TestInfo
 import org.slf4j.LoggerFactory
+import sims.michael.gitkspr.githubtests.GitHubTestHarness.Companion.withTestSetup
+import sims.michael.gitkspr.githubtests.generatedtestdsl.testCase
 import sims.michael.gitkspr.testing.FunctionalTest
 import sims.michael.gitkspr.testing.toStringWithClickableURI
 import java.io.File
@@ -24,35 +26,35 @@ class GitKsprFunctionalTest {
     private val logger = LoggerFactory.getLogger(GitKsprTest::class.java)
 
     @Test
-    fun `push new commits`(testInfo: TestInfo) = runBlocking {
-        val gitDir = createTempDir().resolve(REPO_NAME)
-        logger.info("{}", gitDir.toStringWithClickableURI())
+    fun `push new commits`(testInfo: TestInfo) = withTestSetup(remoteUri = REPO_URI) {
+        createCommitsFrom(
+            testCase {
+                repository {
+                    commit {
+                        title = "one"
+                    }
+                    commit {
+                        title = "two"
+                    }
+                    commit {
+                        title = "three"
+                        localRefs += "feature/1"
+                    }
+                }
+            },
+        )
 
-        val wiring = createAppWiring(gitDir)
-        val git = wiring.gitClient.clone(REPO_URI)
+        val wiring = createAppWiring(localRepo)
         val gitKspr = wiring.gitKspr
         val gitHub = wiring.gitHubClient
 
-        fun addCommit() {
-            val testName = testInfo.displayName.substringBefore("(")
-            val testFileName = "${testName.sanitize()}-${generateUuid()}.txt"
-            gitDir.resolve(testFileName).writeText("This is a test file.\n")
-            git.add(testFileName).commit(testFileName)
-        }
-
-        addCommit()
-        addCommit()
-        addCommit()
-
-        System.setProperty(WORKING_DIR_PROPERTY_NAME, gitDir.absolutePath)
+        System.setProperty(WORKING_DIR_PROPERTY_NAME, localRepo.absolutePath) // TODO why?
         gitKspr.push()
 
-        val testCommits = git.log(JGitClient.HEAD, 3)
+        val testCommits = localGit.log(JGitClient.HEAD, 3)
         val testCommitIds = testCommits.mapNotNull(Commit::id).toSet()
         val remotePrIds = gitHub.getPullRequests(testCommits).mapNotNull(PullRequest::commitId).toSet()
         assertEquals(testCommitIds, remotePrIds)
-
-        git.deleteRemoteRefsFrom(testCommits)
     }
 
     @Test
