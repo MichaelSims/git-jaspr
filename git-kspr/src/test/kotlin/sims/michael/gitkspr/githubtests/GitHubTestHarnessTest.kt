@@ -7,6 +7,7 @@ import org.junit.jupiter.api.assertThrows
 import org.slf4j.LoggerFactory
 import sims.michael.gitkspr.DEFAULT_REMOTE_NAME
 import sims.michael.gitkspr.JGitClient
+import sims.michael.gitkspr.githubtests.generatedtestdsl.branch
 import sims.michael.gitkspr.githubtests.generatedtestdsl.testCase
 import sims.michael.gitkspr.testing.toStringWithClickableURI
 import java.io.File
@@ -302,6 +303,55 @@ class GitHubTestHarnessTest {
             assertEquals(commitTwo.copy(shortMessage = "three"), commitTwo)
             assertEquals(commitThree.copy(shortMessage = "four"), commitThree)
         }
+    }
+
+    @Test
+    fun `rollbackRemoteChanges works as expected`() = runBlocking {
+        val (localRepo, remoteRepo) = createTempDir().createRepoDirs()
+        val harness = GitHubTestHarness(localRepo, remoteRepo)
+        harness.createCommits(
+            testCase {
+                repository {
+                    commit {
+                        title = "one"
+                        branch {
+                            commit {
+                                title = "feature one"
+                                localRefs += "feature/1"
+                                remoteRefs += "feature/1"
+                            }
+                        }
+                        branch {
+                            commit {
+                                title = "feature two"
+                                localRefs += "feature/2"
+                                remoteRefs += "feature/2"
+                            }
+                        }
+                        branch {
+                            commit {
+                                title = "feature three"
+                                localRefs += "feature/3"
+                                remoteRefs += "feature/3"
+                            }
+                        }
+                    }
+                    commit {
+                        title = "two"
+                        localRefs += "main"
+                        remoteRefs += "main"
+                    }
+                }
+            },
+        )
+        harness.rollbackRemoteChanges()
+        val jGitClient = JGitClient(remoteRepo)
+
+        assertEquals(listOf("main"), jGitClient.getBranchNames())
+        assertEquals(
+            GitHubTestHarness.INITIAL_COMMIT_SHORT_MESSAGE,
+            jGitClient.log("main", maxCount = 1).single().shortMessage,
+        )
     }
 
     private fun createTempDir() =

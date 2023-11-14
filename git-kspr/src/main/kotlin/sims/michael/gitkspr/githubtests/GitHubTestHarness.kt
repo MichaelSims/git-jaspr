@@ -38,7 +38,7 @@ class GitHubTestHarness(
         val readme = "README.txt"
         val readmeFile = repoDir.resolve(readme)
         readmeFile.writeText("This is a test repo.\n")
-        add(readme).commit("Initial commit")
+        add(readme).commit(INITIAL_COMMIT_SHORT_MESSAGE)
     }
 
     suspend fun createCommits(testCase: TestCaseData) {
@@ -138,7 +138,7 @@ class GitHubTestHarness(
             .map {
                 RefSpec("+" + it.groupValues[0], it.groupValues[1])
             }
-        val deleteRegex = "${DELETE_PREFIX}(.*?)/.*".toRegex()
+        val deleteRegex = "${DELETE_PREFIX}(.*)/.*".toRegex()
         val toDelete = localGit.getBranchNames()
             .mapNotNull { name -> deleteRegex.matchEntire(name) }
             .map {
@@ -211,6 +211,7 @@ class GitHubTestHarness(
     companion object {
         const val LOCAL_REPO_SUBDIR = "local"
         const val REMOTE_REPO_SUBDIR = "remote"
+        const val INITIAL_COMMIT_SHORT_MESSAGE = "Initial commit"
         val RESTORE_PREFIX = "${GitHubTestHarness::class.java.simpleName.lowercase()}-restore/"
         val DELETE_PREFIX = "${GitHubTestHarness::class.java.simpleName.lowercase()}-delete/"
         val DEFAULT_COMMITTER: Ident = Ident("Frank Grimes", "grimey@springfield.example.com")
