@@ -1,26 +1,29 @@
 package sims.michael.gitkspr.githubtests
 
+import kotlinx.coroutines.runBlocking
 import org.eclipse.jgit.junit.MockSystemReader
 import org.eclipse.jgit.lib.Constants.GIT_COMMITTER_EMAIL_KEY
 import org.eclipse.jgit.lib.Constants.GIT_COMMITTER_NAME_KEY
 import org.eclipse.jgit.util.SystemReader
 import org.slf4j.LoggerFactory
+import org.zeroturnaround.exec.ProcessExecutor
 import sims.michael.gitkspr.*
 import sims.michael.gitkspr.Commit
 import sims.michael.gitkspr.Ident
 import sims.michael.gitkspr.JGitClient.CheckoutMode.CreateBranchIfNotExists
 import sims.michael.gitkspr.PullRequest
 import java.io.File
+import java.nio.file.Files
 
-class GitHubTestHarness(
-    private val localRepo: File,
-    remoteRepo: File,
+data class GitHubTestHarness(
+    val localRepo: File,
+    val remoteRepo: File,
     private val ghClientsByUserKey: Map<String, GitHubClient> = emptyMap(),
-    remoteUri: String? = null,
+    private val remoteUri: String? = null,
 ) {
-    private val logger = LoggerFactory.getLogger(GitHubTestHarness::class.java)
 
     val localGit: JGitClient = JGitClient(localRepo)
+    val remoteGit: JGitClient = JGitClient(remoteRepo)
 
     init {
         if (remoteUri != null) {
@@ -28,7 +31,7 @@ class GitHubTestHarness(
         } else {
             // remoteUri is used for functional tests. If we don't have one we create a "fake" remote with an initial
             // commit and clone it.
-            JGitClient(remoteRepo).init().createInitialCommit()
+            remoteGit.init().createInitialCommit()
             localGit.clone(remoteRepo.toURI().toString())
         }
     }
@@ -41,7 +44,7 @@ class GitHubTestHarness(
         add(readme).commit(INITIAL_COMMIT_SHORT_MESSAGE)
     }
 
-    suspend fun createCommits(testCase: TestCaseData) {
+    suspend fun createCommitsFrom(testCase: TestCaseData) {
         requireNoDuplicatedCommitTitles(testCase)
         requireNoDuplicatedPrTitles(testCase)
 
@@ -138,6 +141,29 @@ class GitHubTestHarness(
                 }
             }
         }
+
+        gitLogLocalAndRemote()
+    }
+
+    private fun gitLogLocalAndRemote() {
+        gitLogGraphAll(localRepo, "LOCAL")
+        gitLogGraphAll(remoteRepo, "REMOTE")
+    }
+
+    private fun gitLogGraphAll(repo: File, label: String) {
+        logger.trace("----------")
+        ProcessExecutor()
+            .directory(repo)
+            .command(listOf("git", "log", "--graph", "--all", "--oneline", "--pretty=format:%h -%d %s <%an>"))
+            .destroyOnExit()
+            .readOutput(true)
+            .execute()
+            .output
+            .lines
+            .forEach {
+                logger.trace("{}: {}", label, it)
+            }
+        logger.trace("----------")
     }
 
     fun rollbackRemoteChanges() {
@@ -229,5 +255,31 @@ class GitHubTestHarness(
         val RESTORE_PREFIX = "${GitHubTestHarness::class.java.simpleName.lowercase()}-restore/"
         val DELETE_PREFIX = "${GitHubTestHarness::class.java.simpleName.lowercase()}-delete/"
         val DEFAULT_COMMITTER: Ident = Ident("Frank Grimes", "grimey@springfield.example.com")
+
+        private val logger = LoggerFactory.getLogger(GitHubTestHarness::class.java)
+        private fun File.toStringWithClickableURI(): String = "$this (${toURI().toString().replaceFirst("/", "///")})"
+        private fun File.createRepoDirs() = resolve(LOCAL_REPO_SUBDIR) to resolve(REMOTE_REPO_SUBDIR)
+
+        private fun createTempDir() =
+            checkNotNull(Files.createTempDirectory(GitHubTestHarness::class.java.simpleName).toFile())
+                .also { logger.info("Temp dir created in {}", it.toStringWithClickableURI()) }
+
+        fun withTestSetup(
+            ghClientsByUserKey: Map<String, GitHubClient> = emptyMap(),
+            remoteUri: String? = null,
+            block: suspend GitHubTestHarness.() -> Unit,
+        ) {
+            val (localRepo, remoteRepo) = createTempDir().createRepoDirs()
+            return runBlocking {
+                GitHubTestHarness(localRepo, remoteRepo, ghClientsByUserKey, remoteUri).apply {
+                    try {
+                        block()
+                    } finally {
+                        rollbackRemoteChanges()
+                        gitLogLocalAndRemote()
+                    }
+                }
+            }
+        }
     }
 }

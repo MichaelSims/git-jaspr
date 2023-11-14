@@ -7,7 +7,7 @@ import org.junit.jupiter.api.assertThrows
 import org.slf4j.LoggerFactory
 import sims.michael.gitkspr.DEFAULT_REMOTE_NAME
 import sims.michael.gitkspr.JGitClient
-import sims.michael.gitkspr.githubtests.generatedtestdsl.branch
+import sims.michael.gitkspr.githubtests.GitHubTestHarness.Companion.withTestSetup
 import sims.michael.gitkspr.githubtests.generatedtestdsl.testCase
 import sims.michael.gitkspr.testing.toStringWithClickableURI
 import java.io.File
@@ -32,7 +32,7 @@ class GitHubTestHarnessTest {
     fun `can create commits from model`() = runBlocking {
         val (localRepo, remoteRepo) = createTempDir().createRepoDirs()
         val harness = GitHubTestHarness(localRepo, remoteRepo)
-        harness.createCommits(
+        harness.createCommitsFrom(
             testCase {
                 repository {
                     commit {
@@ -64,7 +64,7 @@ class GitHubTestHarnessTest {
     fun `can create commits with a branch from model`() = runBlocking {
         val (localRepo, remoteRepo) = createTempDir().createRepoDirs()
         val harness = GitHubTestHarness(localRepo, remoteRepo, emptyMap())
-        harness.createCommits(
+        harness.createCommitsFrom(
             testCase {
                 repository {
                     commit {
@@ -106,10 +106,8 @@ class GitHubTestHarnessTest {
     }
 
     @Test
-    fun `localRefs and remoteRefs test`() = runBlocking {
-        val (localRepo, remoteRepo) = createTempDir().createRepoDirs()
-        val harness = GitHubTestHarness(localRepo, remoteRepo)
-        harness.createCommits(
+    fun `localRefs and remoteRefs test`() = withTestSetup {
+        createCommitsFrom(
             testCase {
                 repository {
                     commit {
@@ -133,23 +131,22 @@ class GitHubTestHarnessTest {
                 }
             },
         )
-        val jGitClient = JGitClient(localRepo)
 
-        jGitClient.logRange("main~2", "main").let { log ->
+        localGit.logRange("main~2", "main").let { log ->
             assertEquals(2, log.size)
             val (commitOne, commitThree) = log
             assertEquals(commitOne.copy(shortMessage = "Commit one"), commitOne)
             assertEquals(commitThree.copy(shortMessage = "Commit two"), commitThree)
         }
 
-        jGitClient.logRange("one~2", "one").let { log ->
+        localGit.logRange("one~2", "one").let { log ->
             assertEquals(2, log.size)
             val (commitOneOne, commitOneTwo) = log
             assertEquals(commitOneOne.copy(shortMessage = "Commit one"), commitOneOne)
             assertEquals(commitOneTwo.copy(shortMessage = "Commit one.one"), commitOneTwo)
         }
 
-        jGitClient.logRange("$DEFAULT_REMOTE_NAME/one~2", "$DEFAULT_REMOTE_NAME/one").let { log ->
+        localGit.logRange("$DEFAULT_REMOTE_NAME/one~2", "$DEFAULT_REMOTE_NAME/one").let { log ->
             assertEquals(2, log.size)
             val (commitOneOne, commitOneTwo) = log
             assertEquals(commitOneOne.copy(shortMessage = "Commit one.one"), commitOneOne)
@@ -162,7 +159,7 @@ class GitHubTestHarnessTest {
         val (localRepo, remoteRepo) = createTempDir().createRepoDirs()
         val harness = GitHubTestHarness(localRepo, remoteRepo)
         val exception = assertThrows<IllegalArgumentException> {
-            harness.createCommits(
+            harness.createCommitsFrom(
                 testCase {
                     repository {
                         commit {
@@ -191,7 +188,7 @@ class GitHubTestHarnessTest {
         val (localRepo, remoteRepo) = createTempDir().createRepoDirs()
         val harness = GitHubTestHarness(localRepo, remoteRepo)
         val exception = assertThrows<IllegalArgumentException> {
-            harness.createCommits(
+            harness.createCommitsFrom(
                 testCase {
                     repository {
                         commit {
@@ -218,11 +215,9 @@ class GitHubTestHarnessTest {
     }
 
     @Test
-    fun `duplicated pr titles are not allowed`(info: TestInfo) = runBlocking {
-        val (localRepo, remoteRepo) = createTempDir().createRepoDirs()
-        val harness = GitHubTestHarness(localRepo, remoteRepo)
+    fun `duplicated pr titles are not allowed`(info: TestInfo) = withTestSetup {
         val exception = assertThrows<IllegalArgumentException> {
-            harness.createCommits(
+            createCommitsFrom(
                 testCase {
                     repository {
                         commit {
@@ -259,10 +254,8 @@ class GitHubTestHarnessTest {
     }
 
     @Test
-    fun `can rewrite history`(info: TestInfo) = runBlocking {
-        val (localRepo, remoteRepo) = createTempDir().createRepoDirs()
-        val harness = GitHubTestHarness(localRepo, remoteRepo)
-        harness.createCommits(
+    fun `can rewrite history`(info: TestInfo) = withTestSetup {
+        createCommitsFrom(
             testCase {
                 repository {
                     commit {
@@ -278,7 +271,7 @@ class GitHubTestHarnessTest {
                 }
             },
         )
-        harness.createCommits(
+        createCommitsFrom(
             testCase {
                 repository {
                     commit {
@@ -294,9 +287,7 @@ class GitHubTestHarnessTest {
                 }
             },
         )
-        val jGitClient = JGitClient(localRepo)
-
-        jGitClient.logRange("one~3", "one").let { log ->
+        localGit.logRange("one~3", "one").let { log ->
             assertEquals(3, log.size)
             val (commitOne, commitTwo, commitThree) = log
             assertEquals(commitOne.copy(shortMessage = "one"), commitOne)
@@ -309,7 +300,7 @@ class GitHubTestHarnessTest {
     fun `rollbackRemoteChanges works as expected`() = runBlocking {
         val (localRepo, remoteRepo) = createTempDir().createRepoDirs()
         val harness = GitHubTestHarness(localRepo, remoteRepo)
-        harness.createCommits(
+        harness.createCommitsFrom(
             testCase {
                 repository {
                     commit {
@@ -344,7 +335,7 @@ class GitHubTestHarnessTest {
                 }
             },
         )
-        harness.createCommits(
+        harness.createCommitsFrom(
             testCase {
                 repository {
                     commit {

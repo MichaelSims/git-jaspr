@@ -5,12 +5,14 @@ import org.eclipse.jgit.api.Git
 import org.eclipse.jgit.api.ListBranchCommand
 import org.eclipse.jgit.api.ResetCommand
 import org.eclipse.jgit.lib.Constants
+import org.eclipse.jgit.lib.PersonIdent
 import org.eclipse.jgit.revwalk.RevCommit
 import org.eclipse.jgit.transport.PushResult
 import org.eclipse.jgit.transport.RemoteRefUpdate.Status
 import org.slf4j.LoggerFactory
 import sims.michael.gitkspr.JGitClient.CheckoutMode.*
 import java.io.File
+import java.time.Instant
 import java.time.ZoneId
 import java.time.ZonedDateTime
 import org.eclipse.jgit.transport.RefSpec as JRefSpec
@@ -162,11 +164,14 @@ class JGitClient(val workingDirectory: File, val remoteBranchPrefix: String = DE
     fun commitAmend(newMessage: String? = null) = useGit { git ->
         val message = newMessage
             ?: git.log().add(git.repository.resolve(HEAD)).setMaxCount(1).call().single().fullMessage
-        git.commit().setMessage(message).setAmend(true).call().toCommit(git)
+        val committer = PersonIdent(PersonIdent(git.repository), Instant.now())
+
+        git.commit().setMessage(message).setCommitter(committer).setAmend(true).call().toCommit(git)
     }
 
     fun commit(message: String) = useGit { git ->
-        git.commit().setMessage(message).call().toCommit(git)
+        val committer = PersonIdent(PersonIdent(git.repository), Instant.now())
+        git.commit().setMessage(message).setCommitter(committer).call().toCommit(git)
     }
 
     fun setCommitId(commitId: String) {

@@ -50,7 +50,7 @@ class GitHubTestHarnessFunctionalTest {
         val (localRepo, remoteRepo) = createTempDir().createRepoDirs()
         val harness = GitHubTestHarness(localRepo, remoteRepo, emptyMap(), REPO_URI)
         try {
-            harness.createCommits(
+            harness.createCommitsFrom(
                 testCase {
                     repository {
                         commit {
@@ -80,7 +80,7 @@ class GitHubTestHarnessFunctionalTest {
         val (localRepo, remoteRepo) = createTempDir().createRepoDirs()
         val harness = GitHubTestHarness(localRepo, remoteRepo, emptyMap(), REPO_URI)
         try {
-            harness.createCommits(
+            harness.createCommitsFrom(
                 testCase {
                     repository {
                         commit {
@@ -126,7 +126,7 @@ class GitHubTestHarnessFunctionalTest {
         val (localRepo, remoteRepo) = createTempDir().createRepoDirs()
         val harness = GitHubTestHarness(localRepo, remoteRepo, mapOf("michael" to michael, "derelictMan" to derelictMan), REPO_URI)
         try {
-            harness.createCommits(
+            harness.createCommitsFrom(
                 testCase {
                     repository {
                         commit { title = "A" }
@@ -194,7 +194,7 @@ class GitHubTestHarnessFunctionalTest {
                 email = "derelictman@gmail.com"
                 name = "Frank Grimes"
             }
-            harness.createCommits(
+            harness.createCommitsFrom(
                 testCase {
                     repository {
                         commit {
@@ -220,7 +220,7 @@ class GitHubTestHarnessFunctionalTest {
                     }
                 },
             )
-            harness.createCommits(
+            harness.createCommitsFrom(
                 testCase {
                     repository {
                         commit {

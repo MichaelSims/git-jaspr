@@ -11,8 +11,7 @@ import org.junit.jupiter.api.DynamicTest.dynamicTest
 import org.slf4j.LoggerFactory
 import sims.michael.gitkspr.JGitClient.CheckoutMode.CreateBranch
 import sims.michael.gitkspr.JGitClient.Companion.HEAD
-import sims.michael.gitkspr.githubtests.GitHubTestHarness
-import sims.michael.gitkspr.githubtests.createRepoDirs
+import sims.michael.gitkspr.githubtests.GitHubTestHarness.Companion.withTestSetup
 import sims.michael.gitkspr.githubtests.generatedtestdsl.testCase
 import sims.michael.gitkspr.testing.toStringWithClickableURI
 import java.io.File
@@ -37,11 +36,8 @@ class GitKsprTest {
     }
 
     @Test
-    fun `push fails unless workdir is clean`() = runBlocking {
-        val (localRepo, remoteRepo) = createTempDir().createRepoDirs()
-        val h = GitHubTestHarness(localRepo, remoteRepo)
-
-        h.createCommits(
+    fun `push fails unless workdir is clean`() = withTestSetup {
+        createCommitsFrom(
             testCase {
                 repository {
                     commit {
@@ -52,15 +48,11 @@ class GitKsprTest {
                 localIsDirty = true
             },
         )
-
         val exception = assertThrows<IllegalStateException> {
-            runBlocking { GitKspr(createDefaultGitHubClient(), h.localGit, config(remoteRepo)).push() }
+            GitKspr(createDefaultGitHubClient(), localGit, config(remoteGit.workingDirectory)).push()
         }
         logger.info("Exception message is {}", exception.message)
     }
-
-    fun File.createRepoDirs() =
-        resolve(GitHubTestHarness.LOCAL_REPO_SUBDIR) to resolve(GitHubTestHarness.REMOTE_REPO_SUBDIR)
 
     @Test
     fun `push fetches from remote`() {
