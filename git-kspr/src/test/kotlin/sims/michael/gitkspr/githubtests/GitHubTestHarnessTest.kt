@@ -344,6 +344,41 @@ class GitHubTestHarnessTest {
                 }
             },
         )
+        harness.createCommits(
+            testCase {
+                repository {
+                    commit {
+                        title = "one.two"
+                        branch {
+                            commit {
+                                title = "feature one.two"
+                                localRefs += "feature/1"
+                                remoteRefs += "feature/1"
+                            }
+                        }
+                        branch {
+                            commit {
+                                title = "feature two.two"
+                                localRefs += "feature/2"
+                                remoteRefs += "feature/2"
+                            }
+                        }
+                        branch {
+                            commit {
+                                title = "feature three.two"
+                                localRefs += "feature/3"
+                                remoteRefs += "feature/3"
+                            }
+                        }
+                    }
+                    commit {
+                        title = "two.two"
+                        localRefs += "main"
+                        remoteRefs += "main"
+                    }
+                }
+            },
+        )
         harness.rollbackRemoteChanges()
         val jGitClient = JGitClient(remoteRepo)
 

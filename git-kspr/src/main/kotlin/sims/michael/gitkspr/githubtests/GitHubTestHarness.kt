@@ -72,23 +72,28 @@ class GitHubTestHarness(
                 }
 
                 // Create temp branches to track which refs need to either be restored or deleted when the test is
-                // finished
-                // TODO clean up this logic
+                // finished and we roll back the changes (important in functional tests to leave the remote repo in
+                // the same state we left it)
                 for (localRef in commitData.localRefs) {
                     val previousCommit = localGit.branch(localRef, force = true)
+
+                    val rollbackDeleteMarker = "${DELETE_PREFIX}$localRef"
+                    val rollbackRestoreMarker = "${RESTORE_PREFIX}$localRef"
+
                     if (previousCommit != null) {
-                        // This local ref existed already
-                        val restore = "${RESTORE_PREFIX}$localRef"
+                        // This local ref existed already...
                         val branchNames = localGit.getBranchNames()
-                        if (!branchNames.contains(restore)) {
-                            if (branchNames.none { it.startsWith("${DELETE_PREFIX}$localRef") }) {
-                                localGit.branch(restore, startPoint = previousCommit.hash)
-                            } else {
-                                localGit.branch("${DELETE_PREFIX}$localRef/${generateUuid(20)}")
-                            }
+                        if (branchNames.any { it.startsWith(rollbackDeleteMarker) }) {
+                            // ...and was marked for deletion in a previous test stage. Update the marker.
+                            localGit.branch(rollbackDeleteMarker, force = true)
+                        } else if (!branchNames.contains(rollbackRestoreMarker)) {
+                            // ...and was not previously marked for deletion. Set the restore marker unless it already
+                            // exists due to a previous testing stage.
+                            localGit.branch(rollbackRestoreMarker, startPoint = previousCommit.hash)
                         }
                     } else {
-                        localGit.branch("${DELETE_PREFIX}$localRef/${generateUuid(20)}")
+                        // This local ref is new. Set the delete marker
+                        localGit.branch(rollbackDeleteMarker, force = true)
                     }
                 }
 
@@ -112,15 +117,16 @@ class GitHubTestHarness(
         if (prs.isNotEmpty()) {
             val existingPrsByTitle = ghClientsByUserKey.values.first().getPullRequests().associateBy(PullRequest::title)
             for (pr in prs) {
-                val gitHubClient = requireNotNull(ghClientsByUserKey[pr.userKey] ?: ghClientsByUserKey.values.firstOrNull()) {
-                    "No github client available!"
-                }
+                val gitHubClient =
+                    requireNotNull(ghClientsByUserKey[pr.userKey] ?: ghClientsByUserKey.values.firstOrNull()) {
+                        "No github client available!"
+                    }
                 val newPullRequest = PullRequest(null, null, null, pr.headRef, pr.baseRef, pr.title, pr.body)
                 val existingPr = existingPrsByTitle[pr.title]
-                if (existingPr != null) {
-                    gitHubClient.updatePullRequest(newPullRequest.copy(id = existingPr.id))
-                } else {
+                if (existingPr == null) {
                     gitHubClient.createPullRequest(newPullRequest)
+                } else {
+                    gitHubClient.updatePullRequest(newPullRequest.copy(id = existingPr.id))
                 }
             }
         }
@@ -138,7 +144,7 @@ class GitHubTestHarness(
             .map {
                 RefSpec("+" + it.groupValues[0], it.groupValues[1])
             }
-        val deleteRegex = "${DELETE_PREFIX}(.*)/.*".toRegex()
+        val deleteRegex = "${DELETE_PREFIX}(.*)".toRegex()
         val toDelete = localGit.getBranchNames()
             .mapNotNull { name -> deleteRegex.matchEntire(name) }
             .map {

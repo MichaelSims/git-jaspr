@@ -139,6 +139,7 @@ class JGitClient(val workingDirectory: File, val remoteBranchPrefix: String = DE
     }
 
     fun branch(name: String, startPoint: String = "HEAD", force: Boolean = false): Commit? {
+        logger.trace("branch {} start {} force {}", name, startPoint, force)
         val old = if (refExists(name)) log(name, maxCount = 1).single() else null
         useGit { git -> git.branchCreate().setName(name).setForce(force).setStartPoint(startPoint).call() }
         return old
