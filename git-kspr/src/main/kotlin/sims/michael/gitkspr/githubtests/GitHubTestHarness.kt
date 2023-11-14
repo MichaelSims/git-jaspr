@@ -14,8 +14,8 @@ import java.io.File
 
 class GitHubTestHarness(
     private val localRepo: File,
-    private val remoteRepo: File,
-    private val gitHubClients: Map<String, GitHubClient> = emptyMap(),
+    remoteRepo: File,
+    private val ghClientsByUserKey: Map<String, GitHubClient> = emptyMap(),
     remoteUri: String? = null,
 ) {
     private val logger = LoggerFactory.getLogger(GitHubTestHarness::class.java)
@@ -26,7 +26,10 @@ class GitHubTestHarness(
         if (remoteUri != null) {
             localGit.clone(remoteUri)
         } else {
-            JGitClient(remoteRepo).init().createInitialCommit().also { localGit.clone(remoteRepo.toURI().toString()) }
+            // remoteUri is used for functional tests. If we don't have one we create a "fake" remote with an initial
+            // commit and clone it.
+            JGitClient(remoteRepo).init().createInitialCommit()
+            localGit.clone(remoteRepo.toURI().toString())
         }
     }
 
@@ -41,28 +44,45 @@ class GitHubTestHarness(
     suspend fun createCommits(testCase: TestCaseData) {
         requireNoDuplicatedCommitTitles(testCase)
         requireNoDuplicatedPrTitles(testCase)
-        val titleToCommitHashMap = localGit.logAll().associate { it.shortMessage to it.hash }
-        localGit.checkout(localGit.logAll().last().hash)
+
+        val commitHashesByTitle = localGit.logAll().associate { commit -> commit.shortMessage to commit.hash }
+
+        val initialCommit = localGit.logAll().last()
+        localGit.checkout(initialCommit.hash) // Go into detached HEAD
+
         fun doCreateCommits(branch: BranchData) {
             val iterator = branch.commits.iterator()
             while (iterator.hasNext()) {
-                val commit = iterator.next()
-                setGitCommitterInfo(commit.committer.toIdent())
-                val existingHash = titleToCommitHashMap[commit.title]
-                val c = if (existingHash != null) {
+                val commitData = iterator.next()
+
+                setGitCommitterInfo(commitData.committer.toIdent())
+
+                val existingHash = commitHashesByTitle[commitData.title]
+                val commit = if (existingHash != null) {
+                    // A commit with this title already exists... cherry-pick it
                     localGit.cherryPick(localGit.log(existingHash, maxCount = 1).single())
                 } else {
-                    commit.create().also { logger.info("Created {}", it) }
+                    // Create a new one
+                    commitData.create()
                 }
-                if (!iterator.hasNext()) requireNamedRef(commit)
-                for (localRef in commit.localRefs) {
-                    val oldCommit = localGit.branch(localRef, force = true)
-                    if (oldCommit != null) {
+
+                if (!iterator.hasNext()) {
+                    // This is a HEAD commit with no more children... bomb out if it doesn't have a named ref assigned
+                    requireNamedRef(commitData)
+                }
+
+                // Create temp branches to track which refs need to either be restored or deleted when the test is
+                // finished
+                // TODO clean up this logic
+                for (localRef in commitData.localRefs) {
+                    val previousCommit = localGit.branch(localRef, force = true)
+                    if (previousCommit != null) {
+                        // This local ref existed already
                         val restore = "${RESTORE_PREFIX}$localRef"
                         val branchNames = localGit.getBranchNames()
                         if (!branchNames.contains(restore)) {
                             if (branchNames.none { it.startsWith("${DELETE_PREFIX}$localRef") }) {
-                                localGit.branch(restore, startPoint = oldCommit.hash)
+                                localGit.branch(restore, startPoint = previousCommit.hash)
                             } else {
                                 localGit.branch("${DELETE_PREFIX}$localRef/${generateUuid(20)}")
                             }
@@ -71,14 +91,16 @@ class GitHubTestHarness(
                         localGit.branch("${DELETE_PREFIX}$localRef/${generateUuid(20)}")
                     }
                 }
-                for (remoteRef in commit.remoteRefs) {
+
+                for (remoteRef in commitData.remoteRefs) {
                     localGit.push(listOf(RefSpec("+HEAD", remoteRef)))
                 }
-                if (commit.branches.isNotEmpty()) {
-                    for (childBranch in commit.branches) {
+
+                if (commitData.branches.isNotEmpty()) {
+                    for (childBranch in commitData.branches) {
                         doCreateCommits(childBranch)
                     }
-                    localGit.checkout(c.hash, CreateBranchIfNotExists)
+                    localGit.checkout(commit.hash, CreateBranchIfNotExists)
                 }
             }
         }
@@ -88,9 +110,9 @@ class GitHubTestHarness(
 
         val prs = testCase.pullRequests
         if (prs.isNotEmpty()) {
-            val existingPrsByTitle = gitHubClients.values.first().getPullRequests().associateBy(PullRequest::title)
+            val existingPrsByTitle = ghClientsByUserKey.values.first().getPullRequests().associateBy(PullRequest::title)
             for (pr in prs) {
-                val gitHubClient = requireNotNull(gitHubClients[pr.userKey] ?: gitHubClients.values.firstOrNull()) {
+                val gitHubClient = requireNotNull(ghClientsByUserKey[pr.userKey] ?: ghClientsByUserKey.values.firstOrNull()) {
                     "No github client available!"
                 }
                 val newPullRequest = PullRequest(null, null, null, pr.headRef, pr.baseRef, pr.title, pr.body)
