@@ -20,7 +20,7 @@ class GitHubTestHarness(
 ) {
     private val logger = LoggerFactory.getLogger(GitHubTestHarness::class.java)
 
-    private val localGit: JGitClient = JGitClient(localRepo)
+    val localGit: JGitClient = JGitClient(localRepo)
 
     init {
         if (remoteUri != null) {
@@ -47,7 +47,7 @@ class GitHubTestHarness(
 
         val commitHashesByTitle = localGit.logAll().associate { commit -> commit.shortMessage to commit.hash }
 
-        val initialCommit = localGit.logAll().last()
+        val initialCommit = localGit.log(DEFAULT_TARGET_REF).last()
         localGit.checkout(initialCommit.hash) // Go into detached HEAD
 
         fun doCreateCommits(branch: BranchData) {
@@ -111,7 +111,15 @@ class GitHubTestHarness(
         }
 
         doCreateCommits(testCase.repository)
-        localGit.checkout(DEFAULT_TARGET_REF)
+        if (testCase.localIsDirty) {
+            localRepo
+                .walk()
+                .maxDepth(1)
+                .filter(File::isFile)
+                .filter { file -> file.name.endsWith(".txt") }
+                .first()
+                .appendText("This is an uncommitted change.\n")
+        }
 
         val prs = testCase.pullRequests
         if (prs.isNotEmpty()) {

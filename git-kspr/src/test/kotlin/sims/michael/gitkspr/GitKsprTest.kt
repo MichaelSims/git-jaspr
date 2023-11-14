@@ -11,6 +11,9 @@ import org.junit.jupiter.api.DynamicTest.dynamicTest
 import org.slf4j.LoggerFactory
 import sims.michael.gitkspr.JGitClient.CheckoutMode.CreateBranch
 import sims.michael.gitkspr.JGitClient.Companion.HEAD
+import sims.michael.gitkspr.githubtests.GitHubTestHarness
+import sims.michael.gitkspr.githubtests.createRepoDirs
+import sims.michael.gitkspr.githubtests.generatedtestdsl.testCase
 import sims.michael.gitkspr.testing.toStringWithClickableURI
 import java.io.File
 import java.nio.file.Files
@@ -34,19 +37,30 @@ class GitKsprTest {
     }
 
     @Test
-    fun `push fails unless workdir is clean`() {
-        val tempDir = createTempDir()
-        val remoteRepoDir = tempDir.resolve("test-remote").apply(File::initRepoWithInitialCommit)
+    fun `push fails unless workdir is clean`() = runBlocking {
+        val (localRepo, remoteRepo) = createTempDir().createRepoDirs()
+        val h = GitHubTestHarness(localRepo, remoteRepo)
 
-        val localRepoDir = tempDir.resolve("test-local")
-        val local =
-            JGitClient(localRepoDir).clone(remoteRepoDir.toURI().toString()).checkout("development", CreateBranch)
-        localRepoDir.resolve("README.txt").writeText("Change the file without committing it")
+        h.createCommits(
+            testCase {
+                repository {
+                    commit {
+                        title = "Some commit"
+                        localRefs += "development"
+                    }
+                }
+                localIsDirty = true
+            },
+        )
 
-        assertThrows<IllegalStateException> {
-            runBlocking { GitKspr(createDefaultGitHubClient(), local, config(localRepoDir)).push() }
+        val exception = assertThrows<IllegalStateException> {
+            runBlocking { GitKspr(createDefaultGitHubClient(), h.localGit, config(remoteRepo)).push() }
         }
+        logger.info("Exception message is {}", exception.message)
     }
+
+    fun File.createRepoDirs() =
+        resolve(GitHubTestHarness.LOCAL_REPO_SUBDIR) to resolve(GitHubTestHarness.REMOTE_REPO_SUBDIR)
 
     @Test
     fun `push fetches from remote`() {
