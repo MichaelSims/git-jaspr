@@ -12,6 +12,7 @@ import org.slf4j.LoggerFactory
 import sims.michael.gitkspr.JGitClient.CheckoutMode.CreateBranch
 import sims.michael.gitkspr.JGitClient.Companion.HEAD
 import sims.michael.gitkspr.githubtests.GitHubTestHarness.Companion.withTestSetup
+import sims.michael.gitkspr.githubtests.TestCaseData
 import sims.michael.gitkspr.githubtests.generatedtestdsl.testCase
 import sims.michael.gitkspr.testing.toStringWithClickableURI
 import java.io.File
@@ -49,74 +50,114 @@ class GitKsprTest {
             },
         )
         val exception = assertThrows<IllegalStateException> {
-            GitKspr(createDefaultGitHubClient(), localGit, config(remoteGit.workingDirectory)).push()
+            gitKspr.push()
         }
         logger.info("Exception message is {}", exception.message)
     }
 
     @Test
-    fun `push fetches from remote`() {
-        val tempDir = createTempDir()
-        val remoteRepoDir = tempDir.resolve("test-remote")
-        val remote = JGitClient(remoteRepoDir).init()
-        val readme = "README.txt"
-        val remoteReadMe = remoteRepoDir.resolve(readme)
-        remoteReadMe.writeText("This is a test repo.\n")
-        val messageA = "Initial commit"
-        remote.add(readme).commit(messageA)
+    fun `push fetches from remote`() = withTestSetup {
+        createCommitsFrom(
+            testCase {
+                repository {
+                    commit {
+                        title = "one"
+                    }
+                    commit {
+                        title = "two"
+                        localRefs += "main"
+                    }
+                    commit {
+                        title = "three"
+                        remoteRefs += "main"
+                    }
+                }
+            },
+        )
 
-        val localRepoDir = tempDir.resolve("test-local")
-        val local =
-            JGitClient(localRepoDir).clone(remoteRepoDir.toURI().toString()).checkout("development", CreateBranch)
+        gitKspr.push()
 
-        remoteReadMe.appendText("Commit 2\n")
-        val messageB = "New remote commit"
-        remote.add(readme).commit(messageB)
-
-        runBlocking { GitKspr(createDefaultGitHubClient(), local, config(localRepoDir)).push() }
-
-        assertEquals(listOf(messageB, messageA), local.log("origin/main").map(Commit::shortMessage))
+        assertEquals(listOf("three", "two", "one"), localGit.log("origin/main", maxCount = 3).map(Commit::shortMessage))
     }
 
     @TestFactory
     fun `push adds commit IDs`(): List<DynamicTest> {
-        data class Test(val name: String, val expected: List<String>, val collectCommits: CommitCollector.() -> Unit)
+        data class Test(val name: String, val expected: List<String>, val testCaseData: TestCaseData)
         return listOf(
-            Test("all commits missing IDs", listOf("0", "1", "2")) { (0..2).forEach(::addCommit) },
-            Test("only recent commits missing IDs", listOf("A", "B", "0", "1", "2")) {
-                addCommit(1, "A")
-                addCommit(2, "B")
-
-                val numCommits = 5
-                for (num in (3..numCommits)) {
-                    addCommit(num, null)
-                }
-            },
-            Test("only commits in the middle missing IDs", listOf("A", "B", "0", "1", "2", "C", "D")) {
-                addCommit(1, "A")
-                addCommit(2, "B")
-
-                for (num in (3..5)) {
-                    addCommit(num, null)
-                }
-
-                addCommit(6, "C")
-                addCommit(7, "D")
-            },
+            Test(
+                "all commits missing IDs",
+                listOf("0", "1", "2"),
+                testCase {
+                    repository {
+                        commit { title = "0" }
+                        commit { title = "1" }
+                        commit {
+                            title = "2"
+                            localRefs += "main"
+                        }
+                    }
+                },
+            ),
+            Test(
+                "only recent commits missing IDs",
+                listOf("A", "B", "0", "1", "2"),
+                testCase {
+                    repository {
+                        commit {
+                            title = "A"
+                            id = "A"
+                        }
+                        commit {
+                            title = "B"
+                            id = "B"
+                        }
+                        commit { title = "0" }
+                        commit { title = "1" }
+                        commit {
+                            title = "2"
+                            localRefs += "main"
+                        }
+                    }
+                },
+            ),
+            Test(
+                "only commits in the middle missing IDs",
+                listOf("A", "B", "0", "1", "2", "C", "D"),
+                testCase {
+                    repository {
+                        commit {
+                            title = "A"
+                            id = "A"
+                        }
+                        commit {
+                            title = "B"
+                            id = "B"
+                        }
+                        commit { title = "0" }
+                        commit { title = "1" }
+                        commit { title = "2" }
+                        commit {
+                            title = "C"
+                            id = "C"
+                        }
+                        commit {
+                            title = "D"
+                            id = "D"
+                            localRefs += "main"
+                        }
+                    }
+                },
+            ),
         ).map { (name, expected, collectCommits) ->
             dynamicTest(name) {
-                val tempDir = createTempDir()
-                val remoteRepoDir = tempDir.resolve("test-remote").apply(File::initRepoWithInitialCommit)
-                val localRepoDir = tempDir.resolve("test-local")
-                val local = JGitClient(localRepoDir)
-                    .clone(remoteRepoDir.toURI().toString())
-                    .checkout("development", CreateBranch)
-                val collector = CommitCollector(local).apply(collectCommits)
-                val ids = uuidIterator()
-                runBlocking {
-                    GitKspr(createDefaultGitHubClient(), local, config(localRepoDir), ids::next).push()
+                withTestSetup {
+                    createCommitsFrom(collectCommits)
+                    gitKspr.push()
+                    assertEquals(
+                        expected,
+                        localGit.logRange("$HEAD~${collectCommits.repository.commits.size}", HEAD).map(Commit::id),
+                    )
                 }
-                assertEquals(expected, local.logRange("$HEAD~${collector.numCommits}", HEAD).map(Commit::id))
             }
         }
     }

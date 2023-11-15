@@ -31,6 +31,8 @@ dependencies {
     implementation(libs.zt.exec)
     implementation(libs.kotlinx.serialization.json)
     implementation(project(":data-class-fragment"))
+    implementation(libs.mockito.kotlin) // TODO explain why or move it
+    implementation(libs.mockito.inline) // TODO explain why or move it
 
     annotationProcessor(libs.auto.service)
     implementation(libs.auto.service)
@@ -40,8 +42,6 @@ dependencies {
     testImplementation(libs.kotlin.test.junit5)
     testImplementation(libs.junit.jupiter.engine)
     implementation(libs.jgit.junit) // TODO explain why
-    testImplementation(libs.mockito.kotlin)
-    testImplementation(libs.mockito.inline)
 }
 
 // Apply a specific Java toolchain to ease working on different environments.

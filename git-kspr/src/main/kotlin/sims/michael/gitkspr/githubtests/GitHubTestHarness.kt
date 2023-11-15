@@ -1,5 +1,8 @@
 package sims.michael.gitkspr.githubtests
 
+import com.nhaarman.mockitokotlin2.any
+import com.nhaarman.mockitokotlin2.doReturn
+import com.nhaarman.mockitokotlin2.mock
 import kotlinx.coroutines.runBlocking
 import org.eclipse.jgit.junit.MockSystemReader
 import org.eclipse.jgit.lib.Constants.GIT_COMMITTER_EMAIL_KEY
@@ -35,10 +38,26 @@ data class GitHubTestHarness(
         }
         .toMap()
 
+    private fun uuidIterator() = (0..Int.MAX_VALUE).asSequence().map(Int::toString).iterator()
+    private val ids = uuidIterator()
+
     val gitKspr = GitKspr(
-        configMapWithClient.values.first().second,
+        ghClient = if (useFakeRemote) {
+            val mock = mock<GitHubClient> {
+                onBlocking {
+                    getPullRequestsById(any())
+                } doReturn emptyList()
+                onBlocking {
+                    getPullRequests(any())
+                } doReturn emptyList()
+            }
+            mock
+        } else {
+            configMapWithClient.values.first().second
+        },
         localGit,
         Config(localRepo, DEFAULT_REMOTE_NAME, gitHubInfo, remoteBranchPrefix = remoteBranchPrefix),
+        ids::next,
     )
 
     val gitHub = configMapWithClient.values.first().second
