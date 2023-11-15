@@ -9,7 +9,6 @@ import org.eclipse.jgit.util.SystemReader
 import org.junit.jupiter.api.*
 import org.junit.jupiter.api.DynamicTest.dynamicTest
 import org.slf4j.LoggerFactory
-import sims.michael.gitkspr.JGitClient.CheckoutMode.CreateBranch
 import sims.michael.gitkspr.JGitClient.Companion.HEAD
 import sims.michael.gitkspr.githubtests.GitHubTestHarness.Companion.withTestSetup
 import sims.michael.gitkspr.githubtests.TestCaseData
@@ -193,59 +192,84 @@ class GitKsprTest {
     }
 
     @Test
-    fun `push pushes revision history branches on update`(testInfo: TestInfo): Unit = runBlocking {
-        val tempDir = createTempDir()
-        val remoteRepoDir = tempDir.resolve("test-remote")
-        val remote = JGitClient(remoteRepoDir).init()
-        val readme = "README.txt"
-        val remoteReadMe = remoteRepoDir.resolve(readme)
-        remoteReadMe.writeText("This is a test repo.\n")
-        val messageA = "Initial commit"
-        remote.add(readme).commit(messageA)
-
-        val localRepoDir = tempDir.resolve("test-local")
-        val local =
-            JGitClient(localRepoDir).clone(remoteRepoDir.toURI().toString()).checkout("development", CreateBranch)
-
-        fun addCommit(commitLabel: String): Commit {
-            val testName = testInfo.displayName.substringBefore("(")
-            val testFileName = "${testName.sanitize()}-$commitLabel.txt"
-            localRepoDir.resolve(testFileName).writeText("$commitLabel\n")
-            return local.add(testFileName).commit("$commitLabel\n\n${COMMIT_ID_LABEL}: $commitLabel\n")
-        }
-
-        val a = addCommit("a")
-        val b = addCommit("b")
-        val c = addCommit("c")
-
-        val ids = uuidIterator()
-        val config = config(localRepoDir)
-        val gitKspr = GitKspr(createDefaultGitHubClient(), local, config, ids::next)
+    fun `push pushes revision history branches on update`(testInfo: TestInfo): Unit = withTestSetup {
+        createCommitsFrom(
+            testCase {
+                repository {
+                    commit {
+                        title = "a"
+                        id = "a"
+                    }
+                    commit {
+                        title = "b"
+                        id = "b"
+                    }
+                    commit {
+                        title = "c"
+                        id = "c"
+                        localRefs += "main"
+                    }
+                }
+            },
+        )
         gitKspr.push()
-
-        local.reset("${a.hash}^")
-        val z = addCommit("z")
-        val a1 = local.cherryPick(a)
-        val b1 = local.cherryPick(b)
-        val c1 = local.cherryPick(c)
-
+        createCommitsFrom(
+            testCase {
+                repository {
+                    commit {
+                        title = "z"
+                        id = "z"
+                    }
+                    commit {
+                        title = "a"
+                        id = "a"
+                    }
+                    commit {
+                        title = "b"
+                        id = "b"
+                    }
+                    commit {
+                        title = "c"
+                        id = "c"
+                        localRefs += "main"
+                    }
+                }
+            },
+        )
         gitKspr.push()
-
-        local.reset("${z.hash}^")
-        addCommit("y")
-        local.cherryPick(a1)
-        local.cherryPick(b1)
-        local.cherryPick(c1)
-
+        createCommitsFrom(
+            testCase {
+                repository {
+                    commit {
+                        title = "y"
+                        id = "y"
+                    }
+                    commit {
+                        title = "a"
+                        id = "a"
+                    }
+                    commit {
+                        title = "b"
+                        id = "b"
+                    }
+                    commit {
+                        title = "c"
+                        id = "c"
+                        localRefs += "main"
+                    }
+                }
+            },
+        )
         gitKspr.push()
+        gitLogLocalAndRemote()
 
         assertEquals(
             listOf("a", "a_01", "a_02", "b", "b_01", "b_02", "c", "c_01", "c_02", "y", "z")
-                .map { name -> "${config.remoteBranchPrefix}$name" },
-            local
+                .map { name -> "${DEFAULT_REMOTE_BRANCH_PREFIX}$name" },
+            localGit
                 .getRemoteBranches()
                 .map(RemoteBranch::name)
-                .filter { name -> name.startsWith(config.remoteBranchPrefix) }
+                .filter { name -> name.startsWith(DEFAULT_REMOTE_BRANCH_PREFIX) }
                 .sorted(),
         )
     }

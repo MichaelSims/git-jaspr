@@ -181,7 +181,7 @@ data class GitHubTestHarness(
         gitLogLocalAndRemote()
     }
 
-    private fun gitLogLocalAndRemote() {
+    fun gitLogLocalAndRemote() {
         gitLogGraphAll(localRepo, "LOCAL")
         if (remoteRepo.exists()) { // If we cloned from a remote URI there will be a "fake" remote
             gitLogGraphAll(remoteRepo, "REMOTE")
