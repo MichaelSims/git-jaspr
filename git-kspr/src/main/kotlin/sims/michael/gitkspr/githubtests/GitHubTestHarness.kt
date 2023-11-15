@@ -19,11 +19,11 @@ import java.util.Properties
 data class GitHubTestHarness(
     val localRepo: File,
     val remoteRepo: File,
-    val configMap: Map<String, UserConfig> = emptyMap(),
-    private val remoteUri: String? = null,
-    private val gitHubInfo: GitHubInfo = GitHubInfo("github.com", "MichaelSims", "git-spr-demo"),
+    private val configMap: Map<String, UserConfig>,
+    private val remoteUri: String,
+    private val gitHubInfo: GitHubInfo,
     private val prefix: String = DEFAULT_REMOTE_BRANCH_PREFIX,
-    val useFakeRemote: Boolean = true,
+    private val useFakeRemote: Boolean = true,
 ) {
 
     val localGit: JGitClient = JGitClient(localRepo)
@@ -35,18 +35,14 @@ data class GitHubTestHarness(
         }
         .toMap()
 
-
     init {
-
-
-        if (!useFakeRemote) {
-            localGit.clone(remoteUri!!)
-        } else {
-            // remoteUri is used for functional tests. If we don't have one we create a "fake" remote with an initial
-            // commit and clone it.
+        val uriToClone = if (useFakeRemote) {
             remoteGit.init().createInitialCommit()
-            localGit.clone(remoteRepo.toURI().toString())
+            remoteRepo.toURI().toString()
+        } else {
+            remoteUri
         }
+        localGit.clone(uriToClone)
     }
 
     private fun JGitClient.createInitialCommit() = apply {
@@ -139,12 +135,11 @@ data class GitHubTestHarness(
 
         val prs = testCase.pullRequests
         if (prs.isNotEmpty()) {
-            val existingPrsByTitle = configMapWithClient.values.first().second.getPullRequests().associateBy(PullRequest::title)
+            val firstClient = configMapWithClient.values.first().second
+            val existingPrsByTitle =
+                firstClient.getPullRequests().associateBy(PullRequest::title)
             for (pr in prs) {
-                val gitHubClient =
-                    requireNotNull(configMapWithClient[pr.userKey] ?: configMapWithClient.values.firstOrNull()) {
-                        "No github client available!"
-                    }.second
+                val gitHubClient = (configMapWithClient[pr.userKey]?.second ?: firstClient)
                 val newPullRequest = PullRequest(null, null, null, pr.headRef, pr.baseRef, pr.title, pr.body)
                 val existingPr = existingPrsByTitle[pr.title]
                 if (existingPr == null) {
@@ -281,15 +276,16 @@ data class GitHubTestHarness(
             configPropertiesFile: File = File(System.getenv("HOME")).resolve(CONFIG_FILE_NAME),
             block: suspend GitHubTestHarness.() -> Unit,
         ) {
-
             val (localRepo, remoteRepo) = createTempDir().createRepoDirs()
 
             val properties = Properties()
-                .apply { configPropertiesFile.inputStream().use(::load) }.map { (k,v) -> k.toString() to v.toString() }.toMap()
+                .apply { configPropertiesFile.inputStream().use(::load) }
+                .map { (k, v) -> k.toString() to v.toString() }
+                .toMap()
 
             val configMap = properties.getUserConfigFromPropertiesFile()
 
-            val githubUri = properties["github-test-harness.githubUri"]!!
+            val githubUri = properties["$PROPERTIES_PREFIX.githubUri"]!!
 
             return runBlocking {
                 GitHubTestHarness(
@@ -309,9 +305,11 @@ data class GitHubTestHarness(
                 }
             }
         }
+
         const val LOCAL_REPO_SUBDIR = "local"
         const val REMOTE_REPO_SUBDIR = "remote"
         const val INITIAL_COMMIT_SHORT_MESSAGE = "Initial commit"
+        private const val PROPERTIES_PREFIX = "github-test-harness"
         val RESTORE_PREFIX = "${GitHubTestHarness::class.java.simpleName.lowercase()}-restore/"
         val DELETE_PREFIX = "${GitHubTestHarness::class.java.simpleName.lowercase()}-delete/"
 
@@ -326,15 +324,15 @@ data class GitHubTestHarness(
                 .also { logger.info("Temp dir created in {}", it.toStringWithClickableURI()) }
 
         private fun Map<String, String>.getUserConfigFromPropertiesFile(): Map<String, UserConfig> {
-            val regex = "github-test-harness\\.userKey\\.(.*?)\\.(.*?)".toRegex()
+            val regex = "$PROPERTIES_PREFIX\\.userKey\\.(.*?)\\.(.*?)".toRegex()
 
             data class ConfigFileEntry(val userKey: String, val key: String, val value: String)
 
             return mapNotNull { (key, value) ->
-                    val matchResult = regex.matchEntire(key)
-                    val matchValues = matchResult?.groupValues
-                    matchValues?.let { (_, userKey, key) -> ConfigFileEntry(userKey, key, value) }
-                }
+                val matchResult = regex.matchEntire(key)
+                val matchValues = matchResult?.groupValues
+                matchValues?.let { (_, userKey, key) -> ConfigFileEntry(userKey, key, value) }
+            }
                 .groupBy { (userKey) -> userKey }
                 .map { (userKey, values) ->
                     val entriesByKey = values.groupBy(ConfigFileEntry::key)
@@ -345,6 +343,5 @@ data class GitHubTestHarness(
                 }
                 .toMap()
         }
-
     }
 }

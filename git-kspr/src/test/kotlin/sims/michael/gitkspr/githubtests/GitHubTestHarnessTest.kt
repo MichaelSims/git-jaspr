@@ -1,6 +1,5 @@
 package sims.michael.gitkspr.githubtests
 
-import kotlinx.coroutines.runBlocking
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.TestInfo
 import org.junit.jupiter.api.assertThrows
@@ -9,9 +8,6 @@ import sims.michael.gitkspr.DEFAULT_REMOTE_NAME
 import sims.michael.gitkspr.JGitClient
 import sims.michael.gitkspr.githubtests.GitHubTestHarness.Companion.withTestSetup
 import sims.michael.gitkspr.githubtests.generatedtestdsl.testCase
-import sims.michael.gitkspr.testing.toStringWithClickableURI
-import java.io.File
-import java.nio.file.Files
 import kotlin.test.assertEquals
 
 class GitHubTestHarnessTest {
@@ -20,19 +16,17 @@ class GitHubTestHarnessTest {
 
     @Test
     fun `can create repo with initial commit`() {
-        val (localRepo, remoteRepo) = createTempDir().createRepoDirs()
-        GitHubTestHarness(localRepo, remoteRepo)
-        val log = JGitClient(localRepo).log()
-        assertEquals(1, log.size)
-        val commit = log.single()
-        assertEquals(commit.copy(shortMessage = "Initial commit"), commit)
+        withTestSetup {
+            val log = JGitClient(localRepo).log()
+            assertEquals(1, log.size)
+            val commit = log.single()
+            assertEquals(commit.copy(shortMessage = "Initial commit"), commit)
+        }
     }
 
     @Test
-    fun `can create commits from model`() = runBlocking {
-        val (localRepo, remoteRepo) = createTempDir().createRepoDirs()
-        val harness = GitHubTestHarness(localRepo, remoteRepo)
-        harness.createCommitsFrom(
+    fun `can create commits from model`() = withTestSetup {
+        createCommitsFrom(
             testCase {
                 repository {
                     commit {
@@ -61,10 +55,8 @@ class GitHubTestHarnessTest {
     }
 
     @Test
-    fun `can create commits with a branch from model`() = runBlocking {
-        val (localRepo, remoteRepo) = createTempDir().createRepoDirs()
-        val harness = GitHubTestHarness(localRepo, remoteRepo, emptyMap())
-        harness.createCommitsFrom(
+    fun `can create commits with a branch from model`() = withTestSetup {
+        createCommitsFrom(
             testCase {
                 repository {
                     commit {
@@ -101,8 +93,6 @@ class GitHubTestHarnessTest {
             assertEquals(commitOneOne.copy(shortMessage = "Commit one.one"), commitOneOne)
             assertEquals(commitOneTwo.copy(shortMessage = "Commit one.two"), commitOneTwo)
         }
-
-        harness.rollbackRemoteChanges()
     }
 
     @Test
@@ -155,11 +145,9 @@ class GitHubTestHarnessTest {
     }
 
     @Test
-    fun `creating commits without named refs fails`(info: TestInfo) = runBlocking {
-        val (localRepo, remoteRepo) = createTempDir().createRepoDirs()
-        val harness = GitHubTestHarness(localRepo, remoteRepo)
+    fun `creating commits without named refs fails`(info: TestInfo) = withTestSetup {
         val exception = assertThrows<IllegalArgumentException> {
-            harness.createCommitsFrom(
+            createCommitsFrom(
                 testCase {
                     repository {
                         commit {
@@ -184,11 +172,9 @@ class GitHubTestHarnessTest {
     }
 
     @Test
-    fun `duplicated commit titles are not allowed`(info: TestInfo) = runBlocking {
-        val (localRepo, remoteRepo) = createTempDir().createRepoDirs()
-        val harness = GitHubTestHarness(localRepo, remoteRepo)
+    fun `duplicated commit titles are not allowed`(info: TestInfo) = withTestSetup {
         val exception = assertThrows<IllegalArgumentException> {
-            harness.createCommitsFrom(
+            createCommitsFrom(
                 testCase {
                     repository {
                         commit {
@@ -297,10 +283,8 @@ class GitHubTestHarnessTest {
     }
 
     @Test
-    fun `rollbackRemoteChanges works as expected`() = runBlocking {
-        val (localRepo, remoteRepo) = createTempDir().createRepoDirs()
-        val harness = GitHubTestHarness(localRepo, remoteRepo)
-        harness.createCommitsFrom(
+    fun `rollbackRemoteChanges works as expected`() = withTestSetup {
+        createCommitsFrom(
             testCase {
                 repository {
                     commit {
@@ -335,7 +319,7 @@ class GitHubTestHarnessTest {
                 }
             },
         )
-        harness.createCommitsFrom(
+        createCommitsFrom(
             testCase {
                 repository {
                     commit {
@@ -370,7 +354,6 @@ class GitHubTestHarnessTest {
                 }
             },
         )
-        harness.rollbackRemoteChanges()
         val jGitClient = JGitClient(remoteRepo)
 
         assertEquals(listOf("main"), jGitClient.getBranchNames())
@@ -379,11 +362,4 @@ class GitHubTestHarnessTest {
             jGitClient.log("main", maxCount = 1).single().shortMessage,
         )
     }
-
-    private fun createTempDir() =
-        checkNotNull(Files.createTempDirectory(GitHubTestHarnessTest::class.java.simpleName).toFile())
-            .also { logger.info("Temp dir created in {}", it.toStringWithClickableURI()) }
 }
-
-fun File.createRepoDirs() =
-    resolve(GitHubTestHarness.LOCAL_REPO_SUBDIR) to resolve(GitHubTestHarness.REMOTE_REPO_SUBDIR)
