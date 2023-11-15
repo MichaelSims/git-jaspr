@@ -19,7 +19,7 @@ import java.io.File
 import java.nio.file.Files
 import java.util.Properties
 
-private val defaultMockGitHubClient = mock<GitHubClient>() {
+val defaultMockGitHubClient = mock<GitHubClient>() {
     // TODO can we not default this somehow? Whatever happened to "nice" mocks?
     onBlocking {
         getPullRequestsById(any())

@@ -315,24 +315,21 @@ class GitKsprTest {
     }
 
     @Test
-    fun `push fails when multiple PRs for a given commit ID exist`(): Unit = runBlocking {
+    fun `push fails when multiple PRs for a given commit ID exist`() {
+        // TODO move this into the harness somehow?
         val config = config()
         val f = config.prFactory()
-        val localStack = listOf(commit(1))
         val prs = listOf(f.pullRequest(1, 10), f.pullRequest(1, 20))
 
-        val gitClient = createDefaultGitClient {
-            on { getLocalCommitStack(any(), any(), any()) } doReturn localStack
+        val ghc = mock<GitHubClient>() {
+            onBlocking { getPullRequests(any<List<Commit>>()) } doReturn prs
         }
-        val gitHubClient = mock<GitHubClient> {
-            onBlocking { getPullRequests(eq(localStack)) } doReturn prs
+        withTestSetup(mockGitHubClient = ghc) {
+            val exception = assertThrows<IllegalStateException> {
+                gitKspr.push()
+            }
+            logger.info("Exception message: {}", exception.message)
         }
-
-        val gitKspr = GitKspr(gitHubClient, gitClient, config)
-        val exception = assertThrows<IllegalStateException> {
-            gitKspr.push()
-        }
-        logger.info("Exception message: {}", exception.message)
     }
 
     @Test
