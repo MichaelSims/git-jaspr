@@ -1,20 +1,11 @@
 package sims.michael.gitkspr
 
-import com.github.ajalt.clikt.core.NoOpCliktCommand
-import com.github.ajalt.clikt.core.context
-import com.github.ajalt.clikt.parameters.options.option
-import com.github.ajalt.clikt.parameters.options.required
-import com.github.ajalt.clikt.sources.PropertiesValueSource
-import kotlinx.coroutines.runBlocking
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.TestInfo
 import org.slf4j.LoggerFactory
 import sims.michael.gitkspr.githubtests.GitHubTestHarness.Companion.withTestSetup
 import sims.michael.gitkspr.githubtests.generatedtestdsl.testCase
 import sims.michael.gitkspr.testing.FunctionalTest
-import sims.michael.gitkspr.testing.toStringWithClickableURI
-import java.io.File
-import java.nio.file.Files
 import kotlin.test.assertEquals
 
 /**
@@ -44,10 +35,6 @@ class GitKsprFunctionalTest {
             },
         )
 
-        val wiring = createAppWiring(localRepo)
-        val gitKspr = wiring.gitKspr
-        val gitHub = wiring.gitHubClient
-
         System.setProperty(WORKING_DIR_PROPERTY_NAME, localRepo.absolutePath) // TODO why?
         gitKspr.push()
 
@@ -58,91 +45,122 @@ class GitKsprFunctionalTest {
     }
 
     @Test
-    fun `amend HEAD commit and re-push`(testInfo: TestInfo) = runBlocking {
-        val gitDir = createTempDir().resolve(REPO_NAME)
-        logger.info("{}", gitDir.toStringWithClickableURI())
+    fun `amend HEAD commit and re-push`(testInfo: TestInfo) = withTestSetup(useFakeRemote = false) {
+        createCommitsFrom(
+            testCase {
+                repository {
+                    commit { title = "one" }
+                    commit { title = "two" }
+                    commit {
+                        title = "three"
+                        localRefs += "development"
+                    }
+                }
+            },
+        )
 
-        val wiring = createAppWiring(gitDir)
-        val git = wiring.gitClient.clone(REPO_URI)
-        val gitKspr = wiring.gitKspr
-        val gitHub = wiring.gitHubClient
-
-        fun addCommit() {
-            val testName = testInfo.displayName.substringBefore("(")
-            val testFileName = "${testName.sanitize()}-${generateUuid()}.txt"
-            gitDir.resolve(testFileName).writeText("This is a test file.\n")
-            git.add(testFileName).commit(testFileName)
-        }
-
-        addCommit()
-        addCommit()
-        addCommit()
-
-        System.setProperty(WORKING_DIR_PROPERTY_NAME, gitDir.absolutePath)
+        System.setProperty(WORKING_DIR_PROPERTY_NAME, localRepo.absolutePath) // TODO why?
         gitKspr.push()
 
-        val first = gitDir.walkTopDown().maxDepth(1).filter { it.name.endsWith(".txt") }.first()
-        first.appendText("An amendment.\n")
-        val headCommit = git.log(JGitClient.HEAD, 1).single()
-        val commitSubject = "I amended this"
-        git.add(first.relativeTo(gitDir).name).commitAmend("$commitSubject\n\n${COMMIT_ID_LABEL}: ${headCommit.id}")
+        createCommitsFrom(
+            testCase {
+                repository {
+                    commit { title = "one" }
+                    commit { title = "two" }
+                    commit {
+                        title = "four"
+                        localRefs += "development"
+                    }
+                }
+            },
+        )
 
         gitKspr.push()
 
-        val testCommits = git.log(JGitClient.HEAD, 3)
+        val testCommits = localGit.log(JGitClient.HEAD, 3)
         val testCommitIds = testCommits.mapNotNull(Commit::id).toSet()
         val remotePrs = gitHub.getPullRequests(testCommits)
         val remotePrIds = remotePrs.mapNotNull(PullRequest::commitId).toSet()
         assertEquals(testCommitIds, remotePrIds)
 
+        val headCommit = localGit.log(JGitClient.HEAD, 1).single()
         val headCommitId = checkNotNull(headCommit.id)
-        assertEquals(commitSubject, remotePrs.single { it.commitId == headCommitId }.title)
-
-        git.deleteRemoteRefsFrom(testCommits)
+        assertEquals("four", remotePrs.single { it.commitId == headCommitId }.title)
     }
 
     @Test
-    fun `reorder, drop, add, and re-push`(testInfo: TestInfo) = runBlocking {
-        val gitDir = createTempDir().resolve(REPO_NAME)
-        logger.info("{}", gitDir.toStringWithClickableURI())
+    fun `reorder, drop, add, and re-push`(testInfo: TestInfo) = withTestSetup(useFakeRemote = false) {
+        createCommitsFrom(
+            testCase {
+                repository {
+                    commit {
+                        title = "A"
+                        id = "A"
+                    }
+                    commit {
+                        title = "B"
+                        id = "B"
+                    }
+                    commit {
+                        title = "C"
+                        id = "C"
+                    }
+                    commit {
+                        title = "D"
+                        id = "D"
+                    }
+                    commit {
+                        title = "E"
+                        id = "E"
+                        localRefs += "main"
+                    }
+                }
+            },
+        )
 
-        val wiring = createAppWiring(gitDir)
-        val git = wiring.gitClient.clone(REPO_URI)
-        val gitKspr = wiring.gitKspr
-        val gitHub = wiring.gitHubClient
-
-        fun addCommit(commitLabel: String): Commit {
-            val testName = testInfo.displayName.substringBefore("(")
-            val testFileName = "${testName.sanitize()}-$commitLabel.txt"
-            gitDir.resolve(testFileName).writeText("$commitLabel\n")
-            val commitId = "${commitLabel}_${generateUuid()}"
-            return git.add(testFileName).commit("$commitId\n\n${COMMIT_ID_LABEL}: $commitId\n")
-        }
-
-        val a = addCommit("A")
-        val b = addCommit("B")
-        val c = addCommit("C")
-        val d = addCommit("D")
-        val e = addCommit("E")
-
-        System.setProperty(WORKING_DIR_PROPERTY_NAME, gitDir.absolutePath)
+        System.setProperty(WORKING_DIR_PROPERTY_NAME, localRepo.absolutePath)
         gitKspr.push()
 
-        git.reset("${a.hash}^")
-        git.cherryPick(e)
-        git.cherryPick(c)
-        val one = addCommit("1")
-        git.cherryPick(b)
-        git.cherryPick(a)
-        val two = addCommit("2")
+        createCommitsFrom(
+            testCase {
+                repository {
+                    commit {
+                        title = "E"
+                        id = "E"
+                    }
+                    commit {
+                        title = "C"
+                        id = "C"
+                    }
+                    commit {
+                        title = "one"
+                        id = "one"
+                    }
+                    commit {
+                        title = "B"
+                        id = "B"
+                    }
+                    commit {
+                        title = "A"
+                        id = "A"
+                    }
+                    commit {
+                        title = "two"
+                        id = "two"
+                        localRefs += "main"
+                    }
+                }
+            },
+        )
 
         gitKspr.push()
 
-        val remotePrs = gitHub.getPullRequests(listOf(e, c, one, b, a, two))
+        // TODO the filter is having some impact on ordering. better if the list was properly ordered regardless
+        val remotePrs = gitHub.getPullRequestsById(listOf("E", "C", "one", "B", "A", "two"))
 
         val prs = remotePrs.map { pullRequest -> pullRequest.baseRefName to pullRequest.headRefName }.toSet()
-        val remoteBranchPrefix = wiring.config.remoteBranchPrefix
-        val commits = git
+        val remoteBranchPrefix = remoteBranchPrefix
+        val commits = localGit
             .log(JGitClient.HEAD, 6)
             .reversed()
             .windowedPairs()
@@ -153,61 +171,5 @@ class GitKsprFunctionalTest {
             }
             .toSet()
         assertEquals(commits, prs)
-
-        git.deleteRemoteRefsFrom(listOf(a, b, c, d, e, one, two))
-    }
-
-    @Test
-    fun `DELETE ALL KSPR BRANCHES (DANGEROUS)`() {
-        val gitDir = createTempDir().resolve(REPO_NAME)
-        logger.info("{}", gitDir.toStringWithClickableURI())
-
-        val wiring = createAppWiring(gitDir)
-        val git = wiring.gitClient.clone(REPO_URI)
-        val regex = ".*(${wiring.config.remoteBranchPrefix}.*?)$".toRegex()
-
-        val refSpecs = git
-            .getRemoteBranches()
-            .map(RemoteBranch::name)
-            .mapNotNull(regex::matchEntire)
-            .map { it.groupValues[1] }
-            .map { remoteBranch -> RefSpec("+", remoteBranch) }
-        git.push(refSpecs)
-    }
-
-    private fun JGitClient.deleteRemoteRefsFrom(commits: List<Commit>) {
-        try {
-            push(commits.map { commit -> RefSpec("+", "$remoteBranchPrefix${commit.id}") })
-        } catch (e: Exception) {
-            logger.error("Caught exception during branch cleanup", e)
-        }
-    }
-
-    private fun createTempDir() = checkNotNull(Files.createTempDirectory(GitKsprTest::class.java.simpleName).toFile())
-
-    // TODO quick and dirty way to get a similar app wiring to the production app. Revisit this
-    private fun createAppWiring(dir: File): DefaultAppWiring = DefaultAppWiring(
-        githubToken,
-        Config(dir, "origin", GitHubInfo(REPO_HOST, REPO_OWNER, REPO_NAME), DEFAULT_REMOTE_BRANCH_PREFIX),
-        JGitClient(dir),
-    )
-
-    private val githubToken by lazy {
-        class ReadToken : NoOpCliktCommand() {
-            init {
-                context {
-                    valueSource = PropertiesValueSource.from(File(System.getenv("HOME")).resolve(CONFIG_FILE_NAME))
-                }
-            }
-
-            val githubToken by option().required()
-        }
-
-        ReadToken().apply { main(arrayOf()) }.githubToken
     }
 }
-
-private const val REPO_HOST = "github.com"
-private const val REPO_OWNER = "MichaelSims"
-private const val REPO_NAME = "git-spr-demo"
-private const val REPO_URI = "git@${REPO_HOST}:${REPO_OWNER}/${REPO_NAME}.git"

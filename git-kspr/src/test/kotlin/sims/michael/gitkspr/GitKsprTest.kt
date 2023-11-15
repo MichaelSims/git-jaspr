@@ -328,7 +328,7 @@ class GitKsprTest {
 
     private fun createDefaultGitHubClient() = mock<GitHubClient> {
         onBlocking {
-            getPullRequests(any())
+            getPullRequestsById(any())
         } doReturn emptyList()
     }
 

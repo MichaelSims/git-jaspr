@@ -22,7 +22,7 @@ data class GitHubTestHarness(
     private val configMap: Map<String, UserConfig>,
     private val remoteUri: String,
     private val gitHubInfo: GitHubInfo,
-    private val prefix: String = DEFAULT_REMOTE_BRANCH_PREFIX,
+    val remoteBranchPrefix: String = DEFAULT_REMOTE_BRANCH_PREFIX,
     private val useFakeRemote: Boolean = true,
 ) {
 
@@ -31,9 +31,17 @@ data class GitHubTestHarness(
 
     private val configMapWithClient: Map<String, Pair<UserConfig, GitHubClient>> = configMap
         .map { (k, v) ->
-            k to (v to GitHubClientWiring(v.githubToken, gitHubInfo, prefix).gitHubClient)
+            k to (v to GitHubClientWiring(v.githubToken, gitHubInfo, remoteBranchPrefix).gitHubClient)
         }
         .toMap()
+
+    val gitKspr = GitKspr(
+        configMapWithClient.values.first().second,
+        localGit,
+        Config(localRepo, DEFAULT_REMOTE_NAME, gitHubInfo, remoteBranchPrefix = remoteBranchPrefix),
+    )
+
+    val gitHub = configMapWithClient.values.first().second
 
     init {
         val uriToClone = if (useFakeRemote) {
@@ -72,6 +80,7 @@ data class GitHubTestHarness(
                 val existingHash = commitHashesByTitle[commitData.title]
                 val commit = if (existingHash != null) {
                     // A commit with this title already exists... cherry-pick it
+                    // TODO but what if this version of the commit differs? shouldn't we amend it?
                     localGit.cherryPick(localGit.log(existingHash, maxCount = 1).single())
                 } else {
                     // Create a new one
@@ -137,7 +146,7 @@ data class GitHubTestHarness(
         if (prs.isNotEmpty()) {
             val firstClient = configMapWithClient.values.first().second
             val existingPrsByTitle =
-                firstClient.getPullRequests().associateBy(PullRequest::title)
+                firstClient.getPullRequestsById().associateBy(PullRequest::title)
             for (pr in prs) {
                 val gitHubClient = (configMapWithClient[pr.userKey]?.second ?: firstClient)
                 val newPullRequest = PullRequest(null, null, null, pr.headRef, pr.baseRef, pr.title, pr.body)
@@ -212,7 +221,12 @@ data class GitHubTestHarness(
     private fun CommitData.create(): Commit {
         val file = localRepo.resolve("${title.sanitize()}.txt")
         file.writeText("Title: $title\n")
-        return localGit.add(file.name).commit(title)
+        val message = if (id != null) {
+            localGit.appendCommitId(title, id)
+        } else {
+            title
+        }
+        return localGit.add(file.name).commit(message)
     }
 
     private fun IdentData.toIdent(): Ident = Ident(name, email)

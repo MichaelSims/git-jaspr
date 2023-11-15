@@ -192,7 +192,7 @@ class JGitClient(val workingDirectory: File, val remoteBranchPrefix: String = DE
         Git.cloneRepository().setDirectory(workingDirectory).setURI(uri).call().close()
     }
 
-    private fun appendCommitId(fullMessage: String, commitId: String) =
+    fun appendCommitId(fullMessage: String, commitId: String) =
         """
             $fullMessage
 

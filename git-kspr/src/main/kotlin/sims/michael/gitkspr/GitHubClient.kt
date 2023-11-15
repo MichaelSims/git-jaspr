@@ -21,10 +21,15 @@ class GitHubClient(
 
     suspend fun getPullRequests(commitFilter: List<Commit>? = null): List<PullRequest> {
         logger.trace("getPullRequests")
+        return getPullRequestsById(commitFilter?.map { it.id!! })
+    }
+
+    suspend fun getPullRequestsById(commitFilter: List<String>? = null): List<PullRequest> {
+        logger.trace("getPullRequests")
 
         // If commitFilter was supplied, build a set of commit IDs for filtering the returned PR list.
         // It'd be nice if the server could filter this for us but there doesn't seem to be a good way to do that.
-        val ids = commitFilter?.map(Commit::id)?.requireNoNulls()?.toSet()
+        val ids = commitFilter?.requireNoNulls()?.toSet()
 
         val regex = "^$remoteBranchPrefix(.*?)$".toRegex()
         val response = delegate
