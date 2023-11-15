@@ -163,33 +163,32 @@ class GitKsprTest {
     }
 
     @Test
-    fun `push pushes to expected remote branch names`() {
-        val tempDir = createTempDir()
-        val remoteRepoDir = tempDir.resolve("test-remote")
-        val remote = JGitClient(remoteRepoDir).init()
-        val readme = "README.txt"
-        val remoteReadMe = remoteRepoDir.resolve(readme)
-        remoteReadMe.writeText("This is a test repo.\n")
-        val messageA = "Initial commit"
-        remote.add(readme).commit(messageA)
+    fun `push pushes to expected remote branch names`() = withTestSetup {
+        createCommitsFrom(
+            testCase {
+                repository {
+                    commit {
+                        title = "1"
+                        id = "1"
+                    }
+                    commit {
+                        title = "2"
+                        id = "2"
+                    }
+                    commit {
+                        title = "3"
+                        id = "3"
+                        localRefs += "main"
+                    }
+                }
+            },
+        )
+        gitKspr.push()
 
-        val localRepoDir = tempDir.resolve("test-local")
-        val local =
-            JGitClient(localRepoDir).clone(remoteRepoDir.toURI().toString()).checkout("development", CreateBranch)
-        for (num in (1..3)) {
-            val filePattern = "$num.txt"
-            localRepoDir.resolve(filePattern).writeText("This is file number $num.\n")
-            local.add(filePattern).commit("This is file number $num")
-        }
-
-        val ids = uuidIterator()
-        val config = config(localRepoDir)
-        runBlocking { GitKspr(createDefaultGitHubClient(), local, config, ids::next).push() }
-
-        val prefix = "refs/heads/${config.remoteBranchPrefix}"
+        val prefix = "refs/heads/${DEFAULT_REMOTE_BRANCH_PREFIX}"
         assertEquals(
-            (0..2).associate { "$prefix$it" to it.toString() },
-            remote.commitIdsByBranch(),
+            (1..3).associate { "$prefix$it" to it.toString() },
+            remoteGit.commitIdsByBranch(),
         )
     }
 
