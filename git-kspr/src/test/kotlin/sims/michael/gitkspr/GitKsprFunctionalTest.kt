@@ -26,7 +26,7 @@ class GitKsprFunctionalTest {
     private val logger = LoggerFactory.getLogger(GitKsprTest::class.java)
 
     @Test
-    fun `push new commits`(testInfo: TestInfo) = withTestSetup(remoteUri = REPO_URI) {
+    fun `push new commits`(testInfo: TestInfo) = withTestSetup(useFakeRemote = false) {
         createCommitsFrom(
             testCase {
                 repository {

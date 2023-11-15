@@ -124,7 +124,7 @@ class GitHubTestHarnessFunctionalTest {
     @Test
     fun `can open PRs from created commits`() = runBlocking {
         val (localRepo, remoteRepo) = createTempDir().createRepoDirs()
-        val harness = GitHubTestHarness(localRepo, remoteRepo, mapOf("michael" to michael, "derelictMan" to derelictMan), REPO_URI)
+        val harness = GitHubTestHarness(localRepo, remoteRepo, useFakeRemote = true)
         try {
             harness.createCommitsFrom(
                 testCase {
@@ -184,7 +184,7 @@ class GitHubTestHarnessFunctionalTest {
     @Test
     fun `can update existing PRs`(testInfo: TestInfo) = runBlocking {
         val (localRepo, remoteRepo) = createTempDir().createRepoDirs()
-        val harness = GitHubTestHarness(localRepo, remoteRepo, mapOf("derelictMan" to derelictMan, "michael" to michael), REPO_URI)
+        val harness = GitHubTestHarness(localRepo, remoteRepo, useFakeRemote = true)
         try {
             val m = ident {
                 email = "michael.h.sims@gmail.com"
