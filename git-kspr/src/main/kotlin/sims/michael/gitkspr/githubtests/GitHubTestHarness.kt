@@ -19,6 +19,15 @@ import java.io.File
 import java.nio.file.Files
 import java.util.Properties
 
+private val defaultMockGitHubClient = mock<GitHubClient>() {
+    // TODO can we not default this somehow? Whatever happened to "nice" mocks?
+    onBlocking {
+        getPullRequestsById(any())
+    } doReturn emptyList()
+    onBlocking {
+        getPullRequests(any())
+    } doReturn emptyList()
+}
 data class GitHubTestHarness(
     val localRepo: File,
     val remoteRepo: File,
@@ -27,10 +36,10 @@ data class GitHubTestHarness(
     private val gitHubInfo: GitHubInfo,
     val remoteBranchPrefix: String = DEFAULT_REMOTE_BRANCH_PREFIX,
     private val useFakeRemote: Boolean = true,
+    private val mockGitHubClient: GitHubClient = defaultMockGitHubClient,
+    val localGit: JGitClient = JGitClient(localRepo),
+    val remoteGit: JGitClient = JGitClient(remoteRepo),
 ) {
-
-    val localGit: JGitClient = JGitClient(localRepo)
-    val remoteGit: JGitClient = JGitClient(remoteRepo)
 
     private val configMapWithClient: Map<String, Pair<UserConfig, GitHubClient>> = configMap
         .map { (k, v) ->
@@ -43,15 +52,7 @@ data class GitHubTestHarness(
 
     val gitKspr = GitKspr(
         ghClient = if (useFakeRemote) {
-            val mock = mock<GitHubClient> {
-                onBlocking {
-                    getPullRequestsById(any())
-                } doReturn emptyList()
-                onBlocking {
-                    getPullRequests(any())
-                } doReturn emptyList()
-            }
-            mock
+            mockGitHubClient
         } else {
             configMapWithClient.values.first().second
         },
@@ -306,7 +307,10 @@ data class GitHubTestHarness(
     companion object {
         fun withTestSetup(
             useFakeRemote: Boolean = true,
+            mockGitHubClient: GitHubClient = defaultMockGitHubClient,
             configPropertiesFile: File = File(System.getenv("HOME")).resolve(CONFIG_FILE_NAME),
+            localGit: JGitClient? = null,
+            remoteGit: JGitClient? = null,
             block: suspend GitHubTestHarness.() -> Unit,
         ) {
             val (localRepo, remoteRepo) = createTempDir().createRepoDirs()
@@ -328,6 +332,9 @@ data class GitHubTestHarness(
                     githubUri,
                     extractGitHubInfoFromUri(githubUri)!!,
                     useFakeRemote = useFakeRemote,
+                    mockGitHubClient = mockGitHubClient,
+                    localGit = localGit ?: JGitClient(localRepo),
+                    remoteGit = remoteGit ?: JGitClient(remoteRepo),
                 ).apply {
                     try {
                         block()

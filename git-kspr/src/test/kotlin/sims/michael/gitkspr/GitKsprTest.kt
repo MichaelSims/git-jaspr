@@ -336,22 +336,21 @@ class GitKsprTest {
     }
 
     @Test
-    fun `getRemoteCommitStatuses produces expected result`() {
-        val config = config()
-        val localStack = listOf(commit(1))
-
-        val gitClient = createDefaultGitClient {
-            on { getLocalCommitStack(any(), any(), any()) } doReturn localStack
-            on { getRemoteBranchesById() } doReturn mapOf(
-                "1" to RemoteBranch("${DEFAULT_REMOTE_BRANCH_PREFIX}1", commit(1)),
-            )
-        }
-
-        val gitKspr = GitKspr(mock<GitHubClient>(), gitClient, config)
-
+    fun `getRemoteCommitStatuses produces expected result`() = withTestSetup {
+        createCommitsFrom(
+            testCase {
+                repository {
+                    commit {
+                        title = "1"
+                        id = "1"
+                        localRefs += "development"
+                    }
+                }
+            },
+        )
+        gitKspr.push()
         val remoteCommitStatuses = gitKspr.getRemoteCommitStatuses()
-        assertEquals(listOf(RemoteCommitStatus(commit(1), commit(1))), remoteCommitStatuses)
-        assertEquals(commit(1), remoteCommitStatuses.single().remoteCommit)
+        assertEquals(localGit.log("HEAD", maxCount = 1).single(), remoteCommitStatuses.single().remoteCommit)
     }
 
     private fun createDefaultGitClient(init: KStubbing<JGitClient>.(JGitClient) -> Unit = {}) = mock<JGitClient> {
