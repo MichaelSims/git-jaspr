@@ -1,7 +1,6 @@
 package sims.michael.gitkspr
 
 import com.nhaarman.mockitokotlin2.*
-import kotlinx.coroutines.runBlocking
 import org.eclipse.jgit.junit.MockSystemReader
 import org.eclipse.jgit.lib.Constants.GIT_COMMITTER_EMAIL_KEY
 import org.eclipse.jgit.lib.Constants.GIT_COMMITTER_NAME_KEY
@@ -275,42 +274,93 @@ class GitKsprTest {
     }
 
     @Test
-    fun `push updates base refs for any reordered PRs`(): Unit = runBlocking {
+    fun `push updates base refs for any reordered PRs`() {
         val localStack = (1..4).map(::commit)
         val remoteStack = listOf(1, 2, 4, 3).map(::commit)
 
         val config = config()
         val f = config.prFactory()
 
-        val gitClient = createDefaultGitClient {
-            on { getLocalCommitStack(any(), any(), any()) } doReturn localStack
-        }
         val gitHubClient = mock<GitHubClient> {
-            onBlocking { getPullRequests(eq(localStack)) } doReturn f.toPrs(remoteStack)
+            onBlocking { getPullRequests(any()) } doReturn f.toPrs(remoteStack)
         }
 
-        val gitKspr = GitKspr(gitHubClient, gitClient, config)
-        gitKspr.push()
+        withTestSetup(mockGitHubClient = gitHubClient) {
+            createCommitsFrom(
+                testCase {
+                    repository {
+                        commit {
+                            title = "1"
+                            id = "1"
+                        }
+                        commit {
+                            title = "2"
+                            id = "2"
+                        }
+                        commit {
+                            title = "4"
+                            id = "4"
+                        }
+                        commit {
+                            title = "3"
+                            id = "3"
+                            localRefs += "development"
+                            remoteRefs += "development"
+                        }
+                    }
+                },
+            )
 
-        argumentCaptor<PullRequest> {
-            verify(gitHubClient, atLeastOnce()).updatePullRequest(capture())
+//            gitKspr.push()
 
-            for (value in allValues) {
-                logger.debug("updatePullRequest {}", value)
+            createCommitsFrom(
+                testCase {
+                    repository {
+                        commit {
+                            title = "1"
+                            id = "1"
+                        }
+                        commit {
+                            title = "2"
+                            id = "2"
+                        }
+                        commit {
+                            title = "3"
+                            id = "3"
+                        }
+                        commit {
+                            title = "4"
+                            id = "4"
+                            localRefs += "development"
+                        }
+                    }
+                },
+            )
+
+            gitKspr.push()
+
+            gitLogLocalAndRemote()
+
+            argumentCaptor<PullRequest> {
+                verify(gitHubClient, atLeastOnce()).updatePullRequest(capture())
+
+                for (value in allValues) {
+                    logger.debug("updatePullRequest {}", value)
+                }
             }
-        }
 
-        inOrder(gitHubClient) {
-            /**
-             * Verify that the moved commits were first rebased to the target branch. For more info on this, see the
-             * comment on [GitKspr.updateBaseRefForReorderedPrsIfAny]
-             */
-            for (pr in listOf(f.pullRequest(4), f.pullRequest(3))) {
-                verify(gitHubClient).updatePullRequest(eq(pr))
+            inOrder(gitHubClient) {
+                /**
+                 * Verify that the moved commits were first rebased to the target branch. For more info on this, see the
+                 * comment on [GitKspr.updateBaseRefForReorderedPrsIfAny]
+                 */
+                for (pr in listOf(f.pullRequest(4), f.pullRequest(3))) {
+                    verify(gitHubClient).updatePullRequest(eq(pr))
+                }
+                verify(gitHubClient).updatePullRequest(f.pullRequest(3, 2))
+                verify(gitHubClient).updatePullRequest(f.pullRequest(4, 3))
+                verifyNoMoreInteractions()
             }
-            verify(gitHubClient).updatePullRequest(f.pullRequest(3, 2))
-            verify(gitHubClient).updatePullRequest(f.pullRequest(4, 3))
-            verifyNoMoreInteractions()
         }
     }
 
@@ -390,7 +440,17 @@ class GitKsprTest {
         fun pullRequest(label: Int, simpleBaseRef: Int? = null): PullRequest {
             val lStr = label.toString()
             val baseRef = simpleBaseRef?.let { "$remoteBranchPrefix$it" } ?: DEFAULT_TARGET_REF
-            return PullRequest(lStr, lStr, label, "$remoteBranchPrefix$lStr", baseRef, lStr, "")
+            return PullRequest(
+                lStr,
+                lStr,
+                label,
+                "$remoteBranchPrefix$lStr",
+                baseRef,
+                lStr,
+                "$lStr\n" +
+                    "\n" +
+                    "commit-id: $lStr\n",
+            )
         }
 
         fun toPrs(commits: List<Commit>, useDefaultBaseRef: Boolean = false) = commits
