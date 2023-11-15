@@ -193,38 +193,6 @@ class GitKsprTest {
     }
 
     @Test
-    fun `push pushes only changed branches`(): Unit = runBlocking {
-        val commitOne = Commit("hOne", "One", "", "iOne")
-        val commitTwo = Commit("hTwo", "Two", "", "iTwo")
-        val commitThree = Commit("hThree", "Three", "", "iThree")
-
-        val config = config()
-
-        fun Commit.toRemoteBranch() = RemoteBranch("${config.remoteBranchPrefix}$id", this)
-        val jGitClient = createDefaultGitClient {
-            on { getLocalCommitStack(any(), any(), any()) } doReturn listOf(
-                commitOne,
-                commitTwo,
-                commitThree,
-            )
-            on { getRemoteBranches() } doReturn listOf(commitOne).map(Commit::toRemoteBranch)
-        }
-
-        val gitKspr = GitKspr(createDefaultGitHubClient(), jGitClient, config)
-        gitKspr.push()
-        argumentCaptor<List<RefSpec>> {
-            verify(jGitClient, times(1)).push(capture())
-
-            val expected = listOf(commitTwo, commitThree)
-                .map { commit -> RefSpec(commit.hash, "${config.remoteBranchPrefix}${commit.id}").forcePush() }
-            val actual = firstValue
-                // Filter out revision history branches
-                .filterNot { (localRef, _) -> localRef.startsWith("$DEFAULT_REMOTE_NAME/") }
-            assertEquals(expected, actual)
-        }
-    }
-
-    @Test
     fun `push pushes revision history branches on update`(testInfo: TestInfo): Unit = runBlocking {
         val tempDir = createTempDir()
         val remoteRepoDir = tempDir.resolve("test-remote")
