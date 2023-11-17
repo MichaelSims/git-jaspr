@@ -1,12 +1,11 @@
 package sims.michael.gitkspr.githubtests
 
 import org.slf4j.LoggerFactory
+import sims.michael.gitkspr.*
 import sims.michael.gitkspr.Commit
-import sims.michael.gitkspr.GitHubClient
 import sims.michael.gitkspr.PullRequest
-import sims.michael.gitkspr.generateUuid
 
-class GitHubStubClient : GitHubClient {
+class GitHubStubClient(private val remoteBranchPrefix: String) : GitHubClient {
 
     private val logger = LoggerFactory.getLogger(GitHubStubClient::class.java)
 
@@ -25,8 +24,14 @@ class GitHubStubClient : GitHubClient {
     }
 
     override suspend fun createPullRequest(pullRequest: PullRequest) {
+        val regex = "^$remoteBranchPrefix(.*?)$".toRegex()
+        val commitId = regex.matchEntire(pullRequest.headRefName)?.let { result -> result.groupValues[1] }
         // Assign a unique id and the next PR number... simulates what GitHub would do
-        val pullRequestToAdd = pullRequest.copy(id = generateUuid(8), number = prNumberIterator.nextInt())
+        val pullRequestToAdd = pullRequest.copy(
+            id = generateUuid(8),
+            number = prNumberIterator.nextInt(),
+            commitId = pullRequest.commitId ?: commitId,
+        )
         logger.trace("createPullRequest {}", pullRequestToAdd)
         prs.add(pullRequestToAdd)
     }

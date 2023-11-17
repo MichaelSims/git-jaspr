@@ -1,6 +1,5 @@
 package sims.michael.gitkspr
 
-import com.nhaarman.mockitokotlin2.*
 import org.eclipse.jgit.junit.MockSystemReader
 import org.eclipse.jgit.lib.Constants.GIT_COMMITTER_EMAIL_KEY
 import org.eclipse.jgit.lib.Constants.GIT_COMMITTER_NAME_KEY
@@ -12,11 +11,6 @@ import sims.michael.gitkspr.JGitClient.Companion.HEAD
 import sims.michael.gitkspr.githubtests.GitHubTestHarness.Companion.withTestSetup
 import sims.michael.gitkspr.githubtests.TestCaseData
 import sims.michael.gitkspr.githubtests.generatedtestdsl.testCase
-import sims.michael.gitkspr.testing.toStringWithClickableURI
-import java.io.File
-import java.nio.file.Files
-import java.time.ZoneId
-import java.time.ZonedDateTime
 import kotlin.test.assertEquals
 
 class GitKsprTest {
@@ -78,7 +72,10 @@ class GitKsprTest {
 
             gitKspr.push()
 
-            assertEquals(listOf("three", "two", "one"), localGit.log("origin/main", maxCount = 3).map(Commit::shortMessage))
+            assertEquals(
+                listOf("three", "two", "one"),
+                localGit.log("origin/main", maxCount = 3).map(Commit::shortMessage),
+            )
         }
     }
 
@@ -283,16 +280,7 @@ class GitKsprTest {
 
     @Test
     fun `push updates base refs for any reordered PRs`() {
-        val remoteStack = listOf(1, 2, 4, 3).map(::commit)
-
-        val config = config()
-        val f = config.prFactory()
-
-        val gitHubClient = mock<GitHubClient> {
-            onBlocking { getPullRequests(any()) } doReturn f.toPrs(remoteStack)
-        }
-
-        withTestSetup(mockGitHubClient = gitHubClient) {
+        withTestSetup {
             createCommitsFrom(
                 testCase {
                     repository {
@@ -318,7 +306,17 @@ class GitKsprTest {
                 },
             )
 
-//            gitKspr.push()
+            gitKspr.push()
+
+            assertEquals(
+                setOf(
+                    "kspr/1 -> main",
+                    "kspr/2 -> kspr/1",
+                    "kspr/4 -> kspr/2",
+                    "kspr/3 -> kspr/4",
+                ),
+                gitHub.getPullRequests().map(PullRequest::headToBaseString).toSet(),
+            )
 
             createCommitsFrom(
                 testCase {
@@ -348,41 +346,49 @@ class GitKsprTest {
 
             gitLogLocalAndRemote()
 
-            argumentCaptor<PullRequest> {
-                verify(gitHubClient, atLeastOnce()).updatePullRequest(capture())
-
-                for (value in allValues) {
-                    logger.debug("updatePullRequest {}", value)
-                }
-            }
-
-            inOrder(gitHubClient) {
-                /**
-                 * Verify that the moved commits were first rebased to the target branch. For more info on this, see the
-                 * comment on [GitKspr.updateBaseRefForReorderedPrsIfAny]
-                 */
-                for (pr in listOf(f.pullRequest(4), f.pullRequest(3))) {
-                    verify(gitHubClient).updatePullRequest(eq(pr))
-                }
-                verify(gitHubClient).updatePullRequest(f.pullRequest(3, 2))
-                verify(gitHubClient).updatePullRequest(f.pullRequest(4, 3))
-                verifyNoMoreInteractions()
-            }
+            assertEquals(
+                setOf(
+                    "kspr/1 -> main",
+                    "kspr/2 -> kspr/1",
+                    "kspr/3 -> kspr/2",
+                    "kspr/4 -> kspr/3",
+                ),
+                gitHub.getPullRequests().map(PullRequest::headToBaseString).toSet(),
+            )
         }
     }
 
     @Test
     fun `push fails when multiple PRs for a given commit ID exist`() {
-        // TODO move this into the harness somehow?
-        val config = config()
-        val f = config.prFactory()
-        val prs = listOf(f.pullRequest(1, 10), f.pullRequest(1, 20))
-
-        val ghc = mock<GitHubClient>() {
-            onBlocking { getPullRequests(any<List<Commit>>()) } doReturn prs
-        }
-        withTestSetup(mockGitHubClient = ghc) {
-            val exception = assertThrows<IllegalStateException> {
+        withTestSetup {
+            createCommitsFrom(
+                testCase {
+                    repository {
+                        commit {
+                            title = "one"
+                            id = "one"
+                            remoteRefs += "${DEFAULT_REMOTE_BRANCH_PREFIX}one"
+                        }
+                        commit {
+                            title = "two"
+                            id = "two"
+                            localRefs += "development"
+                            remoteRefs += "${DEFAULT_REMOTE_BRANCH_PREFIX}two"
+                        }
+                    }
+                    pullRequest {
+                        headRef = "${DEFAULT_REMOTE_BRANCH_PREFIX}one"
+                        baseRef = "main"
+                        title = "One PR"
+                    }
+                    pullRequest {
+                        headRef = "${DEFAULT_REMOTE_BRANCH_PREFIX}one"
+                        baseRef = "main"
+                        title = "Two PR"
+                    }
+                },
+            )
+            val exception = assertThrows<GitKspr.SinglePullRequestPerCommitConstraintViolation> {
                 gitKspr.push()
             }
             logger.info("Exception message: {}", exception.message)
@@ -409,68 +415,6 @@ class GitKsprTest {
         }
     }
 
-    private fun createDefaultGitClient(init: KStubbing<JGitClient>.(JGitClient) -> Unit = {}) = mock<JGitClient> {
-        on { isWorkingDirectoryClean() } doReturn true
-    }.apply { KStubbing(this).init(this) }
-
-    private fun createDefaultGitHubClient() = mock<GitHubClient> {
-        onBlocking {
-            getPullRequestsById(any())
-        } doReturn emptyList()
-    }
-
-    private class CommitCollector(private val git: JGitClient) {
-        var numCommits = 0
-        fun addCommit(num: Int, id: String? = null) {
-            val filePattern = "$num.txt"
-            git.workingDirectory.resolve(filePattern).writeText("This is file number $num.\n")
-            val message = "This is file number $num" + if (id != null) "\n\n$COMMIT_ID_LABEL: $id" else ""
-            git.add(filePattern).commit(message)
-            numCommits++
-        }
-    }
-
-    private fun config(localRepo: File = File("/dev/null")) =
-        Config(localRepo, DEFAULT_REMOTE_NAME, GitHubInfo("host", "owner", "name"), DEFAULT_REMOTE_BRANCH_PREFIX)
-
-    private fun commit(label: Int, id: String? = null) =
-        Commit(
-            "$label",
-            label.toString(),
-            "",
-            id ?: "$label",
-            authorDate = ZonedDateTime.of(2023, 10, 29, 7, 56, 0, 0, ZoneId.systemDefault()),
-            commitDate = ZonedDateTime.of(2023, 10, 29, 7, 56, 0, 0, ZoneId.systemDefault()),
-        )
-
-    private fun Config.prFactory() = PullRequestFactory(remoteBranchPrefix)
-
-    private class PullRequestFactory(val remoteBranchPrefix: String) {
-        fun pullRequest(label: Int, simpleBaseRef: Int? = null): PullRequest {
-            val lStr = label.toString()
-            val baseRef = simpleBaseRef?.let { "$remoteBranchPrefix$it" } ?: DEFAULT_TARGET_REF
-            return PullRequest(
-                lStr,
-                lStr,
-                label,
-                "$remoteBranchPrefix$lStr",
-                baseRef,
-                lStr,
-                "$lStr\n" +
-                    "\n" +
-                    "commit-id: $lStr\n",
-            )
-        }
-
-        fun toPrs(commits: List<Commit>, useDefaultBaseRef: Boolean = false) = commits
-            .windowedPairs()
-            .map { pair ->
-                val (prev, current) = pair
-                val id = current.shortMessage
-                pullRequest(id.toInt(), prev?.id?.takeUnless { useDefaultBaseRef }?.toInt())
-            }
-    }
-
     @Suppress("SameParameterValue")
     private fun setGitCommitterInfo(name: String, email: String) {
         SystemReader
@@ -482,21 +426,4 @@ class GitKsprTest {
                     },
             )
     }
-
-    private fun createTempDir() =
-        checkNotNull(Files.createTempDirectory(GitKsprTest::class.java.simpleName).toFile()).also {
-            logger.info("Temp dir created in {}", it.toStringWithClickableURI())
-        }
 }
-
-private fun uuidIterator() = (0..Int.MAX_VALUE).asSequence().map(Int::toString).iterator()
-
-private fun File.initRepoWithInitialCommit() {
-    val git = JGitClient(this).init()
-    val readme = "README.txt"
-    resolve(readme).writeText("This is a test repo.\n")
-    git.add(readme).commit("Initial commit")
-}
-
-private val filenameSafeRegex = "\\W+".toRegex()
-fun String.sanitize() = replace(filenameSafeRegex, "_")

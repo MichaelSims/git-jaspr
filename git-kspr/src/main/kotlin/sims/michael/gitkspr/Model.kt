@@ -72,8 +72,10 @@ data class PullRequest(
 ) {
     override fun toString(): String {
         val numberString = number?.let { "#$it" }.orEmpty()
-        return "PR$numberString($headRefName -> $baseRefName, title=$title, id=$id)"
+        return "PR$numberString($headToBaseString, title=$title, id=$id)"
     }
+
+    val headToBaseString: String get() = "$headRefName -> $baseRefName"
 }
 
 data class GitHubRateLimitInfo(

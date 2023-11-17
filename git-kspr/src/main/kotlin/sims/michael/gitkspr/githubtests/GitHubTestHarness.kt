@@ -42,7 +42,7 @@ data class GitHubTestHarness(
     val remoteGit: JGitClient = JGitClient(remoteRepo),
 ) {
 
-    private val gitHubStubClient = GitHubStubClient()
+    private val gitHubStubClient = GitHubStubClient(remoteBranchPrefix)
 
     private val configMapWithClient: Map<String, Pair<UserConfig, GitHubClient>> = configMap
         .map { (k, v) -> k to (v to buildGitHubClient(v.githubToken, gitHubInfo, remoteBranchPrefix)) }
@@ -50,7 +50,7 @@ data class GitHubTestHarness(
 
     private fun buildGitHubClient(githubToken: String, gitHubInfo: GitHubInfo, remoteBranchPrefix: String) =
         if (useFakeRemote) {
-            gitHubStubClient
+            gitHubStubClient // TODO this ain't used chief
         } else {
             GitHubClientWiring(githubToken, gitHubInfo, remoteBranchPrefix).gitHubClient
         }
@@ -60,7 +60,7 @@ data class GitHubTestHarness(
 
     val gitKspr = GitKspr(
         ghClient = if (useFakeRemote) {
-            mockGitHubClient
+            gitHubStubClient
         } else {
             configMapWithClient.values.first().second
         },
@@ -286,7 +286,12 @@ data class GitHubTestHarness(
         val duplicatedTitles = titles.groupingBy { it }.eachCount().filterValues { count -> count > 1 }.keys
         require(duplicatedTitles.isEmpty()) {
             "All commit subjects in the repo should be unique as they are used as keys. " +
-                "The following were duplicated: $duplicatedTitles"
+                "The following were duplicated: $duplicatedTitles\n" +
+                "--------- \n" +
+                "PLEASE NOTE: If you wish to have the same commit ID/title at different places in the local and " +
+                "remote, make two calls to createCommitsFrom, with the second updating localRefs without updating " +
+                "remoteRefs\n" +
+                "--------- \n"
         }
     }
 

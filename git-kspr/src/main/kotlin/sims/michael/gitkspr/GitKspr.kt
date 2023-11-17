@@ -1,6 +1,7 @@
 package sims.michael.gitkspr
 
 import org.slf4j.LoggerFactory
+import java.lang.RuntimeException
 
 class GitKspr(
     private val ghClient: GitHubClient,
@@ -81,11 +82,17 @@ class GitKspr(
             }
     }
 
+    class SinglePullRequestPerCommitConstraintViolation(override val message: String) : RuntimeException(message)
+
     private fun checkSinglePullRequestPerCommit(pullRequests: List<PullRequest>): List<PullRequest> {
-        val commitsWithMultiplePrs =
-            pullRequests.groupBy { pr -> checkNotNull(pr.id) }.filterValues { prs -> prs.size > 1 }
-        check(commitsWithMultiplePrs.isEmpty()) {
-            "Some commits have multiple open PRs; please correct this and retry your operation: $commitsWithMultiplePrs"
+        val commitsWithMultiplePrs = pullRequests
+            .groupBy { pr -> checkNotNull(pr.commitId) }
+            .filterValues { prs -> prs.size > 1 }
+        if (commitsWithMultiplePrs.isNotEmpty()) {
+            throw SinglePullRequestPerCommitConstraintViolation(
+                "Some commits have multiple open PRs; please correct this and retry your operation: " +
+                    commitsWithMultiplePrs.toString(),
+            )
         }
         return pullRequests
     }
@@ -176,6 +183,7 @@ class GitKspr(
         }
 
         for (pr in updatedPullRequests.toSet() - toSet()) {
+            // TODO doesn't this update all of them? Do we really need to do that?
             ghClient.updatePullRequest(pr)
         }
 
