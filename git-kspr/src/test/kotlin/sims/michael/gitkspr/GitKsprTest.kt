@@ -55,9 +55,7 @@ class GitKsprTest {
             createCommitsFrom(
                 testCase {
                     repository {
-                        commit {
-                            title = "one"
-                        }
+                        commit { title = "one" }
                         commit {
                             title = "two"
                             localRefs += "main"
@@ -102,14 +100,8 @@ class GitKsprTest {
                 listOf("A", "B", "0", "1", "2"),
                 testCase {
                     repository {
-                        commit {
-                            title = "A"
-                            id = "A"
-                        }
-                        commit {
-                            title = "B"
-                            id = "B"
-                        }
+                        commit { title = "A" }
+                        commit { title = "B" }
                         commit { title = "0" }
                         commit { title = "1" }
                         commit {
@@ -124,24 +116,14 @@ class GitKsprTest {
                 listOf("A", "B", "0", "1", "2", "C", "D"),
                 testCase {
                     repository {
-                        commit {
-                            title = "A"
-                            id = "A"
-                        }
-                        commit {
-                            title = "B"
-                            id = "B"
-                        }
+                        commit { title = "A" }
+                        commit { title = "B" }
                         commit { title = "0" }
                         commit { title = "1" }
                         commit { title = "2" }
-                        commit {
-                            title = "C"
-                            id = "C"
-                        }
+                        commit { title = "C" }
                         commit {
                             title = "D"
-                            id = "D"
                             localRefs += "main"
                         }
                     }
@@ -167,17 +149,10 @@ class GitKsprTest {
             createCommitsFrom(
                 testCase {
                     repository {
-                        commit {
-                            title = "1"
-                            id = "1"
-                        }
-                        commit {
-                            title = "2"
-                            id = "2"
-                        }
+                        commit { title = "1" }
+                        commit { title = "2" }
                         commit {
                             title = "3"
-                            id = "3"
                             localRefs += "main"
                         }
                     }
@@ -199,17 +174,10 @@ class GitKsprTest {
             createCommitsFrom(
                 testCase {
                     repository {
-                        commit {
-                            title = "a"
-                            id = "a"
-                        }
-                        commit {
-                            title = "b"
-                            id = "b"
-                        }
+                        commit { title = "a" }
+                        commit { title = "b" }
                         commit {
                             title = "c"
-                            id = "c"
                             localRefs += "main"
                         }
                     }
@@ -219,21 +187,11 @@ class GitKsprTest {
             createCommitsFrom(
                 testCase {
                     repository {
-                        commit {
-                            title = "z"
-                            id = "z"
-                        }
-                        commit {
-                            title = "a"
-                            id = "a"
-                        }
-                        commit {
-                            title = "b"
-                            id = "b"
-                        }
+                        commit { title = "z" }
+                        commit { title = "a" }
+                        commit { title = "b" }
                         commit {
                             title = "c"
-                            id = "c"
                             localRefs += "main"
                         }
                     }
@@ -243,21 +201,11 @@ class GitKsprTest {
             createCommitsFrom(
                 testCase {
                     repository {
-                        commit {
-                            title = "y"
-                            id = "y"
-                        }
-                        commit {
-                            title = "a"
-                            id = "a"
-                        }
-                        commit {
-                            title = "b"
-                            id = "b"
-                        }
+                        commit { title = "y" }
+                        commit { title = "a" }
+                        commit { title = "b" }
                         commit {
                             title = "c"
-                            id = "c"
                             localRefs += "main"
                         }
                     }
@@ -284,21 +232,11 @@ class GitKsprTest {
             createCommitsFrom(
                 testCase {
                     repository {
-                        commit {
-                            title = "1"
-                            id = "1"
-                        }
-                        commit {
-                            title = "2"
-                            id = "2"
-                        }
-                        commit {
-                            title = "4"
-                            id = "4"
-                        }
+                        commit { title = "1" }
+                        commit { title = "2" }
+                        commit { title = "4" }
                         commit {
                             title = "3"
-                            id = "3"
                             localRefs += "development"
                             remoteRefs += "development"
                         }
@@ -321,21 +259,11 @@ class GitKsprTest {
             createCommitsFrom(
                 testCase {
                     repository {
-                        commit {
-                            title = "1"
-                            id = "1"
-                        }
-                        commit {
-                            title = "2"
-                            id = "2"
-                        }
-                        commit {
-                            title = "3"
-                            id = "3"
-                        }
+                        commit { title = "1" }
+                        commit { title = "2" }
+                        commit { title = "3" }
                         commit {
                             title = "4"
-                            id = "4"
                             localRefs += "development"
                         }
                     }
@@ -366,12 +294,10 @@ class GitKsprTest {
                     repository {
                         commit {
                             title = "one"
-                            id = "one"
                             remoteRefs += "${DEFAULT_REMOTE_BRANCH_PREFIX}one"
                         }
                         commit {
                             title = "two"
-                            id = "two"
                             localRefs += "development"
                             remoteRefs += "${DEFAULT_REMOTE_BRANCH_PREFIX}two"
                         }
@@ -403,7 +329,6 @@ class GitKsprTest {
                     repository {
                         commit {
                             title = "1"
-                            id = "1"
                             localRefs += "development"
                         }
                     }

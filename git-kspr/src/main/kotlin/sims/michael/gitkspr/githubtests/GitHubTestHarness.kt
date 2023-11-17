@@ -1,8 +1,5 @@
 package sims.michael.gitkspr.githubtests
 
-import com.nhaarman.mockitokotlin2.any
-import com.nhaarman.mockitokotlin2.doReturn
-import com.nhaarman.mockitokotlin2.mock
 import kotlinx.coroutines.runBlocking
 import org.eclipse.jgit.junit.MockSystemReader
 import org.eclipse.jgit.lib.Constants.GIT_COMMITTER_EMAIL_KEY
@@ -19,16 +16,6 @@ import java.io.File
 import java.nio.file.Files
 import java.util.Properties
 
-val defaultMockGitHubClient = mock<GitHubClient>() {
-    // TODO can we not default this somehow? Whatever happened to "nice" mocks?
-    onBlocking {
-        getPullRequestsById(any())
-    } doReturn emptyList()
-    onBlocking {
-        getPullRequests(any())
-    } doReturn emptyList()
-}
-
 data class GitHubTestHarness(
     val localRepo: File,
     val remoteRepo: File,
@@ -37,7 +24,6 @@ data class GitHubTestHarness(
     private val gitHubInfo: GitHubInfo,
     val remoteBranchPrefix: String = DEFAULT_REMOTE_BRANCH_PREFIX,
     private val useFakeRemote: Boolean = true,
-    private val mockGitHubClient: GitHubClient = defaultMockGitHubClient,
     val localGit: JGitClient = JGitClient(localRepo),
     val remoteGit: JGitClient = JGitClient(remoteRepo),
 ) {
@@ -249,11 +235,16 @@ data class GitHubTestHarness(
     private fun CommitData.create(): Commit {
         val file = localRepo.resolve("${title.sanitize()}.txt")
         file.writeText("Title: $title\n")
-        val message = if (id != null) {
-            localGit.appendCommitId(title, id)
+        // Use the title as the commit ID if ID wasn't provided
+        val commitId = if (id != null) {
+            id
         } else {
+            require(!title.matches("\\s+".toRegex())) {
+                "ID wasn't provided and title '$title' can\'t be used as it contains whitespace."
+            }
             title
         }
+        val message = localGit.appendCommitId(title, commitId)
         return localGit.add(file.name).commit(message)
     }
 
@@ -320,7 +311,6 @@ data class GitHubTestHarness(
     companion object {
         fun withTestSetup(
             useFakeRemote: Boolean = true,
-            mockGitHubClient: GitHubClient = defaultMockGitHubClient,
             configPropertiesFile: File = File(System.getenv("HOME")).resolve(CONFIG_FILE_NAME),
             localGit: JGitClient? = null,
             remoteGit: JGitClient? = null,
@@ -345,7 +335,6 @@ data class GitHubTestHarness(
                     githubUri,
                     extractGitHubInfoFromUri(githubUri)!!,
                     useFakeRemote = useFakeRemote,
-                    mockGitHubClient = mockGitHubClient,
                     localGit = localGit ?: JGitClient(localRepo),
                     remoteGit = remoteGit ?: JGitClient(remoteRepo),
                 ).apply {
@@ -359,8 +348,8 @@ data class GitHubTestHarness(
             }
         }
 
-        const val LOCAL_REPO_SUBDIR = "local"
-        const val REMOTE_REPO_SUBDIR = "remote"
+        private const val LOCAL_REPO_SUBDIR = "local"
+        private const val REMOTE_REPO_SUBDIR = "remote"
         const val INITIAL_COMMIT_SHORT_MESSAGE = "Initial commit"
         private const val PROPERTIES_PREFIX = "github-test-harness"
         val RESTORE_PREFIX = "${GitHubTestHarness::class.java.simpleName.lowercase()}-restore/"

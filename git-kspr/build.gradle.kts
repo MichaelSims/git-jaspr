@@ -31,8 +31,6 @@ dependencies {
     implementation(libs.zt.exec)
     implementation(libs.kotlinx.serialization.json)
     implementation(project(":data-class-fragment"))
-    implementation(libs.mockito.kotlin) // TODO explain why or move it
-    implementation(libs.mockito.inline) // TODO explain why or move it
 
     annotationProcessor(libs.auto.service)
     implementation(libs.auto.service)

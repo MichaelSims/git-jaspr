@@ -22,12 +22,8 @@ class GitKsprFunctionalTest {
             createCommitsFrom(
                 testCase {
                     repository {
-                        commit {
-                            title = "one"
-                        }
-                        commit {
-                            title = "two"
-                        }
+                        commit { title = "one" }
+                        commit { title = "two" }
                         commit {
                             title = "three"
                             localRefs += "feature/1"
@@ -98,25 +94,12 @@ class GitKsprFunctionalTest {
             createCommitsFrom(
                 testCase {
                     repository {
-                        commit {
-                            title = "A"
-                            id = "A"
-                        }
-                        commit {
-                            title = "B"
-                            id = "B"
-                        }
-                        commit {
-                            title = "C"
-                            id = "C"
-                        }
-                        commit {
-                            title = "D"
-                            id = "D"
-                        }
+                        commit { title = "A" }
+                        commit { title = "B" }
+                        commit { title = "C" }
+                        commit { title = "D" }
                         commit {
                             title = "E"
-                            id = "E"
                             localRefs += "main"
                         }
                     }
@@ -129,29 +112,13 @@ class GitKsprFunctionalTest {
             createCommitsFrom(
                 testCase {
                     repository {
-                        commit {
-                            title = "E"
-                            id = "E"
-                        }
-                        commit {
-                            title = "C"
-                            id = "C"
-                        }
-                        commit {
-                            title = "one"
-                            id = "one"
-                        }
-                        commit {
-                            title = "B"
-                            id = "B"
-                        }
-                        commit {
-                            title = "A"
-                            id = "A"
-                        }
+                        commit { title = "E" }
+                        commit { title = "C" }
+                        commit { title = "one" }
+                        commit { title = "B" }
+                        commit { title = "A" }
                         commit {
                             title = "two"
-                            id = "two"
                             localRefs += "main"
                         }
                     }
