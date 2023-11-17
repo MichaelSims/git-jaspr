@@ -25,184 +25,40 @@ class GitHubTestHarnessTest {
     }
 
     @Test
-    fun `can create commits from model`() = withTestSetup {
-        createCommitsFrom(
-            testCase {
-                repository {
-                    commit {
-                        title = "Commit one"
-                    }
-                    commit {
-                        title = "Commit two"
-                        localRefs += "main"
-                    }
-                }
-            },
-        )
-
-        JGitClient(localRepo).logRange("main~2", "main").let { log ->
-            assertEquals(2, log.size)
-            val (commitOne, commitThree) = log
-            assertEquals(
-                commitOne.copy(
-                    shortMessage = "Commit one",
-                    committer = GitHubTestHarness.DEFAULT_COMMITTER,
-                ),
-                commitOne,
-            )
-            assertEquals(commitThree.copy(shortMessage = "Commit two"), commitThree)
-        }
-    }
-
-    @Test
-    fun `can create commits with a branch from model`() = withTestSetup {
-        createCommitsFrom(
-            testCase {
-                repository {
-                    commit {
-                        title = "Commit one"
-                        branch {
-                            commit {
-                                title = "Commit one.one"
-                            }
-                            commit {
-                                title = "Commit one.two"
-                                localRefs += "one"
-                            }
-                        }
-                    }
-                    commit {
-                        title = "Commit two"
-                        localRefs += "main"
-                    }
-                }
-            },
-        )
-        val jGitClient = JGitClient(localRepo)
-
-        jGitClient.logRange("main~2", "main").let { log ->
-            assertEquals(2, log.size)
-            val (commitOne, commitThree) = log
-            assertEquals(commitOne.copy(shortMessage = "Commit one"), commitOne)
-            assertEquals(commitThree.copy(shortMessage = "Commit two"), commitThree)
-        }
-
-        jGitClient.logRange("one~2", "one").let { log ->
-            assertEquals(2, log.size)
-            val (commitOneOne, commitOneTwo) = log
-            assertEquals(commitOneOne.copy(shortMessage = "Commit one.one"), commitOneOne)
-            assertEquals(commitOneTwo.copy(shortMessage = "Commit one.two"), commitOneTwo)
-        }
-    }
-
-    @Test
-    fun `localRefs and remoteRefs test`() = withTestSetup {
-        createCommitsFrom(
-            testCase {
-                repository {
-                    commit {
-                        title = "Commit one"
-                        branch {
-                            commit {
-                                title = "Commit one.one"
-                                localRefs += "one"
-                            }
-                            commit {
-                                title = "Commit one.two"
-                                remoteRefs += "one"
-                            }
-                        }
-                    }
-                    commit {
-                        title = "Commit two"
-                        localRefs += "main"
-                        remoteRefs += "main"
-                    }
-                }
-            },
-        )
-
-        localGit.logRange("main~2", "main").let { log ->
-            assertEquals(2, log.size)
-            val (commitOne, commitThree) = log
-            assertEquals(commitOne.copy(shortMessage = "Commit one"), commitOne)
-            assertEquals(commitThree.copy(shortMessage = "Commit two"), commitThree)
-        }
-
-        localGit.logRange("one~2", "one").let { log ->
-            assertEquals(2, log.size)
-            val (commitOneOne, commitOneTwo) = log
-            assertEquals(commitOneOne.copy(shortMessage = "Commit one"), commitOneOne)
-            assertEquals(commitOneTwo.copy(shortMessage = "Commit one.one"), commitOneTwo)
-        }
-
-        localGit.logRange("$DEFAULT_REMOTE_NAME/one~2", "$DEFAULT_REMOTE_NAME/one").let { log ->
-            assertEquals(2, log.size)
-            val (commitOneOne, commitOneTwo) = log
-            assertEquals(commitOneOne.copy(shortMessage = "Commit one.one"), commitOneOne)
-            assertEquals(commitOneTwo.copy(shortMessage = "Commit one.two"), commitOneTwo)
-        }
-    }
-
-    @Test
-    fun `creating commits without named refs fails`(info: TestInfo) = withTestSetup {
-        val exception = assertThrows<IllegalArgumentException> {
+    fun `can create commits from model`() {
+        withTestSetup {
             createCommitsFrom(
                 testCase {
                     repository {
                         commit {
                             title = "Commit one"
-                            branch {
-                                commit {
-                                    title = "Commit one.one"
-                                }
-                                commit {
-                                    title = "Commit one.two"
-                                }
-                            }
                         }
                         commit {
                             title = "Commit two"
-                        }
-                    }
-                },
-            )
-        }
-        logger.info("{}: {}", info.displayName, exception.message)
-    }
-
-    @Test
-    fun `duplicated commit titles are not allowed`(info: TestInfo) = withTestSetup {
-        val exception = assertThrows<IllegalArgumentException> {
-            createCommitsFrom(
-                testCase {
-                    repository {
-                        commit {
-                            title = "Commit one"
-                            branch {
-                                commit {
-                                    title = "Commit one.one"
-                                }
-                                commit {
-                                    title = "Commit one.two"
-                                    localRefs += "feature-one"
-                                }
-                            }
-                        }
-                        commit {
-                            title = "Commit one"
                             localRefs += "main"
                         }
                     }
                 },
             )
+
+            JGitClient(localRepo).logRange("main~2", "main").let { log ->
+                assertEquals(2, log.size)
+                val (commitOne, commitThree) = log
+                assertEquals(
+                    commitOne.copy(
+                        shortMessage = "Commit one",
+                        committer = GitHubTestHarness.DEFAULT_COMMITTER,
+                    ),
+                    commitOne,
+                )
+                assertEquals(commitThree.copy(shortMessage = "Commit two"), commitThree)
+            }
         }
-        logger.info("{}: {}", info.displayName, exception.message)
     }
 
     @Test
-    fun `duplicated pr titles are not allowed`(info: TestInfo) = withTestSetup {
-        val exception = assertThrows<IllegalArgumentException> {
+    fun `can create commits with a branch from model`() {
+        withTestSetup {
             createCommitsFrom(
                 testCase {
                     repository {
@@ -214,7 +70,7 @@ class GitHubTestHarnessTest {
                                 }
                                 commit {
                                     title = "Commit one.two"
-                                    localRefs += "feature-one"
+                                    localRefs += "one"
                                 }
                             }
                         }
@@ -223,62 +79,220 @@ class GitHubTestHarnessTest {
                             localRefs += "main"
                         }
                     }
-                    pullRequest {
-                        title = "One"
-                        baseRef = "main"
-                        headRef = "feature-one"
-                    }
-                    pullRequest {
-                        title = "One"
-                        baseRef = "main~1"
-                        headRef = "feature-one"
-                    }
                 },
             )
+            val jGitClient = JGitClient(localRepo)
+
+            jGitClient.logRange("main~2", "main").let { log ->
+                assertEquals(2, log.size)
+                val (commitOne, commitThree) = log
+                assertEquals(commitOne.copy(shortMessage = "Commit one"), commitOne)
+                assertEquals(commitThree.copy(shortMessage = "Commit two"), commitThree)
+            }
+
+            jGitClient.logRange("one~2", "one").let { log ->
+                assertEquals(2, log.size)
+                val (commitOneOne, commitOneTwo) = log
+                assertEquals(commitOneOne.copy(shortMessage = "Commit one.one"), commitOneOne)
+                assertEquals(commitOneTwo.copy(shortMessage = "Commit one.two"), commitOneTwo)
+            }
         }
-        logger.info("{}: {}", info.displayName, exception.message)
     }
 
     @Test
-    fun `can rewrite history`(info: TestInfo) = withTestSetup {
-        createCommitsFrom(
-            testCase {
-                repository {
-                    commit {
-                        title = "one"
+    fun `localRefs and remoteRefs test`() {
+        withTestSetup {
+            createCommitsFrom(
+                testCase {
+                    repository {
+                        commit {
+                            title = "Commit one"
+                            branch {
+                                commit {
+                                    title = "Commit one.one"
+                                    localRefs += "one"
+                                }
+                                commit {
+                                    title = "Commit one.two"
+                                    remoteRefs += "one"
+                                }
+                            }
+                        }
+                        commit {
+                            title = "Commit two"
+                            localRefs += "main"
+                            remoteRefs += "main"
+                        }
                     }
-                    commit {
-                        title = "two"
+                },
+            )
+
+            localGit.logRange("main~2", "main").let { log ->
+                assertEquals(2, log.size)
+                val (commitOne, commitThree) = log
+                assertEquals(commitOne.copy(shortMessage = "Commit one"), commitOne)
+                assertEquals(commitThree.copy(shortMessage = "Commit two"), commitThree)
+            }
+
+            localGit.logRange("one~2", "one").let { log ->
+                assertEquals(2, log.size)
+                val (commitOneOne, commitOneTwo) = log
+                assertEquals(commitOneOne.copy(shortMessage = "Commit one"), commitOneOne)
+                assertEquals(commitOneTwo.copy(shortMessage = "Commit one.one"), commitOneTwo)
+            }
+
+            localGit.logRange("$DEFAULT_REMOTE_NAME/one~2", "$DEFAULT_REMOTE_NAME/one").let { log ->
+                assertEquals(2, log.size)
+                val (commitOneOne, commitOneTwo) = log
+                assertEquals(commitOneOne.copy(shortMessage = "Commit one.one"), commitOneOne)
+                assertEquals(commitOneTwo.copy(shortMessage = "Commit one.two"), commitOneTwo)
+            }
+        }
+    }
+
+    @Test
+    fun `creating commits without named refs fails`(info: TestInfo) {
+        withTestSetup {
+            val exception = assertThrows<IllegalArgumentException> {
+                createCommitsFrom(
+                    testCase {
+                        repository {
+                            commit {
+                                title = "Commit one"
+                                branch {
+                                    commit {
+                                        title = "Commit one.one"
+                                    }
+                                    commit {
+                                        title = "Commit one.two"
+                                    }
+                                }
+                            }
+                            commit {
+                                title = "Commit two"
+                            }
+                        }
+                    },
+                )
+            }
+            logger.info("{}: {}", info.displayName, exception.message)
+        }
+    }
+
+    @Test
+    fun `duplicated commit titles are not allowed`(info: TestInfo) {
+        withTestSetup {
+            val exception = assertThrows<IllegalArgumentException> {
+                createCommitsFrom(
+                    testCase {
+                        repository {
+                            commit {
+                                title = "Commit one"
+                                branch {
+                                    commit {
+                                        title = "Commit one.one"
+                                    }
+                                    commit {
+                                        title = "Commit one.two"
+                                        localRefs += "feature-one"
+                                    }
+                                }
+                            }
+                            commit {
+                                title = "Commit one"
+                                localRefs += "main"
+                            }
+                        }
+                    },
+                )
+            }
+            logger.info("{}: {}", info.displayName, exception.message)
+        }
+    }
+
+    @Test
+    fun `duplicated pr titles are not allowed`(info: TestInfo) {
+        withTestSetup {
+            val exception = assertThrows<IllegalArgumentException> {
+                createCommitsFrom(
+                    testCase {
+                        repository {
+                            commit {
+                                title = "Commit one"
+                                branch {
+                                    commit {
+                                        title = "Commit one.one"
+                                    }
+                                    commit {
+                                        title = "Commit one.two"
+                                        localRefs += "feature-one"
+                                    }
+                                }
+                            }
+                            commit {
+                                title = "Commit two"
+                                localRefs += "main"
+                            }
+                        }
+                        pullRequest {
+                            title = "One"
+                            baseRef = "main"
+                            headRef = "feature-one"
+                        }
+                        pullRequest {
+                            title = "One"
+                            baseRef = "main~1"
+                            headRef = "feature-one"
+                        }
+                    },
+                )
+            }
+            logger.info("{}: {}", info.displayName, exception.message)
+        }
+    }
+
+    @Test
+    fun `can rewrite history`(info: TestInfo) {
+        withTestSetup {
+            createCommitsFrom(
+                testCase {
+                    repository {
+                        commit {
+                            title = "one"
+                        }
+                        commit {
+                            title = "two"
+                        }
+                        commit {
+                            title = "three"
+                            localRefs += "one"
+                        }
                     }
-                    commit {
-                        title = "three"
-                        localRefs += "one"
+                },
+            )
+            createCommitsFrom(
+                testCase {
+                    repository {
+                        commit {
+                            title = "one"
+                        }
+                        commit {
+                            title = "three"
+                        }
+                        commit {
+                            title = "four"
+                            localRefs += "one"
+                        }
                     }
-                }
-            },
-        )
-        createCommitsFrom(
-            testCase {
-                repository {
-                    commit {
-                        title = "one"
-                    }
-                    commit {
-                        title = "three"
-                    }
-                    commit {
-                        title = "four"
-                        localRefs += "one"
-                    }
-                }
-            },
-        )
-        localGit.logRange("one~3", "one").let { log ->
-            assertEquals(3, log.size)
-            val (commitOne, commitTwo, commitThree) = log
-            assertEquals(commitOne.copy(shortMessage = "one"), commitOne)
-            assertEquals(commitTwo.copy(shortMessage = "three"), commitTwo)
-            assertEquals(commitThree.copy(shortMessage = "four"), commitThree)
+                },
+            )
+            localGit.logRange("one~3", "one").let { log ->
+                assertEquals(3, log.size)
+                val (commitOne, commitTwo, commitThree) = log
+                assertEquals(commitOne.copy(shortMessage = "one"), commitOne)
+                assertEquals(commitTwo.copy(shortMessage = "three"), commitTwo)
+                assertEquals(commitThree.copy(shortMessage = "four"), commitThree)
+            }
         }
     }
 

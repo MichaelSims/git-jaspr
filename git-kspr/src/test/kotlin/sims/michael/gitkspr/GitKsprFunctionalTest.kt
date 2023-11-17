@@ -17,159 +17,165 @@ class GitKsprFunctionalTest {
     private val logger = LoggerFactory.getLogger(GitKsprTest::class.java)
 
     @Test
-    fun `push new commits`(testInfo: TestInfo) = withTestSetup(useFakeRemote = false) {
-        createCommitsFrom(
-            testCase {
-                repository {
-                    commit {
-                        title = "one"
+    fun `push new commits`(testInfo: TestInfo) {
+        withTestSetup(useFakeRemote = false) {
+            createCommitsFrom(
+                testCase {
+                    repository {
+                        commit {
+                            title = "one"
+                        }
+                        commit {
+                            title = "two"
+                        }
+                        commit {
+                            title = "three"
+                            localRefs += "feature/1"
+                        }
                     }
-                    commit {
-                        title = "two"
-                    }
-                    commit {
-                        title = "three"
-                        localRefs += "feature/1"
-                    }
-                }
-            },
-        )
+                },
+            )
 
-        System.setProperty(WORKING_DIR_PROPERTY_NAME, localRepo.absolutePath) // TODO why?
-        gitKspr.push()
+            System.setProperty(WORKING_DIR_PROPERTY_NAME, localRepo.absolutePath) // TODO why?
+            gitKspr.push()
 
-        val testCommits = localGit.log(JGitClient.HEAD, 3)
-        val testCommitIds = testCommits.mapNotNull(Commit::id).toSet()
-        val remotePrIds = gitHub.getPullRequests(testCommits).mapNotNull(PullRequest::commitId).toSet()
-        assertEquals(testCommitIds, remotePrIds)
+            val testCommits = localGit.log(JGitClient.HEAD, 3)
+            val testCommitIds = testCommits.mapNotNull(Commit::id).toSet()
+            val remotePrIds = gitHub.getPullRequests(testCommits).mapNotNull(PullRequest::commitId).toSet()
+            assertEquals(testCommitIds, remotePrIds)
+        }
     }
 
     @Test
-    fun `amend HEAD commit and re-push`(testInfo: TestInfo) = withTestSetup(useFakeRemote = false) {
-        createCommitsFrom(
-            testCase {
-                repository {
-                    commit { title = "one" }
-                    commit { title = "two" }
-                    commit {
-                        title = "three"
-                        localRefs += "development"
+    fun `amend HEAD commit and re-push`(testInfo: TestInfo) {
+        withTestSetup(useFakeRemote = false) {
+            createCommitsFrom(
+                testCase {
+                    repository {
+                        commit { title = "one" }
+                        commit { title = "two" }
+                        commit {
+                            title = "three"
+                            localRefs += "development"
+                        }
                     }
-                }
-            },
-        )
+                },
+            )
 
-        System.setProperty(WORKING_DIR_PROPERTY_NAME, localRepo.absolutePath) // TODO why?
-        gitKspr.push()
+            System.setProperty(WORKING_DIR_PROPERTY_NAME, localRepo.absolutePath) // TODO why?
+            gitKspr.push()
 
-        createCommitsFrom(
-            testCase {
-                repository {
-                    commit { title = "one" }
-                    commit { title = "two" }
-                    commit {
-                        title = "four"
-                        localRefs += "development"
+            createCommitsFrom(
+                testCase {
+                    repository {
+                        commit { title = "one" }
+                        commit { title = "two" }
+                        commit {
+                            title = "four"
+                            localRefs += "development"
+                        }
                     }
-                }
-            },
-        )
+                },
+            )
 
-        gitKspr.push()
+            gitKspr.push()
 
-        val testCommits = localGit.log(JGitClient.HEAD, 3)
-        val testCommitIds = testCommits.mapNotNull(Commit::id).toSet()
-        val remotePrs = gitHub.getPullRequests(testCommits)
-        val remotePrIds = remotePrs.mapNotNull(PullRequest::commitId).toSet()
-        assertEquals(testCommitIds, remotePrIds)
+            val testCommits = localGit.log(JGitClient.HEAD, 3)
+            val testCommitIds = testCommits.mapNotNull(Commit::id).toSet()
+            val remotePrs = gitHub.getPullRequests(testCommits)
+            val remotePrIds = remotePrs.mapNotNull(PullRequest::commitId).toSet()
+            assertEquals(testCommitIds, remotePrIds)
 
-        val headCommit = localGit.log(JGitClient.HEAD, 1).single()
-        val headCommitId = checkNotNull(headCommit.id)
-        assertEquals("four", remotePrs.single { it.commitId == headCommitId }.title)
+            val headCommit = localGit.log(JGitClient.HEAD, 1).single()
+            val headCommitId = checkNotNull(headCommit.id)
+            assertEquals("four", remotePrs.single { it.commitId == headCommitId }.title)
+        }
     }
 
     @Test
-    fun `reorder, drop, add, and re-push`(testInfo: TestInfo) = withTestSetup(useFakeRemote = false) {
-        createCommitsFrom(
-            testCase {
-                repository {
-                    commit {
-                        title = "A"
-                        id = "A"
+    fun `reorder, drop, add, and re-push`(testInfo: TestInfo) {
+        withTestSetup(useFakeRemote = false) {
+            createCommitsFrom(
+                testCase {
+                    repository {
+                        commit {
+                            title = "A"
+                            id = "A"
+                        }
+                        commit {
+                            title = "B"
+                            id = "B"
+                        }
+                        commit {
+                            title = "C"
+                            id = "C"
+                        }
+                        commit {
+                            title = "D"
+                            id = "D"
+                        }
+                        commit {
+                            title = "E"
+                            id = "E"
+                            localRefs += "main"
+                        }
                     }
-                    commit {
-                        title = "B"
-                        id = "B"
+                },
+            )
+
+            System.setProperty(WORKING_DIR_PROPERTY_NAME, localRepo.absolutePath)
+            gitKspr.push()
+
+            createCommitsFrom(
+                testCase {
+                    repository {
+                        commit {
+                            title = "E"
+                            id = "E"
+                        }
+                        commit {
+                            title = "C"
+                            id = "C"
+                        }
+                        commit {
+                            title = "one"
+                            id = "one"
+                        }
+                        commit {
+                            title = "B"
+                            id = "B"
+                        }
+                        commit {
+                            title = "A"
+                            id = "A"
+                        }
+                        commit {
+                            title = "two"
+                            id = "two"
+                            localRefs += "main"
+                        }
                     }
-                    commit {
-                        title = "C"
-                        id = "C"
-                    }
-                    commit {
-                        title = "D"
-                        id = "D"
-                    }
-                    commit {
-                        title = "E"
-                        id = "E"
-                        localRefs += "main"
-                    }
+                },
+            )
+
+            gitKspr.push()
+
+            // TODO the filter is having some impact on ordering. better if the list was properly ordered regardless
+            val remotePrs = gitHub.getPullRequestsById(listOf("E", "C", "one", "B", "A", "two"))
+
+            val prs = remotePrs.map { pullRequest -> pullRequest.baseRefName to pullRequest.headRefName }.toSet()
+            val remoteBranchPrefix = remoteBranchPrefix
+            val commits = localGit
+                .log(JGitClient.HEAD, 6)
+                .reversed()
+                .windowedPairs()
+                .map { (prevCommit, currentCommit) ->
+                    val baseRefName = prevCommit?.let { "$remoteBranchPrefix${it.id}" } ?: DEFAULT_TARGET_REF
+                    val headRefName = "$remoteBranchPrefix${currentCommit.id}"
+                    baseRefName to headRefName
                 }
-            },
-        )
-
-        System.setProperty(WORKING_DIR_PROPERTY_NAME, localRepo.absolutePath)
-        gitKspr.push()
-
-        createCommitsFrom(
-            testCase {
-                repository {
-                    commit {
-                        title = "E"
-                        id = "E"
-                    }
-                    commit {
-                        title = "C"
-                        id = "C"
-                    }
-                    commit {
-                        title = "one"
-                        id = "one"
-                    }
-                    commit {
-                        title = "B"
-                        id = "B"
-                    }
-                    commit {
-                        title = "A"
-                        id = "A"
-                    }
-                    commit {
-                        title = "two"
-                        id = "two"
-                        localRefs += "main"
-                    }
-                }
-            },
-        )
-
-        gitKspr.push()
-
-        // TODO the filter is having some impact on ordering. better if the list was properly ordered regardless
-        val remotePrs = gitHub.getPullRequestsById(listOf("E", "C", "one", "B", "A", "two"))
-
-        val prs = remotePrs.map { pullRequest -> pullRequest.baseRefName to pullRequest.headRefName }.toSet()
-        val remoteBranchPrefix = remoteBranchPrefix
-        val commits = localGit
-            .log(JGitClient.HEAD, 6)
-            .reversed()
-            .windowedPairs()
-            .map { (prevCommit, currentCommit) ->
-                val baseRefName = prevCommit?.let { "$remoteBranchPrefix${it.id}" } ?: DEFAULT_TARGET_REF
-                val headRefName = "$remoteBranchPrefix${currentCommit.id}"
-                baseRefName to headRefName
-            }
-            .toSet()
-        assertEquals(commits, prs)
+                .toSet()
+            assertEquals(commits, prs)
+        }
     }
 }

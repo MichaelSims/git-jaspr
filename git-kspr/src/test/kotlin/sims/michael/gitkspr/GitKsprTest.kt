@@ -35,47 +35,51 @@ class GitKsprTest {
     }
 
     @Test
-    fun `push fails unless workdir is clean`() = withTestSetup {
-        createCommitsFrom(
-            testCase {
-                repository {
-                    commit {
-                        title = "Some commit"
-                        localRefs += "development"
+    fun `push fails unless workdir is clean`() {
+        withTestSetup {
+            createCommitsFrom(
+                testCase {
+                    repository {
+                        commit {
+                            title = "Some commit"
+                            localRefs += "development"
+                        }
                     }
-                }
-                localIsDirty = true
-            },
-        )
-        val exception = assertThrows<IllegalStateException> {
-            gitKspr.push()
+                    localIsDirty = true
+                },
+            )
+            val exception = assertThrows<IllegalStateException> {
+                gitKspr.push()
+            }
+            logger.info("Exception message is {}", exception.message)
         }
-        logger.info("Exception message is {}", exception.message)
     }
 
     @Test
-    fun `push fetches from remote`() = withTestSetup {
-        createCommitsFrom(
-            testCase {
-                repository {
-                    commit {
-                        title = "one"
+    fun `push fetches from remote`() {
+        withTestSetup {
+            createCommitsFrom(
+                testCase {
+                    repository {
+                        commit {
+                            title = "one"
+                        }
+                        commit {
+                            title = "two"
+                            localRefs += "main"
+                        }
+                        commit {
+                            title = "three"
+                            remoteRefs += "main"
+                        }
                     }
-                    commit {
-                        title = "two"
-                        localRefs += "main"
-                    }
-                    commit {
-                        title = "three"
-                        remoteRefs += "main"
-                    }
-                }
-            },
-        )
+                },
+            )
 
-        gitKspr.push()
+            gitKspr.push()
 
-        assertEquals(listOf("three", "two", "one"), localGit.log("origin/main", maxCount = 3).map(Commit::shortMessage))
+            assertEquals(listOf("three", "two", "one"), localGit.log("origin/main", maxCount = 3).map(Commit::shortMessage))
+        }
     }
 
     @TestFactory
@@ -161,121 +165,124 @@ class GitKsprTest {
     }
 
     @Test
-    fun `push pushes to expected remote branch names`() = withTestSetup {
-        createCommitsFrom(
-            testCase {
-                repository {
-                    commit {
-                        title = "1"
-                        id = "1"
+    fun `push pushes to expected remote branch names`() {
+        withTestSetup {
+            createCommitsFrom(
+                testCase {
+                    repository {
+                        commit {
+                            title = "1"
+                            id = "1"
+                        }
+                        commit {
+                            title = "2"
+                            id = "2"
+                        }
+                        commit {
+                            title = "3"
+                            id = "3"
+                            localRefs += "main"
+                        }
                     }
-                    commit {
-                        title = "2"
-                        id = "2"
-                    }
-                    commit {
-                        title = "3"
-                        id = "3"
-                        localRefs += "main"
-                    }
-                }
-            },
-        )
-        gitKspr.push()
+                },
+            )
+            gitKspr.push()
 
-        val prefix = "refs/heads/${DEFAULT_REMOTE_BRANCH_PREFIX}"
-        assertEquals(
-            (1..3).associate { "$prefix$it" to it.toString() },
-            remoteGit.commitIdsByBranch(),
-        )
+            val prefix = "refs/heads/${DEFAULT_REMOTE_BRANCH_PREFIX}"
+            assertEquals(
+                (1..3).associate { "$prefix$it" to it.toString() },
+                remoteGit.commitIdsByBranch(),
+            )
+        }
     }
 
     @Test
-    fun `push pushes revision history branches on update`(testInfo: TestInfo) = withTestSetup {
-        createCommitsFrom(
-            testCase {
-                repository {
-                    commit {
-                        title = "a"
-                        id = "a"
+    fun `push pushes revision history branches on update`(testInfo: TestInfo) {
+        withTestSetup {
+            createCommitsFrom(
+                testCase {
+                    repository {
+                        commit {
+                            title = "a"
+                            id = "a"
+                        }
+                        commit {
+                            title = "b"
+                            id = "b"
+                        }
+                        commit {
+                            title = "c"
+                            id = "c"
+                            localRefs += "main"
+                        }
                     }
-                    commit {
-                        title = "b"
-                        id = "b"
+                },
+            )
+            gitKspr.push()
+            createCommitsFrom(
+                testCase {
+                    repository {
+                        commit {
+                            title = "z"
+                            id = "z"
+                        }
+                        commit {
+                            title = "a"
+                            id = "a"
+                        }
+                        commit {
+                            title = "b"
+                            id = "b"
+                        }
+                        commit {
+                            title = "c"
+                            id = "c"
+                            localRefs += "main"
+                        }
                     }
-                    commit {
-                        title = "c"
-                        id = "c"
-                        localRefs += "main"
+                },
+            )
+            gitKspr.push()
+            createCommitsFrom(
+                testCase {
+                    repository {
+                        commit {
+                            title = "y"
+                            id = "y"
+                        }
+                        commit {
+                            title = "a"
+                            id = "a"
+                        }
+                        commit {
+                            title = "b"
+                            id = "b"
+                        }
+                        commit {
+                            title = "c"
+                            id = "c"
+                            localRefs += "main"
+                        }
                     }
-                }
-            },
-        )
-        gitKspr.push()
-        createCommitsFrom(
-            testCase {
-                repository {
-                    commit {
-                        title = "z"
-                        id = "z"
-                    }
-                    commit {
-                        title = "a"
-                        id = "a"
-                    }
-                    commit {
-                        title = "b"
-                        id = "b"
-                    }
-                    commit {
-                        title = "c"
-                        id = "c"
-                        localRefs += "main"
-                    }
-                }
-            },
-        )
-        gitKspr.push()
-        createCommitsFrom(
-            testCase {
-                repository {
-                    commit {
-                        title = "y"
-                        id = "y"
-                    }
-                    commit {
-                        title = "a"
-                        id = "a"
-                    }
-                    commit {
-                        title = "b"
-                        id = "b"
-                    }
-                    commit {
-                        title = "c"
-                        id = "c"
-                        localRefs += "main"
-                    }
-                }
-            },
-        )
-        gitKspr.push()
-        gitLogLocalAndRemote()
+                },
+            )
+            gitKspr.push()
+            gitLogLocalAndRemote()
 
-        assertEquals(
-            listOf("a", "a_01", "a_02", "b", "b_01", "b_02", "c", "c_01", "c_02", "y", "z")
-                .map { name -> "${DEFAULT_REMOTE_BRANCH_PREFIX}$name" },
-            localGit
-                .getRemoteBranches()
-                .map(RemoteBranch::name)
-                .filter { name -> name.startsWith(DEFAULT_REMOTE_BRANCH_PREFIX) }
-                .sorted(),
-        )
+            assertEquals(
+                listOf("a", "a_01", "a_02", "b", "b_01", "b_02", "c", "c_01", "c_02", "y", "z")
+                    .map { name -> "${DEFAULT_REMOTE_BRANCH_PREFIX}$name" },
+                localGit
+                    .getRemoteBranches()
+                    .map(RemoteBranch::name)
+                    .filter { name -> name.startsWith(DEFAULT_REMOTE_BRANCH_PREFIX) }
+                    .sorted(),
+            )
+        }
     }
 
     @Test
     fun `push updates base refs for any reordered PRs`() {
-        val localStack = (1..4).map(::commit)
         val remoteStack = listOf(1, 2, 4, 3).map(::commit)
 
         val config = config()
@@ -383,21 +390,23 @@ class GitKsprTest {
     }
 
     @Test
-    fun `getRemoteCommitStatuses produces expected result`() = withTestSetup {
-        createCommitsFrom(
-            testCase {
-                repository {
-                    commit {
-                        title = "1"
-                        id = "1"
-                        localRefs += "development"
+    fun `getRemoteCommitStatuses produces expected result`() {
+        withTestSetup {
+            createCommitsFrom(
+                testCase {
+                    repository {
+                        commit {
+                            title = "1"
+                            id = "1"
+                            localRefs += "development"
+                        }
                     }
-                }
-            },
-        )
-        gitKspr.push()
-        val remoteCommitStatuses = gitKspr.getRemoteCommitStatuses()
-        assertEquals(localGit.log("HEAD", maxCount = 1).single(), remoteCommitStatuses.single().remoteCommit)
+                },
+            )
+            gitKspr.push()
+            val remoteCommitStatuses = gitKspr.getRemoteCommitStatuses()
+            assertEquals(localGit.log("HEAD", maxCount = 1).single(), remoteCommitStatuses.single().remoteCommit)
+        }
     }
 
     private fun createDefaultGitClient(init: KStubbing<JGitClient>.(JGitClient) -> Unit = {}) = mock<JGitClient> {
