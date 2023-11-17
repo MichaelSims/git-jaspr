@@ -28,6 +28,7 @@ val defaultMockGitHubClient = mock<GitHubClient>() {
         getPullRequests(any())
     } doReturn emptyList()
 }
+
 data class GitHubTestHarness(
     val localRepo: File,
     val remoteRepo: File,
@@ -41,11 +42,18 @@ data class GitHubTestHarness(
     val remoteGit: JGitClient = JGitClient(remoteRepo),
 ) {
 
+    private val gitHubStubClient = GitHubStubClient()
+
     private val configMapWithClient: Map<String, Pair<UserConfig, GitHubClient>> = configMap
-        .map { (k, v) ->
-            k to (v to GitHubClientWiring(v.githubToken, gitHubInfo, remoteBranchPrefix).gitHubClient)
-        }
+        .map { (k, v) -> k to (v to buildGitHubClient(v.githubToken, gitHubInfo, remoteBranchPrefix)) }
         .toMap()
+
+    private fun buildGitHubClient(githubToken: String, gitHubInfo: GitHubInfo, remoteBranchPrefix: String) =
+        if (useFakeRemote) {
+            gitHubStubClient
+        } else {
+            GitHubClientWiring(githubToken, gitHubInfo, remoteBranchPrefix).gitHubClient
+        }
 
     private fun uuidIterator() = (0..Int.MAX_VALUE).asSequence().map(Int::toString).iterator()
     private val ids = uuidIterator()

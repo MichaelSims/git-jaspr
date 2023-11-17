@@ -18,7 +18,8 @@ fun extractGitHubInfoFromUri(uri: String): GitHubInfo? {
 }
 
 fun generateUuid(length: Int = 8): String {
-    require((8..20).contains(length))
+    val lengthConstraint = 8..20
+    require(lengthConstraint.contains(length)) { "Length must be within $lengthConstraint " }
     val fullUuid = UUID.randomUUID().toString()
     // Version 4 UUID... extract the time-low and node sections, skipping the portions that contain the version and
     // variant

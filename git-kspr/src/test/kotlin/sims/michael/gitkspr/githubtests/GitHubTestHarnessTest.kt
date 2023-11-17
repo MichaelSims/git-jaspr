@@ -6,6 +6,7 @@ import org.junit.jupiter.api.assertThrows
 import org.slf4j.LoggerFactory
 import sims.michael.gitkspr.DEFAULT_REMOTE_NAME
 import sims.michael.gitkspr.JGitClient
+import sims.michael.gitkspr.PullRequest
 import sims.michael.gitkspr.githubtests.GitHubTestHarness.Companion.withTestSetup
 import sims.michael.gitkspr.githubtests.generatedtestdsl.testCase
 import kotlin.test.assertEquals
@@ -377,5 +378,64 @@ class GitHubTestHarnessTest {
             GitHubTestHarness.INITIAL_COMMIT_SHORT_MESSAGE,
             jGitClient.log("main", maxCount = 1).single().shortMessage,
         )
+    }
+
+    @Test
+    fun `can open PRs from created commits`() {
+        withTestSetup {
+            createCommitsFrom(
+                testCase {
+                    repository {
+                        commit { title = "A" }
+                        commit {
+                            title = "B"
+                            branch {
+                                commit { title = "f0 A" }
+                                commit {
+                                    title = "f0 B"
+                                    localRefs += "f0"
+                                    remoteRefs += "f0"
+                                    branch {
+                                        commit { title = "f1 A" }
+                                        commit {
+                                            title = "f1 B"
+                                            localRefs += "f1"
+                                            remoteRefs += "f1"
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                        commit { title = "C" }
+                        commit {
+                            title = "D"
+                            localRefs += "main"
+                            remoteRefs += "main"
+                        }
+                    }
+                    pullRequest {
+                        baseRef = "main"
+                        headRef = "f0"
+                        title = "thisun"
+                        userKey = "derelictMan"
+                    }
+                    pullRequest {
+                        baseRef = "f0"
+                        headRef = "f1"
+                        title = "anothern"
+                        userKey = "derelictMan"
+                    }
+                    pullRequest {
+                        baseRef = "main"
+                        headRef = "f1"
+                        title = "yet anothern"
+                        userKey = "michael"
+                    }
+                },
+            )
+
+            // TODO you are only testing titles here... at the very least we should test identities
+            assertEquals(listOf("thisun", "anothern", "yet anothern"), gitHub.getPullRequests().map(PullRequest::title))
+        }
     }
 }
