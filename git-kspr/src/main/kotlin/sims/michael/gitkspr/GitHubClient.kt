@@ -12,19 +12,26 @@ import sims.michael.gitkspr.generated.inputs.CreatePullRequestInput
 import sims.michael.gitkspr.generated.inputs.UpdatePullRequestInput
 import java.util.concurrent.atomic.AtomicReference
 
-class GitHubClient(
+interface GitHubClient {
+    suspend fun getPullRequests(commitFilter: List<Commit>? = null): List<PullRequest>
+    suspend fun getPullRequestsById(commitFilter: List<String>? = null): List<PullRequest>
+    suspend fun createPullRequest(pullRequest: PullRequest)
+    suspend fun updatePullRequest(pullRequest: PullRequest)
+}
+
+class GitHubClientImpl(
     private val delegate: GraphQLClient<*>,
     private val gitHubInfo: GitHubInfo,
     private val remoteBranchPrefix: String,
-) {
+) : GitHubClient {
     private val logger = LoggerFactory.getLogger(GitHubClient::class.java)
 
-    suspend fun getPullRequests(commitFilter: List<Commit>? = null): List<PullRequest> {
+    override suspend fun getPullRequests(commitFilter: List<Commit>?): List<PullRequest> {
         logger.trace("getPullRequests")
         return getPullRequestsById(commitFilter?.map { it.id!! })
     }
 
-    suspend fun getPullRequestsById(commitFilter: List<String>? = null): List<PullRequest> {
+    override suspend fun getPullRequestsById(commitFilter: List<String>?): List<PullRequest> {
         logger.trace("getPullRequests")
 
         // If commitFilter was supplied, build a set of commit IDs for filtering the returned PR list.
@@ -53,7 +60,7 @@ class GitHubClient(
             .also { pullRequests -> logger.trace("getPullRequests {}: {}", pullRequests.size, pullRequests) }
     }
 
-    suspend fun createPullRequest(pullRequest: PullRequest) {
+    override suspend fun createPullRequest(pullRequest: PullRequest) {
         logger.trace("createPullRequest {}", pullRequest)
         check(pullRequest.id == null) { "Cannot create $pullRequest which already exists" }
         delegate
@@ -75,7 +82,7 @@ class GitHubClient(
             }
     }
 
-    suspend fun updatePullRequest(pullRequest: PullRequest) {
+    override suspend fun updatePullRequest(pullRequest: PullRequest) {
         logger.trace("updatePullRequest {}", pullRequest)
         checkNotNull(pullRequest.id) { "Cannot update $pullRequest without an ID" }
         delegate

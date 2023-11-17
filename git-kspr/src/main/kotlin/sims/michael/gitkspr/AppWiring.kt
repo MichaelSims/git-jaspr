@@ -63,6 +63,6 @@ class GitHubClientWiring(
     }
 
     val gitHubClient: GitHubClient by lazy {
-        GitHubClient(graphQLClient, gitHubInfo, remoteBranchPrefix)
+        GitHubClientImpl(graphQLClient, gitHubInfo, remoteBranchPrefix)
     }
 }
