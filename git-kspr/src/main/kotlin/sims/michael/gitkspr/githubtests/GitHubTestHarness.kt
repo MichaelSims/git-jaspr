@@ -312,7 +312,7 @@ data class GitHubTestHarness(
             localGit: JGitClient? = null,
             remoteGit: JGitClient? = null,
             block: suspend GitHubTestHarness.() -> Unit,
-        ) {
+        ): GitHubTestHarness {
             val (localRepo, remoteRepo) = createTempDir().createRepoDirs()
 
             val properties = Properties()

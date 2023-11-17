@@ -283,78 +283,80 @@ class GitHubTestHarnessTest {
     }
 
     @Test
-    fun `rollbackRemoteChanges works as expected`() = withTestSetup {
-        createCommitsFrom(
-            testCase {
-                repository {
-                    commit {
-                        title = "one"
-                        branch {
-                            commit {
-                                title = "feature one"
-                                localRefs += "feature/1"
-                                remoteRefs += "feature/1"
+    fun `rollbackRemoteChanges works as expected`() {
+        val harness = withTestSetup {
+            createCommitsFrom(
+                testCase {
+                    repository {
+                        commit {
+                            title = "one"
+                            branch {
+                                commit {
+                                    title = "feature one"
+                                    localRefs += "feature/1"
+                                    remoteRefs += "feature/1"
+                                }
+                            }
+                            branch {
+                                commit {
+                                    title = "feature two"
+                                    localRefs += "feature/2"
+                                    remoteRefs += "feature/2"
+                                }
+                            }
+                            branch {
+                                commit {
+                                    title = "feature three"
+                                    localRefs += "feature/3"
+                                    remoteRefs += "feature/3"
+                                }
                             }
                         }
-                        branch {
-                            commit {
-                                title = "feature two"
-                                localRefs += "feature/2"
-                                remoteRefs += "feature/2"
-                            }
-                        }
-                        branch {
-                            commit {
-                                title = "feature three"
-                                localRefs += "feature/3"
-                                remoteRefs += "feature/3"
-                            }
-                        }
-                    }
-                    commit {
-                        title = "two"
-                        localRefs += "main"
-                        remoteRefs += "main"
-                    }
-                }
-            },
-        )
-        createCommitsFrom(
-            testCase {
-                repository {
-                    commit {
-                        title = "one.two"
-                        branch {
-                            commit {
-                                title = "feature one.two"
-                                localRefs += "feature/1"
-                                remoteRefs += "feature/1"
-                            }
-                        }
-                        branch {
-                            commit {
-                                title = "feature two.two"
-                                localRefs += "feature/2"
-                                remoteRefs += "feature/2"
-                            }
-                        }
-                        branch {
-                            commit {
-                                title = "feature three.two"
-                                localRefs += "feature/3"
-                                remoteRefs += "feature/3"
-                            }
+                        commit {
+                            title = "two"
+                            localRefs += "main"
+                            remoteRefs += "main"
                         }
                     }
-                    commit {
-                        title = "two.two"
-                        localRefs += "main"
-                        remoteRefs += "main"
+                },
+            )
+            createCommitsFrom(
+                testCase {
+                    repository {
+                        commit {
+                            title = "one.two"
+                            branch {
+                                commit {
+                                    title = "feature one.two"
+                                    localRefs += "feature/1"
+                                    remoteRefs += "feature/1"
+                                }
+                            }
+                            branch {
+                                commit {
+                                    title = "feature two.two"
+                                    localRefs += "feature/2"
+                                    remoteRefs += "feature/2"
+                                }
+                            }
+                            branch {
+                                commit {
+                                    title = "feature three.two"
+                                    localRefs += "feature/3"
+                                    remoteRefs += "feature/3"
+                                }
+                            }
+                        }
+                        commit {
+                            title = "two.two"
+                            localRefs += "main"
+                            remoteRefs += "main"
+                        }
                     }
-                }
-            },
-        )
-        val jGitClient = JGitClient(remoteRepo)
+                },
+            )
+        }
+        val jGitClient = JGitClient(harness.remoteRepo)
 
         assertEquals(listOf("main"), jGitClient.getBranchNames())
         assertEquals(

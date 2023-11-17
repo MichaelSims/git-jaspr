@@ -191,7 +191,7 @@ class GitKsprTest {
     }
 
     @Test
-    fun `push pushes revision history branches on update`(testInfo: TestInfo): Unit = withTestSetup {
+    fun `push pushes revision history branches on update`(testInfo: TestInfo) = withTestSetup {
         createCommitsFrom(
             testCase {
                 repository {
