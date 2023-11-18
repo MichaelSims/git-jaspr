@@ -245,7 +245,7 @@ data class GitHubTestHarness(
             title
         }
         val message = localGit.appendCommitId(title, commitId)
-        return localGit.add(file.name).commit(message)
+        return localGit.add(file.name).commit(message, footerLines)
     }
 
     private fun IdentData.toIdent(): Ident = Ident(name, email)

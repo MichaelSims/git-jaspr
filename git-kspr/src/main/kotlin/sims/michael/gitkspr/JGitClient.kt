@@ -173,9 +173,12 @@ class JGitClient(val workingDirectory: File, val remoteBranchPrefix: String = DE
         git.commit().setMessage(message).setCommitter(committer).setAmend(true).call().toCommit(git)
     }
 
-    fun commit(message: String) = useGit { git ->
+    fun commit(message: String, footerLines: Map<String, String> = emptyMap()) = useGit { git ->
         val committer = PersonIdent(PersonIdent(git.repository), Instant.now())
-        git.commit().setMessage(message).setCommitter(committer).call().toCommit(git)
+        val lines = message.split("\n").filter(String::isNotBlank) + footerLines.map { (k, v) -> "$k: $v" }
+        val linesWithSubjectBodySeparator = listOf(lines.first()) + listOf("") + lines.drop(1)
+        val messageWithFooter = linesWithSubjectBodySeparator.joinToString(separator = "\n")
+        git.commit().setMessage(messageWithFooter).setCommitter(committer).call().toCommit(git)
     }
 
     fun setCommitId(commitId: String) {

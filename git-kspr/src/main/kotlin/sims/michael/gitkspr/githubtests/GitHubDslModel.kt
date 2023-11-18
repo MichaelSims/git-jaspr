@@ -1,6 +1,7 @@
 package sims.michael.gitkspr.githubtests
 
 import sims.michael.gitkspr.dataclassfragment.*
+import sims.michael.gitkspr.githubtests.generatedtestdsl.CommitDataBuilder
 
 @GenerateDataClassFragmentDataClass
 interface TestCase : DataClassFragment {
@@ -30,6 +31,7 @@ interface Commit : DataClassFragment {
     val prTitle: StringPropertyNotNull
     val prStartTitle: StringPropertyNotNull
     val prEndTitle: StringPropertyNotNull
+    val footerLines: MapPropertyNotNull<StringPropertyNotNull>
 }
 
 @GenerateDataClassFragmentDataClass
@@ -45,4 +47,9 @@ interface PullRequest : DataClassFragment {
     val title: StringPropertyNotNull
     val body: StringPropertyNotNull
     val userKey: StringPropertyNotNull
+}
+
+/** Configure our functional test repo to fail this commit during CI/CD */
+fun CommitDataBuilder<CommitData>.willFailVerification() {
+    footerLines["verify-result"] = "13"
 }
