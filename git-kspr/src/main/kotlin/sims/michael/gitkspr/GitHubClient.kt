@@ -29,7 +29,9 @@ class GitHubClientImpl(
 
     override suspend fun getPullRequests(commitFilter: List<Commit>?): List<PullRequest> {
         logger.trace("getPullRequests")
-        return getPullRequestsById(commitFilter?.map { it.id!! })
+        return getPullRequestsById(
+            commitFilter?.map { commit -> requireNotNull(commit.id) { "Missing commit id, filter is $commitFilter" } },
+        )
     }
 
     override suspend fun getPullRequestsById(commitFilter: List<String>?): List<PullRequest> {
