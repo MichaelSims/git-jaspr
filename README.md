@@ -2,6 +2,8 @@
 
 This is a reimplementation of [git spr](https://github.com/ejoffe/spr) written in Kotlin.
 
+Change to test github workflow, will not be merged to main.
+
 ## Braindump of plan
 
 - CLI separated from main logic (naturally)
