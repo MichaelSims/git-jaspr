@@ -377,24 +377,31 @@ class GitHubTestHarness private constructor(
             val (localRepo, remoteRepo) = createTempDir().createRepoDirs()
 
             val properties = Properties()
-                .apply { configPropertiesFile.inputStream().use(::load) }
+                .apply {
+                    if (configPropertiesFile.exists()) {
+                        configPropertiesFile.inputStream().use(::load)
+                    } else {
+                        logger.info("No {} found.", configPropertiesFile) // Expected in CI/CD
+                    }
+                }
                 .map { (k, v) -> k.toString() to v.toString() }
                 .toMap()
 
             val configByUserKey = properties.getConfigByUserKeyFromPropertiesFile()
 
-            val githubUri = requireNotNull(properties["$PROPERTIES_PREFIX.$PROPERTY_GITHUB_URI"]) {
-                "$PROPERTY_GITHUB_URI not defined in $configPropertiesFile"
+            val githubUri = properties["$PROPERTIES_PREFIX.$PROPERTY_GITHUB_URI"]
+            val gitHubInfo = if (githubUri != null) {
+                requireNotNull(extractGitHubInfoFromUri(githubUri)) { "Unable to extract GitHubInfo from $githubUri" }
+            } else {
+                GitHubInfo("example.com", "SomeOwner", "SomeRepo")
             }
 
             return runBlocking {
                 val testHarness = GitHubTestHarness(
                     localRepo,
                     remoteRepo,
-                    remoteUri = githubUri,
-                    gitHubInfo = requireNotNull(extractGitHubInfoFromUri(githubUri)) {
-                        "Couldn't extract github info from $githubUri defined in $configPropertiesFile"
-                    },
+                    remoteUri = githubUri.orEmpty(),
+                    gitHubInfo,
                     remoteBranchPrefix,
                     configByUserKey,
                     useFakeRemote,
