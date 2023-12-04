@@ -67,7 +67,7 @@ jobs:
         shell: bash
 
       - name: Publish Unit Test Results
-        uses: EnricoMi/publish-unit-test-result-action@713caf1dd6f1c273144546ed2d79ca24a01f4623  # v2.1.0
+        uses: EnricoMi/publish-unit-test-result-action@ca89ad036b5fcd524c1017287fb01b5139908408  # v2.11.0
         if: always()
         with:
           junit_files: "**/build/test-results/**/*.xml"
