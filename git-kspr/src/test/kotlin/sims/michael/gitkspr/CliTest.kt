@@ -203,6 +203,27 @@ class CliTest {
         assertTrue(lastLogFile.readText().contains("[main]"), "$lastLogFile doesn't seem to be a log file")
     }
 
+    @Test
+    fun `install hook`() {
+        val scratchDir = createTempDir()
+        val expected = config(
+            workingDirectory = scratchDir.repoDir(),
+            gitHubInfo = GitHubInfo(
+                host = "github.com",
+                owner = "SomeOwner",
+                name = "some-repo-name",
+            ),
+            logsDirectory = scratchDir.logsDir(),
+        )
+        executeCli(
+            scratchDir,
+            "git@host:owner/name.git",
+            expected.remoteName,
+            homeDirConfig = mapOf("logs-directory" to scratchDir.logsDir().absolutePath),
+            strings = listOf("install-commit-id-hook", "--help"),
+        )
+    }
+
     private fun config(workingDirectory: File, gitHubInfo: GitHubInfo, logsDirectory: File) = Config(
         workingDirectory,
         remoteName = DEFAULT_REMOTE_NAME,
