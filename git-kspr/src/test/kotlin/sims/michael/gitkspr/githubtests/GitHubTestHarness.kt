@@ -19,17 +19,18 @@ import java.util.Properties
 import java.util.concurrent.atomic.AtomicBoolean
 
 class GitHubTestHarness private constructor(
+    val scratchDir: File,
     val localRepo: File,
     val remoteRepo: File,
-    private val remoteUri: String,
+    val remoteUri: String,
     private val gitHubInfo: GitHubInfo,
-    val remoteBranchPrefix: String = DEFAULT_REMOTE_BRANCH_PREFIX,
+    private val remoteBranchPrefix: String = DEFAULT_REMOTE_BRANCH_PREFIX,
     private val configByUserKey: Map<String, UserConfig>,
     private val useFakeRemote: Boolean = true,
 ) {
 
     val localGit: JGitClient = JGitClient(localRepo)
-    val remoteGit: JGitClient = JGitClient(remoteRepo)
+    private val remoteGit: JGitClient = JGitClient(remoteRepo)
 
     private val ghClientsByUserKey: Map<String, GitHubClient> by lazy {
         if (!useFakeRemote) {
@@ -382,7 +383,8 @@ class GitHubTestHarness private constructor(
             remoteBranchPrefix: String = DEFAULT_REMOTE_BRANCH_PREFIX,
             block: suspend GitHubTestHarness.() -> Unit,
         ): GitHubTestHarness {
-            val (localRepo, remoteRepo) = createTempDir().createRepoDirs()
+            val scratchDir = createTempDir()
+            val (localRepo, remoteRepo) = scratchDir.createRepoDirs()
 
             val properties = Properties()
                 .apply {
@@ -406,6 +408,7 @@ class GitHubTestHarness private constructor(
 
             return runBlocking {
                 val testHarness = GitHubTestHarness(
+                    scratchDir,
                     localRepo,
                     remoteRepo,
                     remoteUri = githubUri.orEmpty(),

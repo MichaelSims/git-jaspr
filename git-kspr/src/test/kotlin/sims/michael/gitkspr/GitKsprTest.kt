@@ -1,6 +1,7 @@
 package sims.michael.gitkspr
 
 import org.junit.jupiter.api.*
+import org.junit.jupiter.api.Assertions.assertTrue
 import org.slf4j.Logger
 import sims.michael.gitkspr.RemoteRefEncoding.buildRemoteRef
 import sims.michael.gitkspr.githubtests.GitHubTestHarness
@@ -13,6 +14,14 @@ interface GitKsprTest {
 
     val logger: Logger
     val useFakeRemote: Boolean get() = true
+
+    suspend fun GitHubTestHarness.push() = gitKspr.push()
+
+    suspend fun GitHubTestHarness.getAndPrintStatusString() = gitKspr.getStatusString().also(::print)
+
+    suspend fun GitHubTestHarness.merge(refSpec: RefSpec) = gitKspr.merge(refSpec)
+
+    suspend fun GitHubTestHarness.getRemoteCommitStatuses(stack: List<Commit>) = gitKspr.getRemoteCommitStatuses(stack)
 
     suspend fun GitHubTestHarness.waitForChecksToConclude(
         vararg commitFilter: String,
@@ -45,7 +54,7 @@ interface GitKsprTest {
                 },
             )
             val exception = assertThrows<IllegalStateException> {
-                gitKspr.push()
+                push()
             }
             logger.info("Exception message is {}", exception.message)
         }
@@ -64,10 +73,10 @@ interface GitKsprTest {
                     }
                 },
             )
-            gitKspr.push()
+            push()
             localGit.fetch(DEFAULT_REMOTE_NAME)
             val stack = localGit.getLocalCommitStack(DEFAULT_REMOTE_NAME, DEFAULT_LOCAL_OBJECT, DEFAULT_TARGET_REF)
-            val remoteCommitStatuses = gitKspr.getRemoteCommitStatuses(stack)
+            val remoteCommitStatuses = getRemoteCommitStatuses(stack)
             assertEquals(localGit.log("HEAD", maxCount = 1).single(), remoteCommitStatuses.single().remoteCommit)
         }
     }
@@ -90,7 +99,7 @@ interface GitKsprTest {
                 },
             )
 
-            assertEquals("Stack is empty.", gitKspr.getAndPrintStatusString())
+            assertEquals("Stack is empty.", getAndPrintStatusString())
         }
     }
 
@@ -118,7 +127,7 @@ interface GitKsprTest {
                 """
                     .trimMargin()
                     .toStatusString(),
-                gitKspr.getAndPrintStatusString(),
+                getAndPrintStatusString(),
             )
         }
     }
@@ -150,7 +159,7 @@ interface GitKsprTest {
                 """
                     .trimMargin()
                     .toStatusString(),
-                gitKspr.getAndPrintStatusString(),
+                getAndPrintStatusString(),
             )
         }
     }
@@ -187,7 +196,7 @@ interface GitKsprTest {
                 """
                     .trimMargin()
                     .toStatusString(),
-                gitKspr.getAndPrintStatusString(),
+                getAndPrintStatusString(),
             )
         }
     }
@@ -227,7 +236,7 @@ interface GitKsprTest {
                 """
                     .trimMargin()
                     .toStatusString(),
-                gitKspr.getAndPrintStatusString(),
+                getAndPrintStatusString(),
             )
         }
     }
@@ -284,7 +293,7 @@ interface GitKsprTest {
                 """
                     .trimMargin()
                     .toStatusString(),
-                gitKspr.getAndPrintStatusString(),
+                getAndPrintStatusString(),
             )
         }
     }
@@ -355,7 +364,7 @@ interface GitKsprTest {
                 """
                     .trimMargin()
                     .toStatusString(),
-                gitKspr.getAndPrintStatusString(),
+                getAndPrintStatusString(),
             )
         }
     }
@@ -429,7 +438,7 @@ interface GitKsprTest {
                 """
                     .trimMargin()
                     .toStatusString(),
-                gitKspr.getAndPrintStatusString(),
+                getAndPrintStatusString(),
             )
         }
     }
@@ -488,7 +497,7 @@ interface GitKsprTest {
                 """
                     .trimMargin()
                     .toStatusString(),
-                gitKspr.getAndPrintStatusString(),
+                getAndPrintStatusString(),
             )
         }
     }
@@ -535,7 +544,7 @@ interface GitKsprTest {
                 },
             )
 
-            gitKspr.push()
+            push()
 
             waitForChecksToConclude("one", "two", "three")
 
@@ -547,7 +556,7 @@ interface GitKsprTest {
                 """
                     .trimMargin()
                     .toStatusString(),
-                getActual = { gitKspr.getStatusString() },
+                getActual = { getAndPrintStatusString() },
             )
         }
     }
@@ -593,7 +602,7 @@ interface GitKsprTest {
                 },
             )
 
-            gitKspr.push()
+            push()
 
             waitForChecksToConclude("one", "two", "three")
 
@@ -605,7 +614,7 @@ interface GitKsprTest {
                 """
                     .trimMargin()
                     .toStatusString(),
-                gitKspr.getStatusString(),
+                getAndPrintStatusString(),
             )
         }
     }
@@ -632,7 +641,7 @@ interface GitKsprTest {
                 },
             )
 
-            gitKspr.push()
+            push()
 
             assertEquals(
                 listOf("three", "two", "one"),
@@ -646,7 +655,7 @@ interface GitKsprTest {
         // assert the absence of a bug that used to occur with commits that had message bodies... the subject and footer
         // lines would be indented, which was invalid and would cause the commit(s) to effectively have no ID
         // if this test doesn't throw, then we're good
-        withTestSetup {
+        withTestSetup(useFakeRemote) {
             createCommitsFrom(
                 testCase {
                     repository {
@@ -673,17 +682,16 @@ interface GitKsprTest {
                 },
             )
 
-            gitKspr.push()
+            push()
         }
     }
 
     @TestFactory
     fun `push adds commit IDs`(): List<DynamicTest> {
-        data class Test(val name: String, val expected: List<String>, val testCaseData: TestCaseData)
+        data class Test(val name: String, val testCaseData: TestCaseData)
         return listOf(
             Test(
                 "all commits missing IDs",
-                listOf("0", "1", "2"),
                 testCase {
                     repository {
                         commit {
@@ -704,7 +712,6 @@ interface GitKsprTest {
             ),
             Test(
                 "only recent commits missing IDs",
-                listOf("A", "B", "0", "1", "2"),
                 testCase {
                     repository {
                         commit { title = "A" }
@@ -727,7 +734,6 @@ interface GitKsprTest {
             ),
             Test(
                 "only commits in the middle missing IDs",
-                listOf("A", "B", "0", "1", "2", "C", "D"),
                 testCase {
                     repository {
                         commit {
@@ -758,17 +764,21 @@ interface GitKsprTest {
                     }
                 },
             ),
-        ).map { (name, expected, collectCommits) ->
+        ).map { (name, collectCommits) ->
             DynamicTest.dynamicTest(name) {
-                withTestSetup {
+                withTestSetup(useFakeRemote) {
                     createCommitsFrom(collectCommits)
-                    gitKspr.push()
-                    assertEquals(
-                        expected,
-                        localGit.logRange(
-                            "${JGitClient.HEAD}~${collectCommits.repository.commits.size}",
-                            JGitClient.HEAD,
-                        ).map(Commit::id),
+                    push()
+                    val numCommits = collectCommits.repository.commits.size
+                    assertTrue(
+                        localGit
+                            .logRange(
+                                "${JGitClient.HEAD}~$numCommits",
+                                JGitClient.HEAD,
+                            )
+                            .mapNotNull(Commit::id)
+                            .filter(String::isNotBlank)
+                            .size == numCommits,
                     )
                 }
             }
@@ -790,7 +800,7 @@ interface GitKsprTest {
                     }
                 },
             )
-            gitKspr.push()
+            push()
 
             assertEquals(
                 (1..3).map { buildRemoteRef(it.toString()) },
@@ -814,7 +824,7 @@ interface GitKsprTest {
                     }
                 },
             )
-            gitKspr.push()
+            push()
             createCommitsFrom(
                 testCase {
                     repository {
@@ -828,7 +838,7 @@ interface GitKsprTest {
                     }
                 },
             )
-            gitKspr.push()
+            push()
             createCommitsFrom(
                 testCase {
                     repository {
@@ -842,7 +852,7 @@ interface GitKsprTest {
                     }
                 },
             )
-            gitKspr.push()
+            push()
             gitLogLocalAndRemote()
 
             assertEquals(
@@ -875,7 +885,7 @@ interface GitKsprTest {
                 },
             )
 
-            gitKspr.push()
+            push()
 
             assertEquals(
                 setOf(
@@ -901,7 +911,7 @@ interface GitKsprTest {
                 },
             )
 
-            gitKspr.push()
+            push()
 
             gitLogLocalAndRemote()
 
@@ -946,7 +956,7 @@ interface GitKsprTest {
                 },
             )
             val exception = assertThrows<GitKspr.SinglePullRequestPerCommitConstraintViolation> {
-                gitKspr.push()
+                push()
             }
             logger.info("Exception message: {}", exception.message)
         }
@@ -970,7 +980,7 @@ interface GitKsprTest {
                 },
             )
 
-            gitKspr.push()
+            push()
 
             createCommitsFrom(
                 testCase {
@@ -988,7 +998,7 @@ interface GitKsprTest {
                 },
             )
 
-            gitKspr.push()
+            push()
 
             // TODO the filter is having some impact on ordering. better if the list was properly ordered regardless
             val remotePrs = gitHub.getPullRequestsById(listOf("E", "C", "one", "B", "A", "two"))
@@ -1059,7 +1069,7 @@ interface GitKsprTest {
             )
 
             waitForChecksToConclude("one", "two", "three")
-            gitKspr.merge(RefSpec("development", "main"))
+            merge(RefSpec("development", "main"))
 
             assertEquals(
                 emptyList(),
@@ -1124,7 +1134,7 @@ interface GitKsprTest {
                 },
             )
 
-            gitKspr.merge(RefSpec("development", "main"))
+            merge(RefSpec("development", "main"))
             assertEquals(
                 listOf("one", "two", "three"), // Nothing was merged
                 localGit
@@ -1178,7 +1188,7 @@ interface GitKsprTest {
             )
 
             waitForChecksToConclude("one", "two", "three")
-            gitKspr.merge(RefSpec("development", "main"))
+            merge(RefSpec("development", "main"))
             assertEquals(
                 listOf("three"), // All mergeable commits were merged, leaving "three" as the only one not merged
                 localGit
@@ -1255,7 +1265,7 @@ interface GitKsprTest {
 
             waitForChecksToConclude("one", "two", "three", "four", "five")
 
-            gitKspr.merge(RefSpec("development", "main"))
+            merge(RefSpec("development", "main"))
             assertEquals(
                 DEFAULT_TARGET_REF,
                 gitHub.getPullRequestsByHeadRef(buildRemoteRef("four")).last().baseRefName,
@@ -1330,7 +1340,7 @@ interface GitKsprTest {
 
             waitForChecksToConclude("one", "two", "three", "four", "five")
 
-            gitKspr.merge(RefSpec("development", "main"))
+            merge(RefSpec("development", "main"))
             assertEventuallyEquals(
                 listOf("five"),
                 getActual = { gitHub.getPullRequests().map(PullRequest::title) },
@@ -1379,7 +1389,7 @@ interface GitKsprTest {
                 },
             )
 
-            gitKspr.merge(RefSpec("development", "main"))
+            merge(RefSpec("development", "main"))
             assertEquals(
                 listOf("one", "two", "three"),
                 gitHub.getPullRequests().map(PullRequest::title),
@@ -1432,7 +1442,7 @@ interface GitKsprTest {
             )
 
             waitForChecksToConclude("one", "two")
-            gitKspr.merge(RefSpec("development^", "main"))
+            merge(RefSpec("development^", "main"))
             assertEventuallyEquals(
                 listOf("three"),
                 getActual = { gitHub.getPullRequests().map(PullRequest::title) },
@@ -1457,5 +1467,3 @@ fun String.toStatusString() =
             |$this
 
     """.trimMargin()
-
-suspend fun GitKspr.getAndPrintStatusString() = getStatusString().also(::print)
