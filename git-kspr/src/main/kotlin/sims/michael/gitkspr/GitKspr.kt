@@ -1,6 +1,8 @@
 package sims.michael.gitkspr
 
 import org.slf4j.LoggerFactory
+import sims.michael.gitkspr.GitKspr.StatusBits.Status
+import sims.michael.gitkspr.GitKspr.StatusBits.Status.*
 import sims.michael.gitkspr.RemoteRefEncoding.REV_NUM_DELIMITER
 import sims.michael.gitkspr.RemoteRefEncoding.buildRemoteRef
 import sims.michael.gitkspr.RemoteRefEncoding.getRemoteRefParts
@@ -95,17 +97,6 @@ class GitKspr(
 
     // TODO consider pulling the target ref from the branch name instead of requiring it on the command line
     suspend fun getStatusString(refSpec: RefSpec = RefSpec(DEFAULT_LOCAL_OBJECT, DEFAULT_TARGET_REF)): String {
-        data class StatusBits(
-            val commitIsPushed: Boolean = false,
-            val pullRequestExists: Boolean = false,
-            val checksPass: Boolean? = null,
-            val approved: Boolean? = null,
-        ) {
-            fun toList(): List<Boolean?> = listOf(commitIsPushed, pullRequestExists, checksPass, approved)
-        }
-
-        fun Boolean?.toIndicator() = if (this == true) "+" else if (this == null) "?" else "-"
-
         val remoteName = config.remoteName
         gitClient.fetch(remoteName)
 
@@ -120,14 +111,25 @@ class GitKspr(
             for (status in statuses) {
                 append("[")
                 val statusBits = StatusBits(
-                    commitIsPushed = status.remoteCommit != null,
-                    pullRequestExists = status.pullRequest != null,
-                    checksPass = if (status.pullRequest == null) false else status.checksPass,
-                    approved = if (status.pullRequest == null) false else status.approved,
+                    commitIsPushed = if (status.remoteCommit != null) SUCCESS else EMPTY,
+                    pullRequestExists = if (status.pullRequest != null) SUCCESS else EMPTY,
+                    checksPass = when {
+                        status.pullRequest == null -> EMPTY
+                        status.checksPass == null -> PENDING
+                        status.checksPass -> SUCCESS
+                        else -> FAIL
+                    },
+                    approved = when {
+                        status.pullRequest == null -> EMPTY
+                        status.approved == null -> EMPTY
+                        status.approved -> SUCCESS
+                        else -> FAIL
+                    },
                 )
                 val flags = statusBits.toList()
-                if (!flags.all { it == true }) stackCheck = false
-                append((flags + stackCheck).joinToString(separator = " ", transform = Boolean?::toIndicator))
+                if (!flags.all { it == SUCCESS }) stackCheck = false
+                val statusList = flags + if (stackCheck) SUCCESS else EMPTY
+                append(statusList.joinToString(separator = "", transform = Status::emoji))
                 append("] ")
                 val permalink = status.pullRequest?.permalink
                 if (permalink != null) {
@@ -305,6 +307,19 @@ class GitKspr(
 
     private fun Commit.toRefSpec(): RefSpec = RefSpec(hash, toRemoteRefName())
     private fun Commit.toRemoteRefName(): String = buildRemoteRef(checkNotNull(id), prefix = config.remoteBranchPrefix)
+
+    private data class StatusBits(
+        val commitIsPushed: Status,
+        val pullRequestExists: Status,
+        val checksPass: Status,
+        val approved: Status,
+    ) {
+        fun toList(): List<Status> = listOf(commitIsPushed, pullRequestExists, checksPass, approved)
+
+        enum class Status(val emoji: String) {
+            SUCCESS("✅"), FAIL("❌"), PENDING("⌛"), UNKNOWN("❓"), EMPTY("➖"), WARNING("⚠️")
+        }
+    }
 
     companion object {
         private val HEADER = """

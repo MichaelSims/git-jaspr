@@ -122,9 +122,9 @@ interface GitKsprTest {
             val actual = getAndPrintStatusString()
             assertEquals(
                 """
-                    |[- - - - -] one
-                    |[- - - - -] two
-                    |[- - - - -] three
+                    |[➖➖➖➖➖] one
+                    |[➖➖➖➖➖] two
+                    |[➖➖➖➖➖] three
                 """
                     .trimMargin()
                     .toStatusString(actual),
@@ -155,9 +155,9 @@ interface GitKsprTest {
             val actual = getAndPrintStatusString()
             assertEquals(
                 """
-                    |[+ - - - -] one
-                    |[- - - - -] two
-                    |[- - - - -] three
+                    |[✅➖➖➖➖] one
+                    |[➖➖➖➖➖] two
+                    |[➖➖➖➖➖] three
                 """
                     .trimMargin()
                     .toStatusString(actual),
@@ -193,9 +193,9 @@ interface GitKsprTest {
             val actual = getAndPrintStatusString()
             assertEquals(
                 """
-                    |[+ + ? - -] %s : one
-                    |[- - - - -] two
-                    |[- - - - -] three
+                    |[✅✅⌛➖➖] %s : one
+                    |[➖➖➖➖➖] two
+                    |[➖➖➖➖➖] three
                 """
                     .trimMargin()
                     .toStatusString(actual),
@@ -234,9 +234,9 @@ interface GitKsprTest {
             val actual = getAndPrintStatusString()
             assertEquals(
                 """
-                    |[+ + + - -] %s : one
-                    |[- - - - -] two
-                    |[- - - - -] three
+                    |[✅✅✅➖➖] %s : one
+                    |[➖➖➖➖➖] two
+                    |[➖➖➖➖➖] three
                 """
                     .trimMargin()
                     .toStatusString(actual),
@@ -292,9 +292,9 @@ interface GitKsprTest {
             val actual = getAndPrintStatusString()
             assertEquals(
                 """
-                    |[+ + + + +] %s : one
-                    |[+ + + - -] %s : two
-                    |[+ + + - -] %s : three
+                    |[✅✅✅✅✅] %s : one
+                    |[✅✅✅➖➖] %s : two
+                    |[✅✅✅➖➖] %s : three
                 """
                     .trimMargin()
                     .toStatusString(actual),
@@ -361,9 +361,9 @@ interface GitKsprTest {
             val actual = getAndPrintStatusString()
             assertEquals(
                 """
-                    |[+ + + + -] %s : one
-                    |[+ + + + -] %s : two
-                    |[+ + + + -] %s : three
+                    |[✅✅✅✅➖] %s : one
+                    |[✅✅✅✅➖] %s : two
+                    |[✅✅✅✅➖] %s : three
                     |
                     |Your stack is out-of-date with the base branch (1 commit behind main).
                     |You'll need to rebase it (`git rebase origin/main`) before your stack will be mergeable.
@@ -436,9 +436,9 @@ interface GitKsprTest {
             val actual = getAndPrintStatusString()
             assertEquals(
                 """
-                    |[+ + + + -] %s : one
-                    |[+ + + + -] %s : two
-                    |[+ + + + -] %s : three
+                    |[✅✅✅✅➖] %s : one
+                    |[✅✅✅✅➖] %s : two
+                    |[✅✅✅✅➖] %s : three
                     |
                     |Your stack is out-of-date with the base branch (2 commits behind main).
                     |You'll need to rebase it (`git rebase origin/main`) before your stack will be mergeable.
@@ -499,9 +499,9 @@ interface GitKsprTest {
             val actual = getAndPrintStatusString()
             assertEquals(
                 """
-                    |[+ + + + +] %s : one
-                    |[+ + + + +] %s : two
-                    |[+ + + + +] %s : three
+                    |[✅✅✅✅✅] %s : one
+                    |[✅✅✅✅✅] %s : two
+                    |[✅✅✅✅✅] %s : three
                 """
                     .trimMargin()
                     .toStatusString(actual),
@@ -559,9 +559,9 @@ interface GitKsprTest {
             val actual = getAndPrintStatusString()
             assertEventuallyEquals(
                 """
-                    |[+ + + - -] %s : one
-                    |[+ + + + -] %s : two
-                    |[+ + + - -] %s : three
+                    |[✅✅✅➖➖] %s : one
+                    |[✅✅✅✅➖] %s : two
+                    |[✅✅✅➖➖] %s : three
                 """
                     .trimMargin()
                     .toStatusString(actual),
@@ -618,9 +618,9 @@ interface GitKsprTest {
             val actual = getAndPrintStatusString()
             assertEquals(
                 """
-                    |[+ + + - -] %s : one
-                    |[+ + - - -] %s : two
-                    |[+ + + - -] %s : three
+                    |[✅✅✅➖➖] %s : one
+                    |[✅✅❌➖➖] %s : two
+                    |[✅✅✅➖➖] %s : three
                 """
                     .trimMargin()
                     .toStatusString(actual),

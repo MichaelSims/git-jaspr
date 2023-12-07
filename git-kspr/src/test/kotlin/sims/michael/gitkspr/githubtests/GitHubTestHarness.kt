@@ -191,7 +191,7 @@ class GitHubTestHarness private constructor(
                     //   to support this so we can test how KSPR reacts, this logic needs to be updated to set
                     //   checksPass only if _all_ commits in the PR will pass
                     checksPass = commitsByTitle[pr.title]?.willPassVerification,
-                    approved = pr.willBeApprovedByUserKey?.isNotBlank() == true,
+                    approved = pr.willBeApprovedByUserKey?.isNotBlank(),
                     permalink = "http://example.com",
                 )
                 val existingPr = existingPrsByTitle[pr.title]

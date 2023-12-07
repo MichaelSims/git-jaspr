@@ -71,7 +71,11 @@ class GitHubClientImpl(
                         pr.title,
                         pr.body,
                         state?.let { it == StatusState.SUCCESS },
-                        pr.reviewDecision == PullRequestReviewDecision.APPROVED,
+                        when (pr.reviewDecision) {
+                            PullRequestReviewDecision.APPROVED -> true
+                            PullRequestReviewDecision.CHANGES_REQUESTED -> false
+                            else -> null
+                        },
                         pr.conclusionStates,
                         pr.permalink,
                     )
@@ -112,7 +116,11 @@ class GitHubClientImpl(
                     pr.title,
                     pr.body,
                     pr.commits.nodes?.singleOrNull()?.commit?.statusCheckRollup?.state == StatusState.SUCCESS,
-                    pr.reviewDecision == PullRequestReviewDecision.APPROVED,
+                    when (pr.reviewDecision) {
+                        PullRequestReviewDecision.APPROVED -> true
+                        PullRequestReviewDecision.CHANGES_REQUESTED -> false
+                        else -> null
+                    },
                     pr.conclusionStates,
                     pr.permalink,
                 )
@@ -160,7 +168,11 @@ class GitHubClientImpl(
             pr.title,
             pr.body,
             pr.commits.nodes?.singleOrNull()?.commit?.statusCheckRollup?.state == StatusState.SUCCESS,
-            pr.reviewDecision == PullRequestReviewDecision.APPROVED,
+            when (pr.reviewDecision) {
+                PullRequestReviewDecision.APPROVED -> true
+                PullRequestReviewDecision.CHANGES_REQUESTED -> false
+                else -> null
+            },
             permalink = pr.permalink,
         )
     }
