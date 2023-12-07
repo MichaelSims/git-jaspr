@@ -119,6 +119,7 @@ interface GitKsprTest {
                 },
             )
 
+            val actual = getAndPrintStatusString()
             assertEquals(
                 """
                     |[- - - - -] one
@@ -126,8 +127,8 @@ interface GitKsprTest {
                     |[- - - - -] three
                 """
                     .trimMargin()
-                    .toStatusString(),
-                getAndPrintStatusString(),
+                    .toStatusString(actual),
+                actual,
             )
         }
     }
@@ -151,6 +152,7 @@ interface GitKsprTest {
                 },
             )
 
+            val actual = getAndPrintStatusString()
             assertEquals(
                 """
                     |[+ - - - -] one
@@ -158,8 +160,8 @@ interface GitKsprTest {
                     |[- - - - -] three
                 """
                     .trimMargin()
-                    .toStatusString(),
-                getAndPrintStatusString(),
+                    .toStatusString(actual),
+                actual,
             )
         }
     }
@@ -188,15 +190,16 @@ interface GitKsprTest {
                 },
             )
 
+            val actual = getAndPrintStatusString()
             assertEquals(
                 """
-                    |[+ + ? - -] one
+                    |[+ + ? - -] %s : one
                     |[- - - - -] two
                     |[- - - - -] three
                 """
                     .trimMargin()
-                    .toStatusString(),
-                getAndPrintStatusString(),
+                    .toStatusString(actual),
+                actual,
             )
         }
     }
@@ -228,15 +231,16 @@ interface GitKsprTest {
 
             waitForChecksToConclude("one")
 
+            val actual = getAndPrintStatusString()
             assertEquals(
                 """
-                    |[+ + + - -] one
+                    |[+ + + - -] %s : one
                     |[- - - - -] two
                     |[- - - - -] three
                 """
                     .trimMargin()
-                    .toStatusString(),
-                getAndPrintStatusString(),
+                    .toStatusString(actual),
+                actual,
             )
         }
     }
@@ -285,15 +289,16 @@ interface GitKsprTest {
 
             waitForChecksToConclude("one")
 
+            val actual = getAndPrintStatusString()
             assertEquals(
                 """
-                    |[+ + + + +] one
-                    |[+ + + - -] two
-                    |[+ + + - -] three
+                    |[+ + + + +] %s : one
+                    |[+ + + - -] %s : two
+                    |[+ + + - -] %s : three
                 """
                     .trimMargin()
-                    .toStatusString(),
-                getAndPrintStatusString(),
+                    .toStatusString(actual),
+                actual,
             )
         }
     }
@@ -353,18 +358,19 @@ interface GitKsprTest {
 
             waitForChecksToConclude("one", "two", "three")
 
+            val actual = getAndPrintStatusString()
             assertEquals(
                 """
-                    |[+ + + + -] one
-                    |[+ + + + -] two
-                    |[+ + + + -] three
+                    |[+ + + + -] %s : one
+                    |[+ + + + -] %s : two
+                    |[+ + + + -] %s : three
                     |
                     |Your stack is out-of-date with the base branch (1 commit behind main).
                     |You'll need to rebase it (`git rebase origin/main`) before your stack will be mergeable.
                 """
                     .trimMargin()
-                    .toStatusString(),
-                getAndPrintStatusString(),
+                    .toStatusString(actual),
+                actual,
             )
         }
     }
@@ -427,18 +433,19 @@ interface GitKsprTest {
 
             waitForChecksToConclude("one", "two", "three")
 
+            val actual = getAndPrintStatusString()
             assertEquals(
                 """
-                    |[+ + + + -] one
-                    |[+ + + + -] two
-                    |[+ + + + -] three
+                    |[+ + + + -] %s : one
+                    |[+ + + + -] %s : two
+                    |[+ + + + -] %s : three
                     |
                     |Your stack is out-of-date with the base branch (2 commits behind main).
                     |You'll need to rebase it (`git rebase origin/main`) before your stack will be mergeable.
                 """
                     .trimMargin()
-                    .toStatusString(),
-                getAndPrintStatusString(),
+                    .toStatusString(actual),
+                actual,
             )
         }
     }
@@ -489,15 +496,16 @@ interface GitKsprTest {
 
             waitForChecksToConclude("one", "two", "three")
 
+            val actual = getAndPrintStatusString()
             assertEquals(
                 """
-                    |[+ + + + +] one
-                    |[+ + + + +] two
-                    |[+ + + + +] three
+                    |[+ + + + +] %s : one
+                    |[+ + + + +] %s : two
+                    |[+ + + + +] %s : three
                 """
                     .trimMargin()
-                    .toStatusString(),
-                getAndPrintStatusString(),
+                    .toStatusString(actual),
+                actual,
             )
         }
     }
@@ -548,15 +556,16 @@ interface GitKsprTest {
 
             waitForChecksToConclude("one", "two", "three")
 
+            val actual = getAndPrintStatusString()
             assertEventuallyEquals(
                 """
-                    |[+ + + - -] one
-                    |[+ + + + -] two
-                    |[+ + + - -] three
+                    |[+ + + - -] %s : one
+                    |[+ + + + -] %s : two
+                    |[+ + + - -] %s : three
                 """
                     .trimMargin()
-                    .toStatusString(),
-                getActual = { getAndPrintStatusString() },
+                    .toStatusString(actual),
+                getActual = { actual },
             )
         }
     }
@@ -606,15 +615,16 @@ interface GitKsprTest {
 
             waitForChecksToConclude("one", "two", "three")
 
+            val actual = getAndPrintStatusString()
             assertEquals(
                 """
-                    |[+ + + - -] one
-                    |[+ + - - -] two
-                    |[+ + + - -] three
+                    |[+ + + - -] %s : one
+                    |[+ + - - -] %s : two
+                    |[+ + + - -] %s : three
                 """
                     .trimMargin()
-                    .toStatusString(),
-                getAndPrintStatusString(),
+                    .toStatusString(actual),
+                actual,
             )
         }
     }
@@ -1456,14 +1466,19 @@ interface GitKsprTest {
 // It may seem silly to repeat what is already defined in GitKspr.HEADER, but if a dev changes the header I want
 // these tests to break so that any such changes are very deliberate. This is a compromise between referencing the
 // same value from both tests and prod and the other extreme of repeating this header text manually in every test.
-fun String.toStatusString() =
-    """
+fun String.toStatusString(actual: String): String {
+    // Extract URLs from the actual string and put them into the expected. For functional tests I can't predict what
+    // they will be, so I only want to validate that they are present.
+    val urls = "(http.*) :".toRegex().findAll(actual).map { result -> result.groupValues[1] }.toList()
+
+    return """
             | ┌─ commit is pushed
             | │ ┌─ pull request exists
             | │ │ ┌─ github checks pass
             | │ │ │ ┌── pull request approved
             | │ │ │ │ ┌─── stack check
             | │ │ │ │ │
-            |$this
+            |${this.format(*urls.toTypedArray())}
 
     """.trimMargin()
+}

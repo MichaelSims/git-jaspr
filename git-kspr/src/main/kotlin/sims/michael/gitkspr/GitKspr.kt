@@ -58,6 +58,7 @@ class GitKspr(
                     checksPass = existingPr?.checksPass,
                     approved = existingPr?.approved,
                     checkConclusionStates = existingPr?.checkConclusionStates.orEmpty(),
+                    permalink = existingPr?.permalink,
                 )
             }
             .filter { pr -> existingPrsByCommitId[pr.commitId] != pr }
@@ -128,6 +129,11 @@ class GitKspr(
                 if (!flags.all { it == true }) stackCheck = false
                 append((flags + stackCheck).joinToString(separator = " ", transform = Boolean?::toIndicator))
                 append("] ")
+                val permalink = status.pullRequest?.permalink
+                if (permalink != null) {
+                    append(status.pullRequest.permalink)
+                    append(" : ")
+                }
                 appendLine(status.localCommit.shortMessage)
             }
             if (numCommitsBehind > 0) {

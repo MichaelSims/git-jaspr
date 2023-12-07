@@ -23,6 +23,7 @@ query getPullRequestsByHeadRef(
                 headRefName
                 mergeable
                 reviewDecision
+                permalink
                 repository {
                     id
                 }

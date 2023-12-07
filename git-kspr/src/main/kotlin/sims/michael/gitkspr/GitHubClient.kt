@@ -73,6 +73,7 @@ class GitHubClientImpl(
                         state?.let { it == StatusState.SUCCESS },
                         pr.reviewDecision == PullRequestReviewDecision.APPROVED,
                         pr.conclusionStates,
+                        pr.permalink,
                     )
                 } else {
                     null
@@ -113,6 +114,7 @@ class GitHubClientImpl(
                     pr.commits.nodes?.singleOrNull()?.commit?.statusCheckRollup?.state == StatusState.SUCCESS,
                     pr.reviewDecision == PullRequestReviewDecision.APPROVED,
                     pr.conclusionStates,
+                    pr.permalink,
                 )
             }
             .also { pullRequests -> logger.trace("getPullRequests {}: {}", pullRequests.size, pullRequests) }
@@ -159,6 +161,7 @@ class GitHubClientImpl(
             pr.body,
             pr.commits.nodes?.singleOrNull()?.commit?.statusCheckRollup?.state == StatusState.SUCCESS,
             pr.reviewDecision == PullRequestReviewDecision.APPROVED,
+            permalink = pr.permalink,
         )
     }
 

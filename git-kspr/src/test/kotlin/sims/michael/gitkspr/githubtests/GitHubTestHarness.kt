@@ -192,6 +192,7 @@ class GitHubTestHarness private constructor(
                     //   checksPass only if _all_ commits in the PR will pass
                     checksPass = commitsByTitle[pr.title]?.willPassVerification,
                     approved = pr.willBeApprovedByUserKey?.isNotBlank() == true,
+                    permalink = "http://example.com",
                 )
                 val existingPr = existingPrsByTitle[pr.title]
                 val createdOrUpdatedPr = if (existingPr == null) {

@@ -8,6 +8,7 @@ mutation createPullRequest($input: CreatePullRequestInput!) {
             baseRefName
             headRefName
             reviewDecision
+            permalink
             commits(first:25) {
                 nodes {
                     commit {
