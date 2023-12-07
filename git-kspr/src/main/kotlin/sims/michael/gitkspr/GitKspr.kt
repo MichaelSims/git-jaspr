@@ -38,7 +38,9 @@ class GitKspr(
         val outOfDateBranches = stack.map { c -> c.toRefSpec() } - remoteBranches.map { b -> b.toRefSpec() }.toSet()
         val revisionHistoryRefs = getRevisionHistoryRefs(stack, remoteBranches, remoteName)
         // TODO consider push with lease here
-        gitClient.push(outOfDateBranches.map(RefSpec::forcePush) + revisionHistoryRefs)
+        val refSpecs = outOfDateBranches.map(RefSpec::forcePush) + revisionHistoryRefs
+        gitClient.push(refSpecs)
+        logger.info("Pushed {} commit ref(s) and {} history ref(s)", outOfDateBranches.size, revisionHistoryRefs.size)
 
         val existingPrsByCommitId = pullRequestsRebased.associateBy(PullRequest::commitId)
 
@@ -74,6 +76,7 @@ class GitKspr(
                 ghClient.updatePullRequest(pr)
             }
         }
+        logger.info("Updated {} pull request(s)", prsToMutate.size)
     }
 
     suspend fun getRemoteCommitStatuses(stack: List<Commit>): List<RemoteCommitStatus> {
@@ -180,7 +183,9 @@ class GitKspr(
             ghClient.updatePullRequest(lastPr.copy(baseRefName = refSpec.remoteRef))
         }
 
-        gitClient.push(listOf(RefSpec(lastMergeableStatus.localCommit.hash, refSpec.remoteRef)))
+        val refSpecs = listOf(RefSpec(lastMergeableStatus.localCommit.hash, refSpec.remoteRef))
+        gitClient.push(refSpecs)
+        logger.info("Merged {} ref(s) to {}", refSpecs.size, refSpec.remoteRef)
 
         val prsToClose = statuses.slice(0 until indexLastMergeable).mapNotNull(RemoteCommitStatus::pullRequest)
         for (pr in prsToClose) {
