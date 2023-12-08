@@ -1,5 +1,5 @@
-rootProject.name = "git-kspr"
-include("git-kspr")
+rootProject.name = "git-jaspr"
+include("git-jaspr")
 include("data-class-fragment")
 include("github-dsl-model")
 

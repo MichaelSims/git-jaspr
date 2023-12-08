@@ -41,7 +41,7 @@ jobs:
         uses: asdf-vm/actions/install@v3
 
       - name: 'Build Binary'
-        run: JAVA_HOME= ./gradlew :git-kspr:nativeCompile
+        run: JAVA_HOME= ./gradlew :git-jaspr:nativeCompile
         env:
           JAVA_HOME: ""
         shell: bash
@@ -53,8 +53,8 @@ jobs:
           GITHUB_TOKEN: ${{secrets.GITHUB_TOKEN}}
         with:
           upload_url: ${{ needs.create_release.outputs.upload_url }}
-          asset_name: 'git-kspr-${{matrix.label}}'
-          asset_path: 'git-kspr/build/native/nativeCompile/git-kspr'
+          asset_name: 'git-jaspr-${{matrix.label}}'
+          asset_path: 'git-jaspr/build/native/nativeCompile/git-jaspr'
           asset_content_type: application/octet-stream
 
   publish_release:

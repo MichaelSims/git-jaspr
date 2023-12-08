@@ -1,0 +1,21 @@
+<!--
+NOTE: This is a "bootstrap" logging configuration. The app code makes additional modifications to the logging config
+based on options provided by the user.
+-->
+<configuration>
+    <appender name="STDOUT" class="ch.qos.logback.core.ConsoleAppender">
+        <encoder>
+            <pattern>%r %.-1level [%logger{0}] %msg%n</pattern>
+        </encoder>
+        <filter class="ch.qos.logback.classic.filter.ThresholdFilter">
+            <level>INFO</level> <!-- This can be overridden via the log-level command line option -->
+        </filter>
+    </appender>
+
+    <root level="INFO">
+        <appender-ref ref="STDOUT"/>
+    </root>
+
+    <!-- Note the level is set to ALL here, but filtered at the appender level via ThresholdFilter -->
+    <logger name="sims.michael.gitjaspr" level="ALL"/>
+</configuration>
