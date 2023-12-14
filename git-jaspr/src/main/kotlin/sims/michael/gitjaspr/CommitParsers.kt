@@ -1,6 +1,35 @@
 package sims.michael.gitjaspr
 
+import sims.michael.gitjaspr.CliGitClient.Companion.GIT_LOG_SEPARATOR
+import sims.michael.gitjaspr.CliGitClient.Companion.GIT_LOG_TRAILER_SEPARATOR
+import java.time.Instant
+import java.time.ZoneId
+
 object CommitParsers {
+
+    fun parseCommitLogEntry(logEntry: String): Commit {
+        val split = logEntry.split(GIT_LOG_SEPARATOR)
+        val (firstChunk, secondChunk) = split.chunked(5)
+        val (hash, shortMessage, committerName, committerEmail, commitIds) = firstChunk
+        val (commitTimestamp, authorTimestamp, fullMessage) = secondChunk
+
+        // I'm _quite_ certain this can be done more elegantly
+        fun String.timestampToZonedDateTime() = Instant
+            .ofEpochSecond(toLong())
+            .atZone(ZoneId.systemDefault())
+            .canonicalize()
+
+        return Commit(
+            hash,
+            shortMessage,
+            fullMessage,
+            commitIds.split(GIT_LOG_TRAILER_SEPARATOR).last().takeUnless(String::isBlank),
+            Ident(committerName, committerEmail),
+            commitTimestamp.timestampToZonedDateTime(),
+            authorTimestamp.timestampToZonedDateTime(),
+        )
+    }
+
     fun addFooters(fullMessage: String, footers: Map<String, String>): String {
         val existingFooters = getFooters(fullMessage)
         return if (existingFooters.isNotEmpty()) {
