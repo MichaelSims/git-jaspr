@@ -126,7 +126,7 @@ class JGitClient(
         }
     }
 
-    override fun refExists(ref: String): Boolean {
+    private fun refExists(ref: String): Boolean {
         logger.trace("refExists {}", ref)
         return useGit { git -> git.repository.resolve(ref) != null }
     }

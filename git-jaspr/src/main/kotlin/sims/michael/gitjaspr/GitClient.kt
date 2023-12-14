@@ -17,7 +17,6 @@ interface GitClient {
     fun logRange(since: String, until: String): List<Commit>
     fun isWorkingDirectoryClean(): Boolean
     fun getLocalCommitStack(remoteName: String, localObjectName: String, targetRefName: String): List<Commit>
-    fun refExists(ref: String): Boolean
     fun getBranchNames(): List<String>
     fun getRemoteBranches(): List<RemoteBranch>
     fun getRemoteBranchesById(): Map<String, RemoteBranch>

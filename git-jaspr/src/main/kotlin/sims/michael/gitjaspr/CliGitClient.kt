@@ -52,10 +52,6 @@ class CliGitClient(
         TODO("Not yet implemented")
     }
 
-    override fun refExists(ref: String): Boolean {
-        TODO("Not yet implemented")
-    }
-
     override fun getBranchNames(): List<String> {
         TODO("Not yet implemented")
     }
