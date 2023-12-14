@@ -34,7 +34,17 @@ class CliGitClient(
     override fun logRange(since: String, until: String): List<Commit> = gitLog("$since..$until").reversed()
 
     override fun getParents(commit: Commit): List<Commit> {
-        TODO("Not yet implemented")
+        return ProcessExecutor()
+            .directory(workingDirectory)
+            .command(listOf("git", "log", commit.hash, "--pretty=%P", "-1"))
+            .destroyOnExit()
+            .readOutput(true)
+            .execute()
+            .also(ProcessResult::requireZeroExitValue)
+            .output
+            .string
+            .split(" ")
+            .flatMap { parent -> log(parent.trim(), 1) }
     }
 
     override fun isWorkingDirectoryClean(): Boolean = ProcessExecutor()
