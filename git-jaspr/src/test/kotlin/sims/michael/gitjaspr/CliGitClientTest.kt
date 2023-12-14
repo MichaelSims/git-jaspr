@@ -173,4 +173,40 @@ class CliGitClientTest {
             }
         }
     }
+
+    @Test
+    fun `isWorkingDirectoryClean returns expected value`() {
+        withTestSetup {
+            createCommitsFrom(
+                testCase {
+                    repository {
+                        commit {
+                            title = "one"
+                            branch {
+                                commit { title = "a" }
+                                commit { title = "b" }
+                                commit { title = "c" }
+                                commit {
+                                    title = "d"
+                                    localRefs += "some-other-branch"
+                                }
+                            }
+                        }
+                        commit { title = "two" }
+                        commit {
+                            title = "three"
+                            body = "This is a body"
+                            localRefs += "main"
+                        }
+                    }
+                },
+            )
+
+            val readme = localRepo.resolve("README.txt")
+            check(readme.exists())
+            readme.appendText("This is a change")
+            val git = CliGitClient(localGit.workingDirectory)
+            assertFalse(git.isWorkingDirectoryClean())
+        }
+    }
 }

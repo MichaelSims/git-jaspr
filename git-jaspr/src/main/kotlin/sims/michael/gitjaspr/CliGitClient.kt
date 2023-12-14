@@ -37,9 +37,16 @@ class CliGitClient(
         TODO("Not yet implemented")
     }
 
-    override fun isWorkingDirectoryClean(): Boolean {
-        TODO("Not yet implemented")
-    }
+    override fun isWorkingDirectoryClean(): Boolean = ProcessExecutor()
+        .directory(workingDirectory)
+        .command(listOf("git", "status", "-s"))
+        .destroyOnExit()
+        .readOutput(true)
+        .execute()
+        .also(ProcessResult::requireZeroExitValue)
+        .output
+        .lines
+        .isEmpty()
 
     override fun getLocalCommitStack(remoteName: String, localObjectName: String, targetRefName: String): List<Commit> {
         TODO("Not yet implemented")
