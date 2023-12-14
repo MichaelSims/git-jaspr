@@ -209,4 +209,39 @@ class CliGitClientTest {
             assertFalse(git.isWorkingDirectoryClean())
         }
     }
+
+    @Test
+    fun `compare getLocalCommitStack`() {
+        withTestSetup {
+            createCommitsFrom(
+                testCase {
+                    repository {
+                        commit {
+                            title = "one"
+                            branch {
+                                commit { title = "a" }
+                                commit { title = "b" }
+                                commit { title = "c" }
+                                commit {
+                                    title = "d"
+                                    localRefs += "main"
+                                }
+                            }
+                        }
+                        commit { title = "two" }
+                        commit {
+                            title = "three"
+                            body = "This is a body"
+                            remoteRefs += "main"
+                        }
+                    }
+                },
+            )
+            val git = CliGitClient(localGit.workingDirectory)
+            assertEquals(
+                localGit.getLocalCommitStack(DEFAULT_REMOTE_NAME, DEFAULT_TARGET_REF, DEFAULT_TARGET_REF),
+                git.getLocalCommitStack(DEFAULT_REMOTE_NAME, DEFAULT_TARGET_REF, DEFAULT_TARGET_REF),
+            )
+        }
+    }
 }

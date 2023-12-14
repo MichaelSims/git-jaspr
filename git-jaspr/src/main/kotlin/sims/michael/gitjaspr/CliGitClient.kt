@@ -48,9 +48,8 @@ class CliGitClient(
         .lines
         .isEmpty()
 
-    override fun getLocalCommitStack(remoteName: String, localObjectName: String, targetRefName: String): List<Commit> {
-        TODO("Not yet implemented")
-    }
+    override fun getLocalCommitStack(remoteName: String, localObjectName: String, targetRefName: String): List<Commit> =
+        logRange("$remoteName/$targetRefName", localObjectName)
 
     override fun getBranchNames(): List<String> {
         TODO("Not yet implemented")
