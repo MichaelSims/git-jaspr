@@ -107,7 +107,7 @@ class GitJaspr(
 
         val existingPrsByCommitId = pullRequestsRebased.associateBy(PullRequest::commitId)
 
-        val isDraftRegex = "^draft\\b.*$".toRegex(IGNORE_CASE)
+        val isDraftRegex = "^(draft|wip)\\b.*$".toRegex(IGNORE_CASE)
         val prsToMutate = stack
             .windowedPairs()
             .map { (prevCommit, currentCommit) ->
