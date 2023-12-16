@@ -57,6 +57,6 @@
   }]},
   "bundles":[{
     "name":"org.eclipse.jgit.internal.JGitText",
-    "locales":["", "und"]
+    "locales":["und"]
   }]
 }

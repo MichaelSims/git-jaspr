@@ -31,8 +31,8 @@ class GitHubTestHarness private constructor(
     private val useFakeRemote: Boolean = true,
 ) {
 
-    val localGit: GitClient = JGitClient(localRepo)
-    private val remoteGit: GitClient = JGitClient(remoteRepo)
+    val localGit: GitClient = CliGitClient(localRepo)
+    val remoteGit: GitClient = CliGitClient(remoteRepo)
 
     private val ghClientsByUserKey: Map<String, GitHubClient> by lazy {
         if (!useFakeRemote) {
@@ -73,7 +73,9 @@ class GitHubTestHarness private constructor(
         val uriToClone = if (!useFakeRemote) {
             remoteUri
         } else {
-            remoteGit.init().createInitialCommit()
+            val remoteSource = scratchDir.resolve("remote-source")
+            JGitClient(remoteSource).init().createInitialCommit()
+            remoteGit.clone(remoteSource.toURI().toString(), bare = true)
             remoteRepo.toURI().toString()
         }
         localGit.clone(uriToClone)
@@ -104,6 +106,7 @@ class GitHubTestHarness private constructor(
             while (iterator.hasNext()) {
                 val commitData = iterator.next()
 
+                // Called for JGitClient's sake. If we're fully switched to CliGitClient, this can be removed
                 setGitCommitterInfo(commitData.committer.toIdent())
 
                 val existingHash = commitHashesByTitle[commitData.title]
@@ -238,21 +241,24 @@ class GitHubTestHarness private constructor(
                 restoreRegex.matchEntire(name)
             }
             .map {
-                RefSpec(FORCE_PUSH_PREFIX + it.groupValues[0], it.groupValues[1])
+                RefSpec(it.groupValues[0], it.groupValues[1])
             }
 
         // This currently deletes all "jaspr/" branches indiscriminately. Much better would be to capture the ones
         // we created via our JGitClient and delete only those
         val deleteRegex =
-            "($DELETE_PREFIX(.*)|${GitClient.R_REMOTES}$DEFAULT_REMOTE_NAME/($remoteBranchPrefix.*))"
+            "($DELETE_PREFIX(.*)|$DEFAULT_REMOTE_NAME/($remoteBranchPrefix.*))"
                 .toRegex()
 
         val toDelete = localGit.getBranchNames()
             .mapNotNull { name -> deleteRegex.matchEntire(name) }
             .map { result ->
-                RefSpec(FORCE_PUSH_PREFIX, result.groupValues.last(String::isNotBlank))
+                RefSpec(
+                    "", // Will force push below
+                    result.groupValues.last(String::isNotBlank),
+                )
             }
-        val refSpecs = (toRestore + toDelete).distinct()
+        val refSpecs = (toRestore + toDelete).distinct().map(RefSpec::forcePush)
         logger.debug("Pushing {}", refSpecs)
         localGit.push(refSpecs)
         localGit.deleteBranches(
@@ -287,12 +293,12 @@ class GitHubTestHarness private constructor(
         }
     }
 
-    private fun GitClient.createInitialCommit() = apply {
+    private fun GitClient.createInitialCommit(): Commit {
         val repoDir = workingDirectory
         val readme = "README.txt"
         val readmeFile = repoDir.resolve(readme)
         readmeFile.writeText("This is a test repo.\n")
-        add(readme).commit(INITIAL_COMMIT_SHORT_MESSAGE)
+        return add(readme).commit(INITIAL_COMMIT_SHORT_MESSAGE, commitIdent = DEFAULT_COMMITTER)
     }
 
     private fun CommitData.create(): Commit {
@@ -324,10 +330,12 @@ class GitHubTestHarness private constructor(
                         put("verify-result", if (safeWillPassVerification) "0" else "13")
                     }
                 },
+                commitIdent = committer.toIdent(),
             )
     }
 
-    private fun IdentData.toIdent(): Ident = Ident(name, email)
+    private fun IdentData.toIdent(): Ident =
+        Ident(name, email).takeUnless { it.name.isBlank() || it.email.isBlank() } ?: DEFAULT_COMMITTER
 
     private fun requireNamedRef(commit: CommitData) {
         require((commit.localRefs + commit.remoteRefs).isNotEmpty()) {
