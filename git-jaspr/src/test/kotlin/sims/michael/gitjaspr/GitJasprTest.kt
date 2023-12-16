@@ -1121,7 +1121,11 @@ commit-id: 0
                             id = "a"
                         }
                         commit {
-                            title = "b"
+                            title = "wip b"
+                            id = "b"
+                        }
+                        commit {
+                            title = "c"
                             localRefs += "development"
                         }
                     }
@@ -1130,7 +1134,7 @@ commit-id: 0
             push()
 
             assertEquals(
-                listOf(true, false),
+                listOf(true, true, false),
                 gitHub.getPullRequests().map(PullRequest::isDraft),
             )
         }
