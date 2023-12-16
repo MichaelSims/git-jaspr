@@ -237,8 +237,16 @@ abstract class GitJasprCommand(help: String = "", hidden: Boolean = false) :
         }
         .default(DEFAULT_REMOTE_NAME)
 
+    private val useCliGitClient by option().flag("--no-use-cli-git-client", default = true)
+        .help { "Use the CLI client instead of the JGit client. This option is slightly slower but has better " +
+            "compatibility with various SSH configurations such as OS X + ssh-agent." }
+
     val appWiring by lazy {
-        val gitClient = JGitClient(workingDirectory, remoteBranchPrefix)
+        val gitClient = if (useCliGitClient) {
+            CliGitClient(workingDirectory, remoteBranchPrefix)
+        } else {
+            JGitClient(workingDirectory, remoteBranchPrefix)
+        }
         val githubInfo = determineGithubInfo(gitClient)
         val config = Config(
             workingDirectory,
