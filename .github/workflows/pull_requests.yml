@@ -73,7 +73,7 @@ jobs:
         run: |
           git --version
           mkdir test-repo
-          cd test-repo && touch test-file && git add test-file && git commit -m "test commit" && git log --pretty=fuller
+          cd test-repo && git init && touch test-file && git add test-file && git commit -m "test commit" && git log --pretty=fuller
 
 #      - name: Run Tests
 #        run: ./gradlew build --configure-on-demand --max-workers=4
