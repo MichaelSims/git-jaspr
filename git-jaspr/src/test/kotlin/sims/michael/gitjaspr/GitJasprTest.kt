@@ -906,6 +906,44 @@ interface GitJasprTest {
     }
 
     @Test
+    fun `add footers does not consider a trailing URL a footer line`() {
+        // assert the absence of a bug where a URL was being interpreted as a footer line
+        withTestSetup(useFakeRemote, rollBackChanges = false) {
+            createCommitsFrom(
+                testCase {
+                    repository {
+                        commit {
+                            title = "Fix end of year data issue [providerDir]"
+                            body = """
+See this Slack thread:
+https://trillianthealth.slack.com/archives/C04J6Q655GR/p1702918943374039?thread_ts=1702918322.439999&cid=C04J6Q655GR
+
+                            """.trimMargin()
+                            id = ""
+                            localRefs += "main"
+                        }
+                    }
+                },
+            )
+
+            push()
+
+            assertEquals(
+                """
+Fix end of year data issue [providerDir]
+
+See this Slack thread:
+https://trillianthealth.slack.com/archives/C04J6Q655GR/p1702918943374039?thread_ts=1702918322.439999&cid=C04J6Q655GR
+
+commit-id: 0
+
+                """.trimIndent(),
+                localGit.log("HEAD", maxCount = 1).single().fullMessage,
+            )
+        }
+    }
+
+    @Test
     fun `commit ID is added with a blank line before it`() {
         withTestSetup(useFakeRemote) {
             createCommitsFrom(

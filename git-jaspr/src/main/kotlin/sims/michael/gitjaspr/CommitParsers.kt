@@ -45,9 +45,15 @@ object CommitParsers {
         val fullMessageTrimmed = fullMessage.trim()
         val maybeFooterSection = fullMessageTrimmed.substringAfterLast("\n\n")
         if (maybeFooterSection == fullMessageTrimmed) return emptyMap() // Just a subject
-        val maybeFooterLines = maybeFooterSection.lines().map { line -> line.split("\\s*:\\s*".toRegex()) }
-        return if (maybeFooterLines.all { list -> list.size == 2 }) {
-            maybeFooterLines.associate { (k, v) -> k to v }
+
+        val footerLineRegex = "^([^\\s:]+): ([^\\s:]+)$".toRegex()
+
+        val maybeFooterLines = maybeFooterSection.lines()
+        return if (maybeFooterLines.all { line -> footerLineRegex.matches(line) }) {
+            maybeFooterLines.associate { line ->
+                val (key, value) = line.split(":")
+                key.trim() to value.trim()
+            }
         } else {
             emptyMap()
         }

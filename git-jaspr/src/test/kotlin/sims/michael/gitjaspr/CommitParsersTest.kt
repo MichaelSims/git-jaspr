@@ -52,6 +52,19 @@ class CommitParsersTest {
     }
 
     @Test
+    fun `getFooters - subject, body url that could look like a footer line if your code was bad`() {
+        val message = """
+            This is a subject
+
+            See this Slack thread:
+            https://trillianthealth.slack.com/archives/C04J6Q655GR/p1702918943374039?thread_ts=1702918322.439999&cid=C04J6Q655GR
+
+        """.trimIndent()
+
+        assertEquals(emptyMap(), getFooters(message))
+    }
+
+    @Test
     fun `getFooters - subject, body, existing footer lines`() {
         val message = """
             This is a subject
