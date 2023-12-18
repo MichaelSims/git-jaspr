@@ -426,7 +426,7 @@ object Cli {
         is handled via an abstract base class.
          */
         NoOpCliktCommand(name = "git jaspr")
-            .versionOption("v7-beta")
+            .versionOption("v8-beta")
             .subcommands(
                 listOf(
                     Status(),
