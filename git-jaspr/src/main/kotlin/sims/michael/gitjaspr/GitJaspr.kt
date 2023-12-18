@@ -32,6 +32,7 @@ class GitJaspr(
 
         val statuses = getRemoteCommitStatuses(stack)
         val commitsWithDuplicateIds = statuses
+            .filter { status -> status.localCommit.id != null }
             .groupingBy { status -> checkNotNull(status.localCommit.id) }
             .aggregate { _, accumulator: List<RemoteCommitStatus>?, element, _ ->
                 (accumulator ?: emptyList()) + element
@@ -45,7 +46,7 @@ class GitJaspr(
                 append("[")
                 val statusBits = StatusBits(
                     commitIsPushed = when {
-                        commitsWithDuplicateIds.containsKey(checkNotNull(status.localCommit.id)) -> WARNING
+                        commitsWithDuplicateIds.containsKey(status.localCommit.id) -> WARNING
                         status.remoteCommit == null -> EMPTY
                         status.remoteCommit.hash != status.localCommit.hash -> WARNING
                         else -> SUCCESS
@@ -112,6 +113,7 @@ class GitJaspr(
         val stack = addCommitIdsToLocalStack(getLocalCommitStack()) ?: getLocalCommitStack()
 
         val commitsWithDuplicateIds = stack
+            .filter { it.id != null }
             .groupingBy { checkNotNull(it.id) }
             .aggregate { _, accumulator: List<Commit>?, element, _ ->
                 (accumulator ?: emptyList()) + element

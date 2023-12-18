@@ -810,6 +810,34 @@ interface GitJasprTest {
             )
         }
     }
+
+    // Test for a bug that was occurring when the stack had commits without ids
+    @Test
+    fun `status without commit IDs does not crash`() {
+        withTestSetup(useFakeRemote) {
+            createCommitsFrom(
+                testCase {
+                    repository {
+                        commit {
+                            title = "one"
+                            id = ""
+                        }
+                        commit {
+                            title = "two"
+                            id = ""
+                        }
+                        commit {
+                            title = "three"
+                            id = ""
+                            localRefs += "main"
+                        }
+                    }
+                },
+            )
+
+            logger.info(gitJaspr.getStatusString())
+        }
+    }
     //endregion
 
     //region push tests
