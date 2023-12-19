@@ -54,3 +54,82 @@ mind with regard to using Jaspr:
 - You want to make sure that people can force push to `jspr/**/*`. Jaspr's philosophy is that of Gerrit's, which is to
   favor a trunk based workflow where PR remediation is done via amends/edits and are force pushed (this is why Jaspr
   pushes revision history branches and includes diff links for them in the PR descriptions).
+
+## Note on functional tests
+
+This repo contains functional tests that work with a real GitHub remote and actually open/modify/close PRs. To use these
+tests, you will need to set some configuration options in your `~/.git-jaspr.properties` file:
+
+```properties
+github-test-harness.githubUri=git@github.com:some-project.git
+github-test-harness.userKey.michael.name=Michael Sims
+github-test-harness.userKey.michael.email=michael@example.com
+github-test-harness.userKey.michael.githubToken=<redacted>
+github-test-harness.userKey.derelictMan.name=Frank Grimes
+github-test-harness.userKey.derelictMan.email=frank@example.com
+github-test-harness.userKey.derelictMan.githubToken=<redacted>
+
+```
+
+Replace the `<redacted>` with GitHub classic PATs with the same permissions required by Jaspr. The `githubUri` should be
+the URI of a test project that the tests can push to and open PRs to, etc. The repo should have a workflow triggered on
+PRs that runs a fake verify script:
+
+Workflow:
+```yaml
+name: Pull Request
+
+on:
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+
+  build:
+    name: Build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+        name: Checkout repo
+        with:
+          fetch-depth: 0
+      - run: git checkout origin/${{ github.event.pull_request.head.ref }}
+
+      - name: Verify
+        run: |
+          chmod a+x verify.sh
+          ./verify.sh
+
+```
+
+verify.sh:
+```shell
+
+#!/usr/bin/env bash
+
+set -x
+set -e
+
+# Keeping around this commented code in case github decides to start being a pain again
+#git log --graph --all
+# shellcheck disable=SC2034
+#gitOutput=$(git show --pretty=full)
+
+verifyDelay=$(git show --pretty=full | awk '/^    verify-delay:/ { print $2 }')
+verifyResult=$(git show --pretty=full | awk '/^    verify-result:/ { print $2 }')
+
+if [[ "$verifyDelay" -gt 0 ]]; then
+  echo "Delaying $verifyDelay seconds"
+  sleep "$verifyDelay"
+fi
+
+if [[ "$verifyResult" ]]; then
+  echo "Exiting with code $verifyResult"
+  exit "$verifyResult"
+else
+    echo "Verify result not found in commit body, exiting success by default"
+    exit 0
+fi
+```
+
+If you try to run these and have questions, please contact me or open an issue and I'll try to help.
