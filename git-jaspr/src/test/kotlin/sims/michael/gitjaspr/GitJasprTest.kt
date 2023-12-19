@@ -1793,6 +1793,38 @@ E
     }
 
     @Test
+    fun `merge just one`() {
+        withTestSetup(useFakeRemote, rollBackChanges = true) {
+            createCommitsFrom(
+                testCase {
+                    repository {
+                        commit {
+                            title = "one"
+                            willPassVerification = true
+                            localRefs += "development"
+                            remoteRefs += buildRemoteRef("one")
+                        }
+                    }
+                    pullRequest {
+                        headRef = buildRemoteRef("one")
+                        baseRef = "main"
+                        title = "one"
+                        willBeApprovedByUserKey = "michael"
+                    }
+                },
+            )
+
+            waitForChecksToConclude("one")
+            merge(RefSpec("development", "main"))
+
+            assertEquals(
+                emptyList(),
+                localGit.getLocalCommitStack(DEFAULT_REMOTE_NAME, "development", DEFAULT_TARGET_REF),
+            )
+        }
+    }
+
+    @Test
     fun `autoMerge happy path`() {
         withTestSetup(useFakeRemote) {
             createCommitsFrom(

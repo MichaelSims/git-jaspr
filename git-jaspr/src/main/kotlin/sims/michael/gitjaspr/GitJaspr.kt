@@ -252,7 +252,7 @@ class GitJaspr(
         gitClient.push(refSpecs)
         logger.info("Merged {} {} to {}", indexLastMergeable + 1, refOrRefs(indexLastMergeable + 1), refSpec.remoteRef)
 
-        val prsToClose = statuses.slice(0..indexLastMergeable).mapNotNull(RemoteCommitStatus::pullRequest)
+        val prsToClose = statuses.slice(0 until indexLastMergeable).mapNotNull(RemoteCommitStatus::pullRequest)
         for (pr in prsToClose) {
             ghClient.closePullRequest(pr)
         }
