@@ -23,6 +23,7 @@ import com.github.ajalt.clikt.sources.PropertiesValueSource
 import com.github.ajalt.clikt.sources.ValueSource.Companion.getKey
 import kotlinx.coroutines.runBlocking
 import kotlinx.serialization.encodeToString
+import org.intellij.lang.annotations.Language
 import org.slf4j.Logger
 import org.slf4j.LoggerFactory
 import sims.michael.gitjaspr.RemoteRefEncoding.DEFAULT_REMOTE_BRANCH_PREFIX
@@ -160,7 +161,7 @@ private fun ArgumentTransformContext.convertRefSpecString(refSpecString: String)
 }
 
 abstract class GitJasprCommand(help: String = "", hidden: Boolean = false) :
-    CliktCommand(hidden = hidden, help = help) {
+    CliktCommand(hidden = hidden, help = help, epilog = helpEpilog) {
     private val workingDirectory = File(System.getProperty(WORKING_DIR_PROPERTY_NAME) ?: ".").findNearestGitDir()
         .canonicalFile
         .also { dir ->
@@ -449,3 +450,14 @@ const val DEFAULT_TARGET_REF = "main"
 const val DEFAULT_REMOTE_NAME = "origin"
 const val COMMIT_ID_LABEL = "commit-id"
 private const val GITHUB_TOKEN_ENV_VAR = "GIT_JASPR_TOKEN"
+
+@Language("Markdown")
+private val helpEpilog = """
+**Note on supplying config options via configuration files**
+
+Any option above can be supplied via the per-user config file ($CONFIG_FILE_NAME in your home directory) or the per-working copy config file ($CONFIG_FILE_NAME in your working directory). For example, you can supply the --use-cli-git-client flag in the config file like so:
+
+```
+use-cli-git-client=true
+```
+""".trimIndent()
