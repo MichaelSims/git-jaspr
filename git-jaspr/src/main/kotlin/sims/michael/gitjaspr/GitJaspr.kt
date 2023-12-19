@@ -234,11 +234,7 @@ class GitJaspr(
         }
 
         val prs = ghClient.getPullRequests()
-        val branchesToDelete = getBranchesToDeleteDuringMerge(
-            stack.slice(0..indexLastMergeable),
-            refSpec.remoteRef,
-            prs,
-        )
+        val branchesToDelete = getBranchesToDeleteDuringMerge(stack.slice(0..indexLastMergeable), refSpec.remoteRef)
 
         val lastMergeableStatus = statuses[indexLastMergeable]
         val lastPr = checkNotNull(lastMergeableStatus.pullRequest)
@@ -248,7 +244,7 @@ class GitJaspr(
         }
 
         val refSpecs = listOf(RefSpec(lastMergeableStatus.localCommit.hash, refSpec.remoteRef))
-        gitClient.push(refSpecs + branchesToDelete)
+        gitClient.push(refSpecs)
         logger.info("Merged {} ref(s) to {}", indexLastMergeable + 1, refSpec.remoteRef)
 
         val prsToClose = statuses.slice(0..indexLastMergeable).mapNotNull(RemoteCommitStatus::pullRequest)
@@ -264,6 +260,11 @@ class GitJaspr(
         for (pr in prsToRebase) {
             ghClient.updatePullRequest(pr)
         }
+
+        // Do this cleanup separately after we've rebased remaining PRs. Otherwise if we delete a branch that's the
+        // base ref for a current PR, GitHub will implicitly close it.
+        logger.info("Cleaning up {} branch(es).", branchesToDelete.size)
+        gitClient.push(branchesToDelete)
     }
 
     suspend fun autoMerge(refSpec: RefSpec, pollingIntervalSeconds: Int = 10) {
@@ -441,25 +442,19 @@ class GitJaspr(
     private fun getBranchesToDeleteDuringMerge(
         stackBeingMerged: List<Commit>,
         targetRef: String,
-        prs: List<PullRequest>,
     ): List<RefSpec> {
         logger.trace("getBranchesToDeleteDuringMerge {} {}", stackBeingMerged, targetRef)
         data class TargetRefToCommitId(val targetRef: String, val commitId: String)
 
         stackBeingMerged.map { it.toRemoteRefName() }
-        val prBaseRefs = prs.map(PullRequest::baseRefName).toSet()
 
-        val lastRefName = stackBeingMerged.last().toRemoteRefName()
         val deletionCandidates = stackBeingMerged
-            .dropLast(1) // Handled at the end, see below
             .asSequence()
             .map { commit -> checkNotNull(commit.id) }
             .map { id -> buildRemoteRef(id, targetRef, config.remoteBranchPrefix) }
             .mapNotNull { remoteRef -> getRemoteRefParts(remoteRef, config.remoteBranchPrefix) }
             .map { (targetRef, commitId, _) -> TargetRefToCommitId(targetRef, commitId) }
             .toList()
-            // Include the last ref for deletion only if no other PRs use it for a base
-            .plus(if (!prBaseRefs.contains(lastRefName)) listOf(lastRefName) else emptyList())
 
         logger.trace("Deletion candidates {}", deletionCandidates)
 

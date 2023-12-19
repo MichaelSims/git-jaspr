@@ -2320,8 +2320,6 @@ E
             merge(RefSpec("dev2", "main"))
             assertEquals(
                 listOf(
-                    buildRemoteRef("b"),
-                    buildRemoteRef("b_01"),
                     buildRemoteRef("c"),
                     buildRemoteRef("c_01"),
                     "main",
