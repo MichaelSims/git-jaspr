@@ -80,8 +80,7 @@ class GitJaspr(
             if (numCommitsBehind > 0) {
                 appendLine()
                 append("Your stack is out-of-date with the base branch ")
-                val commits = if (numCommitsBehind > 1) "commits" else "commit"
-                appendLine("($numCommitsBehind $commits behind ${refSpec.remoteRef}).")
+                appendLine("($numCommitsBehind ${commitOrCommits(numCommitsBehind)} behind ${refSpec.remoteRef}).")
                 append("You'll need to rebase it (`git rebase $remoteName/${refSpec.remoteRef}`) ")
                 appendLine("before your stack will be mergeable.")
             }
@@ -138,7 +137,13 @@ class GitJaspr(
         )
         val refSpecs = outOfDateBranches.map(RefSpec::forcePush) + revisionHistoryRefs
         gitClient.push(refSpecs)
-        logger.info("Pushed {} commit ref(s) and {} history ref(s)", outOfDateBranches.size, revisionHistoryRefs.size)
+        logger.info(
+            "Pushed {} commit {} and {} history {}",
+            outOfDateBranches.size,
+            refOrRefs(outOfDateBranches.size),
+            revisionHistoryRefs.size,
+            refOrRefs(revisionHistoryRefs.size),
+        )
 
         val existingPrsByCommitId = pullRequestsRebased.associateBy(PullRequest::commitId)
 
@@ -178,7 +183,7 @@ class GitJaspr(
                 ghClient.updatePullRequest(pr)
             }
         }
-        logger.info("Updated {} pull request(s)", prsToMutate.size)
+        logger.info("Updated {} pull {}", prsToMutate.size, requestOrRequests(prsToMutate.size))
 
         // Update pull request descriptions second pass. This is necessary because we don't have the GH-assigned PR
         // numbers for new PRs until after we create them.
@@ -188,7 +193,7 @@ class GitJaspr(
         for (pr in prsNeedingBodyUpdate) {
             ghClient.updatePullRequest(pr)
         }
-        logger.info("Updated descriptions for {} pull request(s)", prsToMutate.size)
+        logger.info("Updated descriptions for {} pull {}", prsToMutate.size, requestOrRequests(prsToMutate.size))
     }
 
     suspend fun merge(refSpec: RefSpec) {
@@ -245,7 +250,7 @@ class GitJaspr(
 
         val refSpecs = listOf(RefSpec(lastMergeableStatus.localCommit.hash, refSpec.remoteRef))
         gitClient.push(refSpecs)
-        logger.info("Merged {} ref(s) to {}", indexLastMergeable + 1, refSpec.remoteRef)
+        logger.info("Merged {} {} to {}", indexLastMergeable + 1, refOrRefs(indexLastMergeable + 1), refSpec.remoteRef)
 
         val prsToClose = statuses.slice(0..indexLastMergeable).mapNotNull(RemoteCommitStatus::pullRequest)
         for (pr in prsToClose) {
@@ -263,7 +268,7 @@ class GitJaspr(
 
         // Do this cleanup separately after we've rebased remaining PRs. Otherwise if we delete a branch that's the
         // base ref for a current PR, GitHub will implicitly close it.
-        logger.info("Cleaning up {} branch(es).", branchesToDelete.size)
+        logger.info("Cleaning up {} {}.", branchesToDelete.size, branchOrBranches(branchesToDelete.size))
         gitClient.push(branchesToDelete)
     }
 
@@ -332,7 +337,7 @@ class GitJaspr(
             logger.info("{} is orphaned", branch)
         }
         if (!dryRun) {
-            logger.info("Deleting {} branch(es)", orphanedBranches.size)
+            logger.info("Deleting {} {}", orphanedBranches.size, branchOrBranches(orphanedBranches.size))
             gitClient.push(orphanedBranches.map { RefSpec(FORCE_PUSH_PREFIX, it) })
         }
     }
@@ -596,6 +601,11 @@ class GitJaspr(
             SUCCESS("✅"), FAIL("❌"), PENDING("⌛"), UNKNOWN("❓"), EMPTY("➖"), WARNING("⚠️")
         }
     }
+
+    private fun refOrRefs(count: Int) = if (count == 1) "ref" else "refs"
+    private fun requestOrRequests(count: Int) = if (count == 1) "request" else "requests"
+    private fun branchOrBranches(count: Int) = if (count == 1) "branch" else "branches"
+    private fun commitOrCommits(count: Int) = if (count == 1) "commit" else "commits"
 
     companion object {
         private val HEADER = """
