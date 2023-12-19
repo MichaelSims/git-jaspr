@@ -234,8 +234,11 @@ class GitJaspr(
         }
 
         val prs = ghClient.getPullRequests()
-        val branchesToDelete =
-            getBranchesToDeleteDuringMerge(stack.slice(0..indexLastMergeable), refSpec.remoteRef, prs)
+        val branchesToDelete = getBranchesToDeleteDuringMerge(
+            stack.slice(0..indexLastMergeable),
+            refSpec.remoteRef,
+            prs,
+        )
 
         val lastMergeableStatus = statuses[indexLastMergeable]
         val lastPr = checkNotNull(lastMergeableStatus.pullRequest)
@@ -254,8 +257,9 @@ class GitJaspr(
         }
 
         val lastMergedRef = stack[indexLastMergeable].toRemoteRefName()
-        val prsToRebase =
-            prs.filter { it.baseRefName == lastMergedRef }.map { it.copy(baseRefName = refSpec.remoteRef) }
+        val prsToRebase = prs
+            .filter { it.baseRefName == lastMergedRef }
+            .map { it.copy(baseRefName = refSpec.remoteRef) }
         logger.trace("Rebasing {} prs to {}", prsToRebase.size, refSpec.remoteRef)
         for (pr in prsToRebase) {
             ghClient.updatePullRequest(pr)
