@@ -21,6 +21,8 @@ import com.github.ajalt.clikt.parameters.types.int
 import com.github.ajalt.clikt.sources.ChainedValueSource
 import com.github.ajalt.clikt.sources.PropertiesValueSource
 import com.github.ajalt.clikt.sources.ValueSource.Companion.getKey
+import com.github.ajalt.mordant.rendering.TextColors
+import com.github.ajalt.mordant.rendering.TextColors.*
 import kotlinx.coroutines.runBlocking
 import kotlinx.serialization.encodeToString
 import org.intellij.lang.annotations.Language
@@ -451,9 +453,10 @@ const val DEFAULT_REMOTE_NAME = "origin"
 const val COMMIT_ID_LABEL = "commit-id"
 private const val GITHUB_TOKEN_ENV_VAR = "GIT_JASPR_TOKEN"
 
+// Note the embedded color below matches what Clikt uses for section headings
 @Language("Markdown")
 private val helpEpilog = """
-**Note on supplying config options via configuration files**
+**${TextColors.rgb("#E5C07B").invoke("Note on supplying config options via configuration files")}**
 
 Any option above can be supplied via the per-user config file ($CONFIG_FILE_NAME in your home directory) or the per-working copy config file ($CONFIG_FILE_NAME in your working directory). For example, you can supply the --use-cli-git-client flag in the config file like so:
 
