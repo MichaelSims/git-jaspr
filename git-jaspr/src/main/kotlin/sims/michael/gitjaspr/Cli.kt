@@ -265,10 +265,13 @@ you'll need to re-enable it again.
         }
         .default(DEFAULT_REMOTE_NAME)
 
-    private val useCliGitClient by option().flag("--no-use-cli-git-client", default = false)
+    private val useCliGitClient by option().flag("--no-use-cli-git-client", default = (envvar = USE_CLI_GIT_CLIENT_ENV_VAR))
         .help {
-            "Use the CLI client instead of the JGit client. This option is slightly slower but has better " +
-                "compatibility with various SSH configurations such as OS X + ssh-agent."
+            """
+            Use the CLI client instead of the JGit client. This option is slightly slower but has better compatibility
+            with various SSH configurations such as OS X + ssh-agent. Can be provided via the per-user config file, a
+            per-working copy config file, or the environment variable $USE_CLI_GIT_CLIENT_ENV_VAR.
+            """.trimIndent()
         }
 
     val appWiring by lazy {
@@ -449,3 +452,4 @@ const val DEFAULT_TARGET_REF = "main"
 const val DEFAULT_REMOTE_NAME = "origin"
 const val COMMIT_ID_LABEL = "commit-id"
 private const val GITHUB_TOKEN_ENV_VAR = "GIT_JASPR_TOKEN"
+private const val USE_CLI_GIT_CLIENT_ENV_VAR = false

@@ -16,7 +16,8 @@ version maybe?) and install it into your `PATH` somewhere (`~/.local/bin`?) and 
 `~/.git-jaspr.properties` with the following contents:
 
 ```properties
-github-token=<GH PAT>
+github-token=<GH PAT> # required
+use-cli-git-client=true # optional, run a help command for more info
 ```
 
 Where `<GH PAT>` is a GitHub Personal Access Token (classic) with the permissions `read:org`, `read:user`, `repo`, and 
