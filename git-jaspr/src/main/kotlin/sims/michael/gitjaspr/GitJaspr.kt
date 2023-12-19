@@ -266,7 +266,7 @@ class GitJaspr(
             ghClient.updatePullRequest(pr)
         }
 
-        // Do this cleanup separately after we've rebased remaining PRs. Otherwise if we delete a branch that's the
+        // Do this cleanup separately after we've rebased remaining PRs. Otherwise, if we delete a branch that's the
         // base ref for a current PR, GitHub will implicitly close it.
         logger.info("Cleaning up {} {}.", branchesToDelete.size, branchOrBranches(branchesToDelete.size))
         gitClient.push(branchesToDelete)
