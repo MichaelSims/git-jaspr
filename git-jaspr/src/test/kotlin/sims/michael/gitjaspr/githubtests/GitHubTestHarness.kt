@@ -32,8 +32,8 @@ class GitHubTestHarness private constructor(
     private val useFakeRemote: Boolean = true,
 ) {
 
-    val localGit: GitClient = CliGitClient(localRepo)
-    val remoteGit: GitClient = CliGitClient(remoteRepo)
+    val localGit: GitClient = OptimizedCliGitClient(localRepo)
+    val remoteGit: GitClient = OptimizedCliGitClient(remoteRepo)
 
     private val ghClientsByUserKey: Map<String, GitHubClient> by lazy {
         if (!useFakeRemote) {
