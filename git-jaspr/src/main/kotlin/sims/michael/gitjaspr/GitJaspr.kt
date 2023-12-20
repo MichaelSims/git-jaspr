@@ -58,6 +58,7 @@ class GitJaspr(
                         status.checksPass -> SUCCESS
                         else -> FAIL
                     },
+                    readyForReview = if (status.pullRequest != null && status.isDraft != true) SUCCESS else EMPTY,
                     approved = when {
                         status.pullRequest == null -> EMPTY
                         status.approved == null -> EMPTY
@@ -221,13 +222,8 @@ class GitJaspr(
 
         val statuses = getRemoteCommitStatuses(stack)
 
-        // Do a "stack check"... find the first commit that isn't pushed, is out of date, isn't approved, or fails
-        // checks, and the one before is the last mergeable commit.
-        val firstIndexNotMergeable = statuses
-            .indexOfFirst { status ->
-                status.remoteCommit == null || status.remoteCommit.hash != status.localCommit.hash ||
-                    status.approved != true || status.checksPass != true
-            }
+        // Do a "stack check"... find the commit before the first commit that isn't mergeable
+        val firstIndexNotMergeable = statuses.indexOfFirst { status -> !status.isMergeable }
         val indexLastMergeable = if (firstIndexNotMergeable == -1) {
             statuses.lastIndex
         } else {
@@ -301,7 +297,7 @@ class GitJaspr(
             }
 
             val statuses = getRemoteCommitStatuses(stack)
-            if (statuses.all { status -> status.approved == true && status.checksPass == true }) {
+            if (statuses.all(RemoteCommitStatus::isMergeable)) {
                 merge(refSpec)
                 break
             }
@@ -313,6 +309,10 @@ class GitJaspr(
             }
             if (statuses.any { status -> status.approved == false }) {
                 logger.warn("PRs are not approved. Aborting auto-merge.")
+                break
+            }
+            if (statuses.any { status -> status.isDraft == true }) {
+                logger.warn("Some PRs in the stack are drafts. Aborting auto-merge.")
                 break
             }
 
@@ -443,6 +443,7 @@ class GitJaspr(
                     remoteCommit = remoteBranchesById[commit.id]?.commit,
                     pullRequest = prsById[commit.id],
                     checksPass = prsById[commit.id]?.checksPass,
+                    isDraft = prsById[commit.id]?.isDraft,
                     approved = prsById[commit.id]?.approved,
                 )
             }
@@ -596,9 +597,10 @@ class GitJaspr(
         val commitIsPushed: Status,
         val pullRequestExists: Status,
         val checksPass: Status,
+        val readyForReview: Status,
         val approved: Status,
     ) {
-        fun toList(): List<Status> = listOf(commitIsPushed, pullRequestExists, checksPass, approved)
+        fun toList(): List<Status> = listOf(commitIsPushed, pullRequestExists, checksPass, readyForReview, approved)
 
         @Suppress("unused")
         enum class Status(val emoji: String) {
@@ -616,9 +618,10 @@ class GitJaspr(
             | ┌─ commit is pushed
             | │ ┌─ pull request exists
             | │ │ ┌─ github checks pass
-            | │ │ │ ┌── pull request approved
-            | │ │ │ │ ┌─── stack check
-            | │ │ │ │ │
+            | │ │ │ ┌─ pull request is not a draft
+            | │ │ │ │ ┌── pull request approved
+            | │ │ │ │ │ ┌─── stack check
+            | │ │ │ │ │ │ 
 
         """.trimMargin()
         private const val COMMIT_MSG_HOOK = "commit-msg"

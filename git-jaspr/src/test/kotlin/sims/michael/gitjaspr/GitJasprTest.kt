@@ -128,9 +128,9 @@ interface GitJasprTest {
             val actual = getAndPrintStatusString()
             assertEquals(
                 """
-                    |[➖➖➖➖➖] one
-                    |[➖➖➖➖➖] two
-                    |[➖➖➖➖➖] three
+                    |[➖➖➖➖➖➖] one
+                    |[➖➖➖➖➖➖] two
+                    |[➖➖➖➖➖➖] three
                 """
                     .trimMargin()
                     .toStatusString(actual),
@@ -161,9 +161,9 @@ interface GitJasprTest {
             val actual = getAndPrintStatusString()
             assertEquals(
                 """
-                    |[✅➖➖➖➖] one
-                    |[➖➖➖➖➖] two
-                    |[➖➖➖➖➖] three
+                    |[✅➖➖➖➖➖] one
+                    |[➖➖➖➖➖➖] two
+                    |[➖➖➖➖➖➖] three
                 """
                     .trimMargin()
                     .toStatusString(actual),
@@ -199,9 +199,9 @@ interface GitJasprTest {
             val actual = getAndPrintStatusString()
             assertEquals(
                 """
-                    |[✅✅⌛➖➖] %s : one
-                    |[➖➖➖➖➖] two
-                    |[➖➖➖➖➖] three
+                    |[✅✅⌛✅➖➖] %s : one
+                    |[➖➖➖➖➖➖] two
+                    |[➖➖➖➖➖➖] three
                 """
                     .trimMargin()
                     .toStatusString(actual),
@@ -240,9 +240,9 @@ interface GitJasprTest {
             val actual = getAndPrintStatusString()
             assertEquals(
                 """
-                    |[✅✅✅➖➖] %s : one
-                    |[➖➖➖➖➖] two
-                    |[➖➖➖➖➖] three
+                    |[✅✅✅✅➖➖] %s : one
+                    |[➖➖➖➖➖➖] two
+                    |[➖➖➖➖➖➖] three
                 """
                     .trimMargin()
                     .toStatusString(actual),
@@ -298,9 +298,9 @@ interface GitJasprTest {
             val actual = getAndPrintStatusString()
             assertEquals(
                 """
-                    |[✅✅✅✅✅] %s : one
-                    |[✅✅✅➖➖] %s : two
-                    |[✅✅✅➖➖] %s : three
+                    |[✅✅✅✅✅✅] %s : one
+                    |[✅✅✅✅➖➖] %s : two
+                    |[✅✅✅✅➖➖] %s : three
                 """
                     .trimMargin()
                     .toStatusString(actual),
@@ -367,9 +367,9 @@ interface GitJasprTest {
             val actual = getAndPrintStatusString()
             assertEquals(
                 """
-                    |[✅✅✅✅➖] %s : one
-                    |[✅✅✅✅➖] %s : two
-                    |[✅✅✅✅➖] %s : three
+                    |[✅✅✅✅✅➖] %s : one
+                    |[✅✅✅✅✅➖] %s : two
+                    |[✅✅✅✅✅➖] %s : three
                     |
                     |Your stack is out-of-date with the base branch (1 commit behind main).
                     |You'll need to rebase it (`git rebase origin/main`) before your stack will be mergeable.
@@ -442,9 +442,9 @@ interface GitJasprTest {
             val actual = getAndPrintStatusString()
             assertEquals(
                 """
-                    |[✅✅✅✅➖] %s : one
-                    |[✅✅✅✅➖] %s : two
-                    |[✅✅✅✅➖] %s : three
+                    |[✅✅✅✅✅➖] %s : one
+                    |[✅✅✅✅✅➖] %s : two
+                    |[✅✅✅✅✅➖] %s : three
                     |
                     |Your stack is out-of-date with the base branch (2 commits behind main).
                     |You'll need to rebase it (`git rebase origin/main`) before your stack will be mergeable.
@@ -505,9 +505,72 @@ interface GitJasprTest {
             val actual = getAndPrintStatusString()
             assertEquals(
                 """
-                    |[✅✅✅✅✅] %s : one
-                    |[✅✅✅✅✅] %s : two
-                    |[✅✅✅✅✅] %s : three
+                    |[✅✅✅✅✅✅] %s : one
+                    |[✅✅✅✅✅✅] %s : two
+                    |[✅✅✅✅✅✅] %s : three
+                """
+                    .trimMargin()
+                    .toStatusString(actual),
+                actual,
+            )
+        }
+    }
+
+    @Test
+    fun `status stack check with draft PR`() {
+        withTestSetup(useFakeRemote) {
+            createCommitsFrom(
+                testCase {
+                    repository {
+                        commit {
+                            title = "one"
+                            id = "one"
+                            willPassVerification = true
+                            remoteRefs += buildRemoteRef("one")
+                        }
+                        commit {
+                            title = "two"
+                            id = "two"
+                            willPassVerification = true
+                            remoteRefs += buildRemoteRef("two")
+                        }
+                        commit {
+                            title = "draft: three"
+                            id = "three"
+                            willPassVerification = true
+                            remoteRefs += buildRemoteRef("three")
+                            localRefs += "development"
+                        }
+                    }
+                    pullRequest {
+                        headRef = buildRemoteRef("one")
+                        baseRef = "main"
+                        title = "one"
+                        willBeApprovedByUserKey = "michael"
+                    }
+                    pullRequest {
+                        headRef = buildRemoteRef("two")
+                        baseRef = buildRemoteRef("one")
+                        title = "two"
+                        willBeApprovedByUserKey = "michael"
+                    }
+                    pullRequest {
+                        headRef = buildRemoteRef("three")
+                        baseRef = buildRemoteRef("two")
+                        title = "draft: three"
+                        willBeApprovedByUserKey = "michael"
+                    }
+                },
+            )
+
+            waitForChecksToConclude("one", "two", "three")
+
+            val actual = getAndPrintStatusString()
+            assertEquals(
+                """
+                    |[✅✅✅✅✅✅] %s : one
+                    |[✅✅✅✅✅✅] %s : two
+                    |[✅✅✅➖✅➖] %s : draft: three
                 """
                     .trimMargin()
                     .toStatusString(actual),
@@ -565,9 +628,9 @@ interface GitJasprTest {
             val actual = getAndPrintStatusString()
             assertEventuallyEquals(
                 """
-                    |[✅✅✅➖➖] %s : one
-                    |[✅✅✅✅➖] %s : two
-                    |[✅✅✅➖➖] %s : three
+                    |[✅✅✅✅➖➖] %s : one
+                    |[✅✅✅✅✅➖] %s : two
+                    |[✅✅✅✅➖➖] %s : three
                 """
                     .trimMargin()
                     .toStatusString(actual),
@@ -624,9 +687,9 @@ interface GitJasprTest {
             val actual = getAndPrintStatusString()
             assertEquals(
                 """
-                    |[✅✅✅➖➖] %s : one
-                    |[✅✅❌➖➖] %s : two
-                    |[✅✅✅➖➖] %s : three
+                    |[✅✅✅✅➖➖] %s : one
+                    |[✅✅❌✅➖➖] %s : two
+                    |[✅✅✅✅➖➖] %s : three
                 """
                     .trimMargin()
                     .toStatusString(actual),
@@ -671,7 +734,7 @@ interface GitJasprTest {
             val actual = getAndPrintStatusString(RefSpec("development", "development"))
             assertEquals(
                 """
-                    |[✅✅✅✅✅] %s : three
+                    |[✅✅✅✅✅✅] %s : three
                 """
                     .trimMargin()
                     .toStatusString(actual),
@@ -758,9 +821,9 @@ interface GitJasprTest {
             val actual = getAndPrintStatusString(RefSpec("development", "main"))
             assertEquals(
                 """
-                    |[✅✅✅✅✅] %s : one
-                    |[⚠️✅✅✅➖] %s : three
-                    |[⚠️✅✅✅➖] %s : four
+                    |[✅✅✅✅✅✅] %s : one
+                    |[⚠️✅✅✅✅➖] %s : three
+                    |[⚠️✅✅✅✅➖] %s : four
                 """
                     .trimMargin()
                     .toStatusString(actual),
@@ -795,9 +858,9 @@ interface GitJasprTest {
             val actual = getAndPrintStatusString()
             assertEquals(
                 """
-                    |[⚠️➖➖➖➖] one
-                    |[⚠️➖➖➖➖] two
-                    |[➖➖➖➖➖] three
+                    |[⚠️➖➖➖➖➖] one
+                    |[⚠️➖➖➖➖➖] two
+                    |[➖➖➖➖➖➖] three
                     |
                     |Some commits in your local stack have duplicate IDs:
                     |- a: (one, two)
@@ -1960,7 +2023,8 @@ E
                             remoteRefs += buildRemoteRef("b")
                         }
                         commit {
-                            title = "c"
+                            title = "draft: c"
+                            id = "c"
                             willPassVerification = true
                             remoteRefs += buildRemoteRef("c")
                         }
@@ -1991,7 +2055,8 @@ E
                     pullRequest {
                         headRef = buildRemoteRef("c")
                         baseRef = buildRemoteRef("b")
-                        title = "c"
+                        title = "draft: c"
+                        willBeApprovedByUserKey = "michael"
                     }
                     pullRequest {
                         headRef = buildRemoteRef("d")
@@ -2011,7 +2076,7 @@ E
             merge(RefSpec("development", "main"))
             assertEquals(
                 // All mergeable commits were merged, leaving c, d, and e as the only one not merged
-                listOf("c", "d", "e"),
+                listOf("draft: c", "d", "e"),
                 localGit
                     .getLocalCommitStack(DEFAULT_REMOTE_NAME, "development", DEFAULT_TARGET_REF)
                     .map(Commit::shortMessage),
@@ -2631,9 +2696,10 @@ E
             | ┌─ commit is pushed
             | │ ┌─ pull request exists
             | │ │ ┌─ github checks pass
-            | │ │ │ ┌── pull request approved
-            | │ │ │ │ ┌─── stack check
-            | │ │ │ │ │
+            | │ │ │ ┌─ pull request is not a draft
+            | │ │ │ │ ┌── pull request approved
+            | │ │ │ │ │ ┌─── stack check
+            | │ │ │ │ │ │ 
             |$formattedString
 
         """.trimMargin()

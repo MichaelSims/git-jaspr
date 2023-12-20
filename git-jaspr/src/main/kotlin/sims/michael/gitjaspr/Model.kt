@@ -59,8 +59,14 @@ data class RemoteCommitStatus(
     val remoteCommit: Commit?,
     val pullRequest: PullRequest?,
     val checksPass: Boolean?,
+    val isDraft: Boolean?,
     val approved: Boolean?,
-)
+) {
+    val isMergeable = localCommit.hash == remoteCommit?.hash &&
+        checksPass == true &&
+        isDraft != true &&
+        approved == true
+}
 
 data class PullRequest(
     val id: String?,

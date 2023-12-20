@@ -188,7 +188,7 @@ class GitHubTestHarness private constructor(
                 .appendText("This is an uncommitted change.\n")
         }
 
-        val isDraftRegex = "^draft\\b.*$".toRegex(IGNORE_CASE)
+        val isDraftRegex = "^(draft|wip)\\b.*$".toRegex(IGNORE_CASE)
         val prs = testCase.pullRequests
         if (prs.isNotEmpty()) {
             val existingPrsByTitle = gitHub.getPullRequestsById().associateBy(PullRequest::title)
