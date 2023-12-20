@@ -22,7 +22,6 @@ import com.github.ajalt.clikt.sources.ChainedValueSource
 import com.github.ajalt.clikt.sources.PropertiesValueSource
 import com.github.ajalt.clikt.sources.ValueSource.Companion.getKey
 import com.github.ajalt.mordant.rendering.TextColors
-import com.github.ajalt.mordant.rendering.TextColors.*
 import kotlinx.coroutines.runBlocking
 import kotlinx.serialization.encodeToString
 import org.intellij.lang.annotations.Language
