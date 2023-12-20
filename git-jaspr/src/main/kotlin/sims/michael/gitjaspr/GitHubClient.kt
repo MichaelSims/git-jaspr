@@ -259,14 +259,18 @@ class GitHubClientImpl(
 
     private suspend fun fetchRepositoryId(gitHubInfo: GitHubInfo): String {
         logger.trace("fetchRepositoryId {}", gitHubInfo)
-        val response = delegate.execute(
-            GetRepositoryId(
-                GetRepositoryId.Variables(
-                    gitHubInfo.owner,
-                    gitHubInfo.name,
+        val response = delegate
+            .execute(
+                GetRepositoryId(
+                    GetRepositoryId.Variables(
+                        gitHubInfo.owner,
+                        gitHubInfo.name,
+                    ),
                 ),
-            ),
-        )
+            )
+            .also { response ->
+                response.checkNoErrors { logger.error("Error fetching repository ID for {}", gitHubInfo) }
+            }
         val repositoryId = response.data?.repository?.id
         logger.logRateLimitInfo(response.data?.rateLimit?.toCanonicalRateLimitInfo())
         return checkNotNull(repositoryId) { "Failed to fetch repository ID, response is null" }
