@@ -92,12 +92,13 @@ class GitHubStubClient(private val remoteBranchPrefix: String, private val local
     // PRs so that the PR state is always viewed consistently with the git repo state
     override fun autoClosePrs() {
         logger.trace("autoClosePrs")
-        val commitsById = localGit.logAll().associateBy(Commit::id)
+        val remoteBranchesById = localGit.getRemoteBranchesById()
         synchronized(prs) {
             for (i in 0 until prs.size) {
                 val pr = prs[i].pullRequest
-                val commit = checkNotNull(commitsById[pr.commitId ?: continue])
-                val range = localGit.logRange("$DEFAULT_REMOTE_NAME/${DEFAULT_TARGET_REF}", commit.hash)
+                val commitId = pr.commitId ?: continue // Commit missing ID
+                val remoteBranch = remoteBranchesById[commitId] ?: continue // No remote branch for commit
+                val range = localGit.logRange("$DEFAULT_REMOTE_NAME/${DEFAULT_TARGET_REF}", remoteBranch.commit.hash)
                 // Close it if it's already been merged
                 if (range.isEmpty()) {
                     logger.trace("autoClosePrs closing {}", prs[i])
