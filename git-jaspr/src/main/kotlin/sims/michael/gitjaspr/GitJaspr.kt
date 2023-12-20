@@ -266,6 +266,10 @@ class GitJaspr(
             ghClient.updatePullRequest(pr)
         }
 
+        // Call this for the benefit of the stub client in case we're running within tests. In production, this does
+        // nothing as GitHub will "auto close" PRs that are merged
+        ghClient.autoClosePrs()
+
         // Do this cleanup separately after we've rebased remaining PRs. Otherwise, if we delete a branch that's the
         // base ref for a current PR, GitHub will implicitly close it.
         logger.info("Cleaning up {} {}.", branchesToDelete.size, branchOrBranches(branchesToDelete.size))

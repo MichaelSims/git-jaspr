@@ -25,6 +25,7 @@ interface GitHubClient {
     suspend fun updatePullRequest(pullRequest: PullRequest)
     suspend fun closePullRequest(pullRequest: PullRequest)
     suspend fun approvePullRequest(pullRequest: PullRequest)
+    fun autoClosePrs()
 }
 
 class GitHubClientImpl(
@@ -250,6 +251,10 @@ class GitHubClientImpl(
             .also { response ->
                 response.checkNoErrors { logger.error("Error approving PR #{}", pullRequest.number) }
             }
+    }
+
+    override fun autoClosePrs() {
+        // No-op: only the stub client needs to do this
     }
 
     private suspend fun fetchRepositoryId(gitHubInfo: GitHubInfo): String {

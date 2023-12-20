@@ -90,7 +90,7 @@ class GitHubStubClient(private val remoteBranchPrefix: String, private val local
 
     // Mimic GitHub's behavior since our program logic depends on it. Should be called from any method that returns
     // PRs so that the PR state is always viewed consistently with the git repo state
-    private fun autoClosePrs() {
+    override fun autoClosePrs() {
         logger.trace("autoClosePrs")
         val commitsById = localGit.logAll().associateBy(Commit::id)
         synchronized(prs) {
