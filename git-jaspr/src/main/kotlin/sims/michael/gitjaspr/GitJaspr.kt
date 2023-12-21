@@ -2,6 +2,7 @@ package sims.michael.gitjaspr
 
 import kotlinx.coroutines.delay
 import org.slf4j.LoggerFactory
+import sims.michael.gitjaspr.CommitParsers.getSubjectAndBodyFromFullMessage
 import sims.michael.gitjaspr.CommitParsers.trimFooters
 import sims.michael.gitjaspr.GitJaspr.StatusBits.Status
 import sims.michael.gitjaspr.GitJaspr.StatusBits.Status.*
@@ -386,7 +387,15 @@ class GitJaspr(
     ): String {
         val remoteBranches: List<String> = gitClient.getRemoteBranches().map(RemoteBranch::name)
         return buildString {
-            append(trimFooters(fullMessage))
+            val fullMessageWithoutFooters = trimFooters(fullMessage)
+            val (subject, body) = getSubjectAndBodyFromFullMessage(fullMessageWithoutFooters)
+            // Render subject with an H3 header
+            append("### ")
+            appendLine(subject)
+            if (body != null) {
+                appendLine()
+                appendLine(body)
+            }
             appendLine()
             if (pullRequests.isNotEmpty()) {
                 appendLine("**Stack**:")

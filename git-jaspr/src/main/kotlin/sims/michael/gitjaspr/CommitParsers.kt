@@ -7,6 +7,19 @@ import java.time.ZoneId
 
 object CommitParsers {
 
+    data class SubjectAndBody(val subject: String, val body: String?)
+
+    fun getSubjectAndBodyFromFullMessage(fullMessage: String): SubjectAndBody {
+        return SubjectAndBody(
+            fullMessage.substringBefore("\n\n").replace("\n", " ").trim(),
+            if (fullMessage.contains("\n\n")) {
+                fullMessage.substringAfter("\n\n").trim().takeIf(String::isNotBlank)
+            } else {
+                null
+            },
+        )
+    }
+
     fun parseCommitLogEntry(logEntry: String): Commit {
         val split = logEntry.split(GIT_FORMAT_SEPARATOR)
         check(split.size == 8) {

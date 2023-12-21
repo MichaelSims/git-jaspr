@@ -1,12 +1,62 @@
 package sims.michael.gitjaspr
 
 import org.junit.jupiter.api.Test
+import sims.michael.gitjaspr.CommitParsers.SubjectAndBody
 import sims.michael.gitjaspr.CommitParsers.addFooters
 import sims.michael.gitjaspr.CommitParsers.getFooters
+import sims.michael.gitjaspr.CommitParsers.getSubjectAndBodyFromFullMessage
 import sims.michael.gitjaspr.CommitParsers.trimFooters
 import kotlin.test.assertEquals
 
 class CommitParsersTest {
+
+    @Test
+    fun `getSubjectAndBodyFromFullMessage - subject only`() {
+        assertEquals(
+            SubjectAndBody("This is a subject", null),
+            getSubjectAndBodyFromFullMessage("This is a subject"),
+        )
+    }
+
+    @Test
+    fun `getSubjectAndBodyFromFullMessage - subject with newline`() {
+        assertEquals(
+            SubjectAndBody("This is a subject", null),
+            getSubjectAndBodyFromFullMessage("This is a subject\n"),
+        )
+    }
+
+    @Test
+    fun `getSubjectAndBodyFromFullMessage - subject and body`() {
+        val message = """
+            This is a subject
+            
+            This is a body
+            
+        """.trimIndent()
+
+        assertEquals(
+            SubjectAndBody("This is a subject", "This is a body"),
+            getSubjectAndBodyFromFullMessage(message),
+        )
+    }
+
+    @Test
+    fun `getSubjectAndBodyFromFullMessage - multiline subject`() {
+        val message = """
+            This is a subject
+            with three lines
+            but still a subject
+            
+            This is a body
+            
+        """.trimIndent()
+
+        assertEquals(
+            SubjectAndBody("This is a subject with three lines but still a subject", "This is a body"),
+            getSubjectAndBodyFromFullMessage(message),
+        )
+    }
 
     @Test
     fun `getFooters - subject only`() {

@@ -1500,7 +1500,7 @@ commit-id: 0
             assertEquals(
                 listOf(
                     """
-1
+### 1
 
 **Stack**:
 - %s
@@ -1509,7 +1509,7 @@ commit-id: 0
 
                     """.trimIndent().toPrBodyString(actualIterator.next()),
                     """
-2
+### 2
 
 **Stack**:
 - %s
@@ -1518,7 +1518,7 @@ commit-id: 0
 
                     """.trimIndent().toPrBodyString(actualIterator.next()),
                     """
-3
+### 3
 
 This is a body
 
@@ -1577,7 +1577,7 @@ This is a body
             assertEquals(
                 listOf(
                     """
-A
+### A
 
 **Stack**:
 - %s
@@ -1593,7 +1593,7 @@ A
 
                     """.trimIndent().toPrBodyString(actualIterator.next()),
                     """
-B
+### B
 
 **Stack**:
 - %s
@@ -1609,7 +1609,7 @@ B
 
                     """.trimIndent().toPrBodyString(actualIterator.next()),
                     """
-C
+### C
 
 **Stack**:
 - %s
@@ -1625,7 +1625,7 @@ C
 
                     """.trimIndent().toPrBodyString(actualIterator.next()),
                     """
-D
+### D
 
 **Stack**:
 - %s
@@ -1636,7 +1636,7 @@ D
 
                     """.trimIndent().toPrBodyString(actualIterator.next()),
                     """
-E
+### E
 
 **Stack**:
 - %s
@@ -1652,7 +1652,7 @@ E
 
                     """.trimIndent().toPrBodyString(actualIterator.next()),
                     """
-one
+### one
 
 **Stack**:
 - %s
@@ -1668,7 +1668,7 @@ one
 
                     """.trimIndent().toPrBodyString(actualIterator.next()),
                     """
-two
+### two
 
 **Stack**:
 - %s ⬅
@@ -1742,7 +1742,7 @@ two
             assertEquals(
                 listOf(
                     """
-A
+### A
 
 **Stack**:
 - %s
@@ -1751,7 +1751,7 @@ A
 
                     """.trimIndent().toPrBodyString(actualIterator.next()),
                     """
-B
+### B
 
 **Stack**:
 - %s
@@ -1760,7 +1760,7 @@ B
 
                     """.trimIndent().toPrBodyString(actualIterator.next()),
                     """
-C
+### C
 
 **Stack**:
 - %s ⬅
@@ -1769,7 +1769,7 @@ C
 
                     """.trimIndent().toPrBodyString(actualIterator.next()),
                     """
-D
+### D
 
 **Stack**:
 - %s ⬅
@@ -1778,7 +1778,7 @@ D
 
                     """.trimIndent().toPrBodyString(actualIterator.next()),
                     """
-E
+### E
 
 **Stack**:
 - %s ⬅
