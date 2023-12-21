@@ -269,8 +269,7 @@ class GitJaspr(
 
         // Do this cleanup separately after we've rebased remaining PRs. Otherwise, if we delete a branch that's the
         // base ref for a current PR, GitHub will implicitly close it.
-        logger.info("Cleaning up {} {}.", branchesToDelete.size, branchOrBranches(branchesToDelete.size))
-        gitClient.push(branchesToDelete)
+        cleanUpBranches(branchesToDelete)
     }
 
     suspend fun autoMerge(refSpec: RefSpec, pollingIntervalSeconds: Int = 10) {
@@ -494,6 +493,28 @@ class GitJaspr(
             .map { branchName -> RefSpec(FORCE_PUSH_PREFIX, branchName) }
         logger.trace("Deletion list {}", branchesToDelete)
         return branchesToDelete
+    }
+
+    private suspend fun cleanUpBranches(branchesToDelete: List<RefSpec>) {
+        logger.info("Cleaning up {} {}.", branchesToDelete.size, branchOrBranches(branchesToDelete.size))
+        val maxTries = 3
+        val delayBetweenTries = 500L
+        var tries = 0
+        while (true) {
+            try {
+                gitClient.push(branchesToDelete)
+                break
+            } catch (e: Exception) {
+                tries++
+                logger.error("Failed to delete branches (attempt $tries of $maxTries)", e)
+                if (tries < maxTries) {
+                    logger.info("Retrying in {} ms...", delayBetweenTries)
+                    delay(delayBetweenTries)
+                } else {
+                    throw e
+                }
+            }
+        }
     }
 
     class SinglePullRequestPerCommitConstraintViolation(override val message: String) : RuntimeException(message)
