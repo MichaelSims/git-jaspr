@@ -1500,6 +1500,7 @@ commit-id: 0
             assertEquals(
                 listOf(
                     """
+<!-- jaspr start -->
 ### 1
 
 **Stack**:
@@ -1509,6 +1510,7 @@ commit-id: 0
 
                     """.trimIndent().toPrBodyString(actualIterator.next()),
                     """
+<!-- jaspr start -->
 ### 2
 
 **Stack**:
@@ -1518,6 +1520,7 @@ commit-id: 0
 
                     """.trimIndent().toPrBodyString(actualIterator.next()),
                     """
+<!-- jaspr start -->
 ### 3
 
 This is a body
@@ -1577,6 +1580,7 @@ This is a body
             assertEquals(
                 listOf(
                     """
+<!-- jaspr start -->
 ### A
 
 **Stack**:
@@ -1593,6 +1597,7 @@ This is a body
 
                     """.trimIndent().toPrBodyString(actualIterator.next()),
                     """
+<!-- jaspr start -->
 ### B
 
 **Stack**:
@@ -1609,6 +1614,7 @@ This is a body
 
                     """.trimIndent().toPrBodyString(actualIterator.next()),
                     """
+<!-- jaspr start -->
 ### C
 
 **Stack**:
@@ -1625,6 +1631,7 @@ This is a body
 
                     """.trimIndent().toPrBodyString(actualIterator.next()),
                     """
+<!-- jaspr start -->
 ### D
 
 **Stack**:
@@ -1636,6 +1643,7 @@ This is a body
 
                     """.trimIndent().toPrBodyString(actualIterator.next()),
                     """
+<!-- jaspr start -->
 ### E
 
 **Stack**:
@@ -1652,6 +1660,7 @@ This is a body
 
                     """.trimIndent().toPrBodyString(actualIterator.next()),
                     """
+<!-- jaspr start -->
 ### one
 
 **Stack**:
@@ -1668,6 +1677,7 @@ This is a body
 
                     """.trimIndent().toPrBodyString(actualIterator.next()),
                     """
+<!-- jaspr start -->
 ### two
 
 **Stack**:
@@ -1742,6 +1752,7 @@ This is a body
             assertEquals(
                 listOf(
                     """
+<!-- jaspr start -->
 ### A
 
 **Stack**:
@@ -1751,6 +1762,7 @@ This is a body
 
                     """.trimIndent().toPrBodyString(actualIterator.next()),
                     """
+<!-- jaspr start -->
 ### B
 
 **Stack**:
@@ -1760,6 +1772,7 @@ This is a body
 
                     """.trimIndent().toPrBodyString(actualIterator.next()),
                     """
+<!-- jaspr start -->
 ### C
 
 **Stack**:
@@ -1769,6 +1782,7 @@ This is a body
 
                     """.trimIndent().toPrBodyString(actualIterator.next()),
                     """
+<!-- jaspr start -->
 ### D
 
 **Stack**:
@@ -1778,6 +1792,7 @@ This is a body
 
                     """.trimIndent().toPrBodyString(actualIterator.next()),
                     """
+<!-- jaspr start -->
 ### E
 
 **Stack**:

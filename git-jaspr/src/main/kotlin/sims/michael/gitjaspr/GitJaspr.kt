@@ -164,7 +164,7 @@ class GitJaspr(
                     // commit is the remote ref name (i.e. jaspr/<commit-id>) of the previous commit in the stack
                     baseRefName = prevCommit?.toRemoteRefName() ?: refSpec.remoteRef,
                     title = currentCommit.shortMessage,
-                    body = buildPullRequestBody(currentCommit.fullMessage),
+                    body = buildPullRequestBody(currentCommit.fullMessage, emptyList(), existingPr),
                     checksPass = existingPr?.checksPass,
                     approved = existingPr?.approved,
                     checkConclusionStates = existingPr?.checkConclusionStates.orEmpty(),
@@ -372,7 +372,7 @@ class GitJaspr(
                 val newBody = buildPullRequestBody(
                     fullMessage = commit.fullMessage,
                     pullRequests = stackPrsReordered.reversed(),
-                    existingPr.commitId,
+                    existingPr,
                 )
                 existingPr.copy(body = newBody)
             }
@@ -383,10 +383,15 @@ class GitJaspr(
     private fun buildPullRequestBody(
         fullMessage: String,
         pullRequests: List<PullRequest> = emptyList(),
-        currentCommitId: String? = null,
+        existingPr: PullRequest? = null,
     ): String {
         val remoteBranches: List<String> = gitClient.getRemoteBranches().map(RemoteBranch::name)
+        val jasprStartComment = "<!-- jaspr start -->"
         return buildString {
+            if (existingPr != null && existingPr.body.contains(jasprStartComment)) {
+                append(existingPr.body.substringBefore(jasprStartComment))
+            }
+            appendLine(jasprStartComment)
             val fullMessageWithoutFooters = trimFooters(fullMessage)
             val (subject, body) = getSubjectAndBodyFromFullMessage(fullMessageWithoutFooters)
             // Render subject with an H3 header
@@ -401,7 +406,7 @@ class GitJaspr(
                 appendLine("**Stack**:")
                 for (pr in pullRequests) {
                     append("- #${pr.number}")
-                    if (pr.commitId == currentCommitId) {
+                    if (pr.commitId == existingPr?.commitId) {
                         append(" ⬅")
                     }
                     appendLine()
