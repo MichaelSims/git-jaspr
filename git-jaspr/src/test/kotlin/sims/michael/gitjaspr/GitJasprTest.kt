@@ -1871,6 +1871,74 @@ This is a body
     }
 
     @Test
+    fun `merge - push and merge`() {
+        withTestSetup(useFakeRemote) {
+            createCommitsFrom(
+                testCase {
+                    repository {
+                        commit { title = "one" }
+                        commit { title = "two" }
+                        commit {
+                            title = "three"
+                            localRefs += "main"
+                        }
+                    }
+                },
+            )
+
+            push()
+
+            createCommitsFrom(
+                testCase {
+                    // Intentionally repeating the commits here... this is because GitHubTestHarness will not "notice"
+                    // that the commits should pass verification unless they are defined again as part of this pass.
+                    // I should fix that, but this works for now.
+                    repository {
+                        commit {
+                            title = "one"
+                            willPassVerification = true
+                        }
+                        commit {
+                            title = "two"
+                            willPassVerification = true
+                        }
+                        commit {
+                            title = "three"
+                            willPassVerification = true
+                            localRefs += "main"
+                        }
+                    }
+                    pullRequest {
+                        headRef = buildRemoteRef("one")
+                        baseRef = "main"
+                        title = "one"
+                        willBeApprovedByUserKey = "michael"
+                    }
+                    pullRequest {
+                        headRef = buildRemoteRef("two")
+                        baseRef = buildRemoteRef("one")
+                        title = "two"
+                        willBeApprovedByUserKey = "michael"
+                    }
+                    pullRequest {
+                        headRef = buildRemoteRef("three")
+                        baseRef = buildRemoteRef("two")
+                        title = "three"
+                        willBeApprovedByUserKey = "michael"
+                    }
+                },
+            )
+            waitForChecksToConclude("one", "two", "three")
+            merge(RefSpec("main", "main"))
+
+            assertEquals(
+                emptyList(),
+                localGit.getLocalCommitStack(DEFAULT_REMOTE_NAME, "main", DEFAULT_TARGET_REF),
+            )
+        }
+    }
+
+    @Test
     fun `merge just one`() {
         withTestSetup(useFakeRemote, rollBackChanges = true) {
             createCommitsFrom(
@@ -2733,9 +2801,11 @@ This is a body
                     numRegexResult != null -> {
                         list + numRegexResult.groupValues[1]
                     }
+
                     historyLineRegexResult != null -> {
                         list + historyLineRegexResult.groupValues.drop(1)
                     }
+
                     else -> list
                 }
             }
