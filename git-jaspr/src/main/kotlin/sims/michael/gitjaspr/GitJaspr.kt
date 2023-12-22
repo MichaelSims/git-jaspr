@@ -35,9 +35,7 @@ class GitJaspr(
         val commitsWithDuplicateIds = statuses
             .filter { status -> status.localCommit.id != null }
             .groupingBy { status -> checkNotNull(status.localCommit.id) }
-            .aggregate { _, accumulator: List<RemoteCommitStatus>?, element, _ ->
-                (accumulator ?: emptyList()) + element
-            }
+            .aggregate { _, accumulator: List<RemoteCommitStatus>?, element, _ -> accumulator.orEmpty() + element }
             .filter { (_, statuses) -> statuses.size > 1 }
         val numCommitsBehind = gitClient.logRange(stack.last().hash, "$remoteName/${refSpec.remoteRef}").size
         return buildString {
@@ -45,29 +43,7 @@ class GitJaspr(
             var stackCheck = numCommitsBehind == 0
             for (status in statuses) {
                 append("[")
-                val statusBits = StatusBits(
-                    commitIsPushed = when {
-                        commitsWithDuplicateIds.containsKey(status.localCommit.id) -> WARNING
-                        status.remoteCommit == null -> EMPTY
-                        status.remoteCommit.hash != status.localCommit.hash -> WARNING
-                        else -> SUCCESS
-                    },
-                    pullRequestExists = if (status.pullRequest != null) SUCCESS else EMPTY,
-                    checksPass = when {
-                        status.pullRequest == null -> EMPTY
-                        status.checksPass == null -> PENDING
-                        status.checksPass -> SUCCESS
-                        else -> FAIL
-                    },
-                    readyForReview = if (status.pullRequest != null && status.isDraft != true) SUCCESS else EMPTY,
-                    approved = when {
-                        status.pullRequest == null -> EMPTY
-                        status.approved == null -> EMPTY
-                        status.approved -> SUCCESS
-                        else -> FAIL
-                    },
-                )
-                val flags = statusBits.toList()
+                val flags = status.toStatusList(commitsWithDuplicateIds)
                 if (!flags.all { it == SUCCESS }) stackCheck = false
                 val statusList = flags + if (stackCheck) SUCCESS else EMPTY
                 append(statusList.joinToString(separator = "", transform = Status::emoji))
@@ -98,7 +74,6 @@ class GitJaspr(
         }
     }
 
-    // git jaspr push [[local-object:]target-ref]
     suspend fun push(refSpec: RefSpec = RefSpec(DEFAULT_LOCAL_OBJECT, DEFAULT_TARGET_REF)) {
         logger.trace("push {}", refSpec)
 
@@ -111,14 +86,13 @@ class GitJaspr(
 
         val targetRef = refSpec.remoteRef
         fun getLocalCommitStack() = gitClient.getLocalCommitStack(remoteName, refSpec.localRef, targetRef)
-        val stack = addCommitIdsToLocalStack(getLocalCommitStack()) ?: getLocalCommitStack()
+        val originalStack = getLocalCommitStack()
+        val stack = if (addCommitIdsToLocalStack(originalStack)) getLocalCommitStack() else originalStack
 
         val commitsWithDuplicateIds = stack
             .filter { it.id != null }
             .groupingBy { checkNotNull(it.id) }
-            .aggregate { _, accumulator: List<Commit>?, element, _ ->
-                (accumulator ?: emptyList()) + element
-            }
+            .aggregate { _, accumulator: List<Commit>?, element, _ -> accumulator.orEmpty() + element }
             .filter { (_, commits) -> commits.size > 1 }
         if (commitsWithDuplicateIds.isNotEmpty()) {
             logger.error("Refusing to push because some commits in your stack have duplicate IDs.")
@@ -223,7 +197,8 @@ class GitJaspr(
 
         val statuses = getRemoteCommitStatuses(stack)
 
-        // Do a "stack check"... find the commit before the first commit that isn't mergeable
+        // Do a "stack check"
+        // Find the first commit that isn't mergeable, and the one before it is the last mergeable commit
         val firstIndexNotMergeable = statuses.indexOfFirst { status -> !status.isMergeable }
         val indexLastMergeable = if (firstIndexNotMergeable == -1) {
             statuses.lastIndex
@@ -357,6 +332,30 @@ class GitJaspr(
         check(hook.setExecutable(true)) { "Failed to set the executable bit on $hook" }
     }
 
+    private fun RemoteCommitStatus.toStatusList(commitsWithDuplicateIds: Map<String, List<RemoteCommitStatus>>) =
+        StatusBits(
+            commitIsPushed = when {
+                commitsWithDuplicateIds.containsKey(localCommit.id) -> WARNING
+                remoteCommit == null -> EMPTY
+                remoteCommit.hash != localCommit.hash -> WARNING
+                else -> SUCCESS
+            },
+            pullRequestExists = if (pullRequest != null) SUCCESS else EMPTY,
+            checksPass = when {
+                pullRequest == null -> EMPTY
+                checksPass == null -> PENDING
+                checksPass -> SUCCESS
+                else -> FAIL
+            },
+            readyForReview = if (pullRequest != null && isDraft != true) SUCCESS else EMPTY,
+            approved = when {
+                pullRequest == null -> EMPTY
+                approved == null -> EMPTY
+                approved -> SUCCESS
+                else -> FAIL
+            },
+        ).toList()
+
     private fun List<PullRequest>.updateDescriptionsWithStackInfo(stack: List<Commit>): List<PullRequest> {
         val prsById = associateBy { checkNotNull(it.commitId) }
         val stackById = stack.associateBy(Commit::id)
@@ -469,7 +468,7 @@ class GitJaspr(
         logger.trace("getBranchesToDeleteDuringMerge {} {}", stackBeingMerged, targetRef)
         data class TargetRefToCommitId(val targetRef: String, val commitId: String)
 
-        stackBeingMerged.map { it.toRemoteRefName() }
+        stackBeingMerged.map { c -> c.toRemoteRefName() }
 
         val deletionCandidates = stackBeingMerged
             .asSequence()
@@ -562,27 +561,27 @@ class GitJaspr(
             .also { refSpecs -> logger.trace("getRevisionHistoryRefs: {}", refSpecs) }
     }
 
-    private fun addCommitIdsToLocalStack(commits: List<Commit>): List<Commit>? {
+    private fun addCommitIdsToLocalStack(commits: List<Commit>): Boolean {
         logger.trace("addCommitIdsToLocalStack {}", commits)
         val indexOfFirstCommitMissingId = commits.indexOfFirst { it.id == null }
         if (indexOfFirstCommitMissingId == -1) {
             logger.trace("No commits are missing IDs")
-            return commits
-        } else {
-            logger.warn("Some commits in your local stack are missing commit IDs and are being amended to add them.")
-            logger.warn("Consider running ${InstallCommitIdHook().commandName} to avoid this in the future.")
-            val missing = commits.slice(indexOfFirstCommitMissingId until commits.size)
-            val refName = "${missing.first().hash}^"
-            gitClient.reset(refName)
-            for (commit in missing) {
-                gitClient.cherryPick(commit, commitIdentOverride)
-                if (commit.id == null) {
-                    val commitId = newUuid()
-                    gitClient.setCommitId(commitId, commitIdentOverride)
-                }
-            }
-            return null
+            return false
         }
+
+        logger.warn("Some commits in your local stack are missing commit IDs and are being amended to add them.")
+        logger.warn("Consider running ${InstallCommitIdHook().commandName} to avoid this in the future.")
+        val missing = commits.slice(indexOfFirstCommitMissingId until commits.size)
+        val refName = "${missing.first().hash}^"
+        gitClient.reset(refName)
+        for (commit in missing) {
+            gitClient.cherryPick(commit, commitIdentOverride)
+            if (commit.id == null) {
+                val commitId = newUuid()
+                gitClient.setCommitId(commitId, commitIdentOverride)
+            }
+        }
+        return true
     }
 
     /**
