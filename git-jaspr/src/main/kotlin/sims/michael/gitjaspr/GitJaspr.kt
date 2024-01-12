@@ -641,7 +641,7 @@ class GitJaspr(
 
         @Suppress("unused")
         enum class Status(val emoji: String) {
-            SUCCESS("✅"), FAIL("❌"), PENDING("⌛"), UNKNOWN("❓"), EMPTY("➖"), WARNING("⚠️")
+            SUCCESS("✅"), FAIL("❌"), PENDING("⌛"), UNKNOWN("❓"), EMPTY("ㄧ"), WARNING("❗")
         }
     }
 
