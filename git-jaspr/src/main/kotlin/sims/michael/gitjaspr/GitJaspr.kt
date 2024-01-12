@@ -313,7 +313,8 @@ class GitJaspr(
                 }
             }
         for (branch in orphanedBranches) {
-            logger.info("{} is orphaned", branch)
+            val shortMessage = gitClient.log("${config.remoteName}/$branch", 1).singleOrNull()?.shortMessage
+            logger.info("{}{} is orphaned", branch, if (shortMessage != null) " ($shortMessage)" else "")
         }
         if (!dryRun) {
             logger.info("Deleting {} {}", orphanedBranches.size, branchOrBranches(orphanedBranches.size))
