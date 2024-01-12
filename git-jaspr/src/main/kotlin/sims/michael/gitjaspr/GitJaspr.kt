@@ -170,6 +170,8 @@ class GitJaspr(
             ghClient.updatePullRequest(pr)
         }
         logger.info("Updated descriptions for {} pull {}", prsToMutate.size, requestOrRequests(prsToMutate.size))
+
+        print(getStatusString(refSpec))
     }
 
     suspend fun merge(refSpec: RefSpec) {
