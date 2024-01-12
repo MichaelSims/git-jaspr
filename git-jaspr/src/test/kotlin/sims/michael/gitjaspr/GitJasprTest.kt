@@ -2776,12 +2776,12 @@ This is a body
             this
         }
         return """
-            | ┌─ commit is pushed
-            | │ ┌─ pull request exists
-            | │ │ ┌─ github checks pass
-            | │ │ │ ┌─ pull request is not a draft
-            | │ │ │ │ ┌── pull request approved
-            | │ │ │ │ │ ┌─── stack check
+            | ┌─────────── commit pushed
+            | │ ┌─────────── exists       ┐
+            | │ │ ┌───────── checks pass  │ PR
+            | │ │ │ ┌─────── ready        │
+            | │ │ │ │ ┌───── approved     ┘
+            | │ │ │ │ │ ┌─ stack check
             | │ │ │ │ │ │ 
             |$formattedString
 

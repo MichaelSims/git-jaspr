@@ -31,7 +31,23 @@ import sims.michael.gitjaspr.RemoteRefEncoding.DEFAULT_REMOTE_BRANCH_PREFIX
 import java.io.File
 
 //region Commands
-class Status : GitJasprCommand(help = "Show status of current stack") {
+class Status : GitJasprCommand(
+    help =
+    // language=Markdown
+    """
+Show status of current stack
+ 
+| Heading       | Description                                                                                                                                                                                                                           |
+|---------------|---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| commit pushed | The commit has been pushed to the remote.                                                                                                                                                                                             |
+| exists        | A pull request has been created for the given commit.                                                                                                                                                                                 |
+| checks pass   | Github checks pass.                                                                                                                                                                                                                   |
+| ready         | The PR is ready for review, which means it is not a draft. Commits with subjects that begin with `DRAFT` or `WIP` will automatically be created in draft mode. Use the GitHub UI to mark the PR as ready for review when appropriate. |
+| approved      | The PR is approved.                                                                                                                                                                                                                   |
+| stack check   | This commit is mergeable, as well as all of its parent commits in the stack.                                                                                                                                                          |
+
+    """.trimIndent(),
+) {
     private val refSpec by argument()
         .convert(conversion = ArgumentTransformContext::convertRefSpecString)
         .help {
