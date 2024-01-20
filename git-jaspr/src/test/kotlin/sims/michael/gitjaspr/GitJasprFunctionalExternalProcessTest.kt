@@ -13,7 +13,13 @@ import java.io.File
 import java.util.Properties
 import kotlin.test.assertEquals
 
-/** Run this test to update the native-image metadata files */
+/**
+ * Run this test to update the native-image metadata files
+ *
+ * Keep in mind this test class isn't really for verifications. It's mainly to provide a way to update the native-image
+ * metadata. Some tests may be painful to get to pass under this setup. [GitJasprFunctionalTest] should be the one used
+ * to verify behavior.
+ */
 @FunctionalTest
 class GitJasprFunctionalExternalProcessTest : GitJasprTest {
     override val logger: Logger = LoggerFactory.getLogger(GitJasprDefaultTest::class.java)
@@ -97,6 +103,13 @@ class GitJasprFunctionalExternalProcessTest : GitJasprTest {
 
     // Too painful to try to get this type of test to work with external processes, so we'll opt out
     override fun `push fails when multiple PRs for a given commit ID exist`() = Unit
+
+    // Another test that we'll opt out of, since it pushes in one pass and merges in a second one. Due to the fact that
+    // we don't currently have a mechanism to control which GitHub PAT is used for the push (it'll be whichever one is
+    // enabled in the main config file of the user running the test), we run into the "Can not approve your own pull
+    // request" error for this one. This could be fixed by making the PAT selection configurable for the external
+    // process test, but for now I'm opting out.
+    override fun `merge - push and merge`() = Unit
 
     override suspend fun GitHubTestHarness.waitForChecksToConclude(
         vararg commitFilter: String,
