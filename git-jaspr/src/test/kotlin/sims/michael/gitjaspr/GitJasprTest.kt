@@ -1003,7 +1003,7 @@ https://trillianthealth.slack.com/archives/C04J6Q655GR/p1702918943374039?thread_
 commit-id: 0
 
                 """.trimIndent(),
-                localGit.log("HEAD", maxCount = 1).single().fullMessage,
+                localGit.log("HEAD", maxCount = 1).single().fullMessage.withCommitIdZero(),
             )
         }
     }
@@ -1032,7 +1032,7 @@ Market Explorer: Remove unused code
 commit-id: 0
 
                 """.trimIndent(),
-                localGit.log("HEAD", maxCount = 1).single().fullMessage,
+                localGit.log("HEAD", maxCount = 1).single().fullMessage.withCommitIdZero(),
             )
         }
     }
@@ -2898,4 +2898,12 @@ This is a body
             "⚠️ *Part of a stack created by [jaspr](https://github.com/MichaelSims/git-jaspr). " +
             "Do not merge manually using the UI - doing so may have unexpected results.*\n"
     }
+
+    /**
+     * Returns a copy of the string with the commit ID replaced with 0. Useful for comparing full commit messages in
+     * tests where you don't care about the commit ID.
+     */
+    fun String.withCommitIdZero(): String =
+        // Using zero-width assertions in the regex to keep the replacement simple
+        replace("(?<=$COMMIT_ID_LABEL: ).*?(?=\n)".toRegex(), "0")
 }
