@@ -2024,6 +2024,83 @@ This is a body
     }
 
     @Test
+    fun `autoMerge with limited refSpec`() {
+        withTestSetup(useFakeRemote) {
+            createCommitsFrom(
+                testCase {
+                    repository {
+                        commit {
+                            title = "one"
+                            willPassVerification = true
+                            remoteRefs += buildRemoteRef("one")
+                        }
+                        commit {
+                            title = "two"
+                            willPassVerification = true
+                            remoteRefs += buildRemoteRef("two")
+                        }
+                        commit {
+                            title = "three"
+                            willPassVerification = true
+                            remoteRefs += buildRemoteRef("three")
+                        }
+                        commit {
+                            title = "four"
+                            willPassVerification = true
+                            remoteRefs += buildRemoteRef("four")
+                        }
+                        commit {
+                            title = "five"
+                            willPassVerification = true
+                            remoteRefs += buildRemoteRef("five")
+                            localRefs += "development"
+                        }
+                    }
+                    pullRequest {
+                        headRef = buildRemoteRef("one")
+                        baseRef = "main"
+                        title = "one"
+                        willBeApprovedByUserKey = "michael"
+                    }
+                    pullRequest {
+                        headRef = buildRemoteRef("two")
+                        baseRef = buildRemoteRef("one")
+                        title = "two"
+                        willBeApprovedByUserKey = "michael"
+                    }
+                    pullRequest {
+                        headRef = buildRemoteRef("three")
+                        baseRef = buildRemoteRef("two")
+                        title = "three"
+                        willBeApprovedByUserKey = "michael"
+                    }
+                    pullRequest {
+                        headRef = buildRemoteRef("four")
+                        baseRef = buildRemoteRef("three")
+                        title = "four"
+                        willBeApprovedByUserKey = "michael"
+                    }
+                    pullRequest {
+                        headRef = buildRemoteRef("five")
+                        baseRef = buildRemoteRef("four")
+                        title = "five"
+                        willBeApprovedByUserKey = "michael"
+                    }
+                },
+            )
+
+            autoMerge(RefSpec("development^", "main"))
+
+            assertEquals(
+                listOf("five"),
+                localGit
+                    .getLocalCommitStack(DEFAULT_REMOTE_NAME, "development", DEFAULT_TARGET_REF)
+                    .map(Commit::shortMessage),
+            )
+        }
+    }
+
+    @Test
     fun `merge fails when behind target branch`() {
         withTestSetup(useFakeRemote) {
             createCommitsFrom(
