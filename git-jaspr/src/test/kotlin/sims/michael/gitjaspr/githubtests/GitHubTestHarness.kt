@@ -47,9 +47,21 @@ class GitHubTestHarness private constructor(
 
     val gitHub by lazy {
         if (!useFakeRemote) {
-            // These all point to the same project. Since this is mainly used for verifications in tests (i.e. it will
-            // mostly just be getting the PRs and not mutating anything), it doesn't matter which we use so we'll just
-            // grab the first.
+            // TODO
+            //   At some point I had intended to use the github client just for verifications. Since all of the GH
+            //   clients here point to the same project, it shouldn't matter which client I actually use, as long as
+            //   I'm not mutating anything. Unfortunately, I *am* mutating with this client (via push and merge).
+            //   To make matters worse, it matters which client I use to push... it can't be the same one that I use
+            //   to approve the PRs in the tests, otherwise I get "Can not approve your own pull request" from GitHub.
+            //   Right now I'm lucky that in my particular config calling `values.first()` grabs the user who isn't
+            //   the one approving all the PRs in the tests.
+            //   I need to think on how to fix this. Either the harness needs to expose a `gitJasprByUserKey` to the
+            //   tests so that the tests can choose which user to push and merge with, or I need to come up with a more
+            //   predictable way to choose the token that will be used for pushes and merges in the tests.
+            //   Note that the mechanism the external process test uses to land on a github token to use is entirely
+            //   different. It basically uses whichever one is in the home directory of the user running the test.
+            //   This may be fixable too, but it's less important because the point of the external process test is
+            //   to provide a mechanism to update native-image metadata, and not so much to verify behavior.
             ghClientsByUserKey.values.first()
         } else {
             GitHubStubClient(
