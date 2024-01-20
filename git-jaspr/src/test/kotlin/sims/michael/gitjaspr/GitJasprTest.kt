@@ -818,6 +818,8 @@ interface GitJasprTest {
                 },
             )
 
+            waitForChecksToConclude("one", "three", "four")
+
             val actual = getAndPrintStatusString(RefSpec("development", "main"))
             assertEquals(
                 """
