@@ -19,8 +19,8 @@ interface GitClient {
     fun getLocalCommitStack(remoteName: String, localObjectName: String, targetRefName: String): List<Commit>
     fun refExists(ref: String): Boolean
     fun getBranchNames(): List<String>
-    fun getRemoteBranches(): List<RemoteBranch>
-    fun getRemoteBranchesById(): Map<String, RemoteBranch>
+    fun getRemoteBranches(remoteName: String = DEFAULT_REMOTE_NAME): List<RemoteBranch>
+    fun getRemoteBranchesById(remoteName: String = DEFAULT_REMOTE_NAME): Map<String, RemoteBranch>
     fun reset(refName: String): GitClient
     fun branch(name: String, startPoint: String = "HEAD", force: Boolean = false): Commit?
     fun deleteBranches(names: List<String>, force: Boolean = false): List<String>

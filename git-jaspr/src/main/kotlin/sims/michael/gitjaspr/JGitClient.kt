@@ -150,7 +150,7 @@ class JGitClient(
         }
     }
 
-    override fun getRemoteBranches(): List<RemoteBranch> {
+    override fun getRemoteBranches(remoteName: String): List<RemoteBranch> {
         logger.trace("getRemoteBranches")
         return useGit { git ->
             git
@@ -158,19 +158,22 @@ class JGitClient(
                 .setListMode(ListBranchCommand.ListMode.REMOTE)
                 .call()
                 .filter { it.name.startsWith(Constants.R_REMOTES) }
-                .map { ref ->
+                .mapNotNull { ref ->
                     val r = git.repository
-                    val shortBranchName = checkNotNull(r.shortenRemoteBranchName(ref.name)) {
-                        "Short branch name was null for ${ref.name}"
+                    val (thisRemoteName, shortBranchName) =
+                        ref.name.removePrefix(Constants.R_REMOTES).split("/", limit = 2)
+                    if (thisRemoteName == remoteName) {
+                        RemoteBranch(shortBranchName, r.parseCommit(ref.objectId).toCommit(git))
+                    } else {
+                        null
                     }
-                    RemoteBranch(shortBranchName, r.parseCommit(ref.objectId).toCommit(git))
                 }
         }
     }
 
-    override fun getRemoteBranchesById(): Map<String, RemoteBranch> {
+    override fun getRemoteBranchesById(remoteName: String): Map<String, RemoteBranch> {
         logger.trace("getRemoteBranchesById")
-        return getRemoteBranches()
+        return getRemoteBranches(remoteName)
             .mapNotNull { branch ->
                 getRemoteRefParts(branch.name, remoteBranchPrefix)
                     ?.takeIf { parts -> parts.revisionNum == null } // Filter history branches

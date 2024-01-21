@@ -98,26 +98,31 @@ class CliGitClient(
             .map { line -> if (line.contains("HEAD detached")) "HEAD" else line }
     }
 
-    override fun getRemoteBranches(): List<RemoteBranch> {
+    override fun getRemoteBranches(remoteName: String): List<RemoteBranch> {
         val command = listOf(
             "git",
             "branch",
             "-r",
             "-l",
-            "--format=%(refname:lstrip=3)${GIT_FORMAT_SEPARATOR}%(objectname:short)",
+            "--format=%(refname:lstrip=2)${GIT_FORMAT_SEPARATOR}%(objectname:short)",
         )
         return executeCommand(command)
             .output
             .lines
-            .map { line ->
-                val (name, hash) = line.split(GIT_FORMAT_SEPARATOR)
-                RemoteBranch(name, log(hash, 1).single())
+            .mapNotNull { line ->
+                val (nameWithRemote, hash) = line.split(GIT_FORMAT_SEPARATOR)
+                val (thisRemoteName, name) = nameWithRemote.split("/", limit = 2)
+                if (thisRemoteName == remoteName) {
+                    RemoteBranch(name, log(hash, 1).single())
+                } else {
+                    null
+                }
             }
     }
 
-    override fun getRemoteBranchesById(): Map<String, RemoteBranch> {
+    override fun getRemoteBranchesById(remoteName: String): Map<String, RemoteBranch> {
         logger.trace("getRemoteBranchesById")
-        return getRemoteBranches()
+        return getRemoteBranches(remoteName)
             .mapNotNull { branch ->
                 getRemoteRefParts(branch.name, remoteBranchPrefix)
                     ?.takeIf { parts -> parts.revisionNum == null } // Filter history branches

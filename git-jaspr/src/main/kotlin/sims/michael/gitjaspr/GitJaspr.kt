@@ -105,7 +105,7 @@ class GitJaspr(
         val pullRequests = checkSinglePullRequestPerCommit(ghClient.getPullRequests(stack))
         val pullRequestsRebased = pullRequests.updateBaseRefForReorderedPrsIfAny(stack, refSpec.remoteRef)
 
-        val remoteBranches = gitClient.getRemoteBranches()
+        val remoteBranches = gitClient.getRemoteBranches(config.remoteName)
         val outOfDateBranches = stack.map { c -> c.toRefSpec() } - remoteBranches.map { b -> b.toRefSpec() }.toSet()
         val revisionHistoryRefs = getRevisionHistoryRefs(
             stack,
@@ -305,7 +305,7 @@ class GitJaspr(
         val pullRequests = ghClient.getPullRequests().map(PullRequest::headRefName).toSet()
         gitClient.fetch(config.remoteName)
         val orphanedBranches = gitClient
-            .getRemoteBranches()
+            .getRemoteBranches(config.remoteName)
             .map(RemoteBranch::name)
             .filter {
                 val remoteRefParts = getRemoteRefParts(it, config.remoteBranchPrefix)
@@ -388,7 +388,7 @@ class GitJaspr(
         pullRequests: List<PullRequest> = emptyList(),
         existingPr: PullRequest? = null,
     ): String {
-        val remoteBranches: List<String> = gitClient.getRemoteBranches().map(RemoteBranch::name)
+        val remoteBranches: List<String> = gitClient.getRemoteBranches(config.remoteName).map(RemoteBranch::name)
         val jasprStartComment = "<!-- jaspr start -->"
         return buildString {
             if (existingPr != null && existingPr.body.contains(jasprStartComment)) {
@@ -486,7 +486,7 @@ class GitJaspr(
         logger.trace("Deletion candidates {}", deletionCandidates)
 
         val branchesToDelete = gitClient
-            .getRemoteBranches()
+            .getRemoteBranches(config.remoteName)
             .map(RemoteBranch::name)
             .filter { branchName ->
                 getRemoteRefParts(branchName, config.remoteBranchPrefix)
