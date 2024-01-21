@@ -303,7 +303,7 @@ class GitJaspr(
     suspend fun clean(dryRun: Boolean) {
         logger.trace("clean{}", if (dryRun) " (dryRun)" else "")
         val pullRequests = ghClient.getPullRequests().map(PullRequest::headRefName).toSet()
-        gitClient.fetch(config.remoteName)
+        gitClient.fetch(config.remoteName, prune = true)
         val orphanedBranches = gitClient
             .getRemoteBranches(config.remoteName)
             .map(RemoteBranch::name)

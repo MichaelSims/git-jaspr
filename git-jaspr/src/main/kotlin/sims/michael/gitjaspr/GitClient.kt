@@ -9,7 +9,7 @@ interface GitClient {
     fun init(): GitClient
     fun checkout(refName: String): GitClient
     fun clone(uri: String, bare: Boolean = false): GitClient
-    fun fetch(remoteName: String)
+    fun fetch(remoteName: String, prune: Boolean = false)
     fun log(): List<Commit>
     fun log(revision: String, maxCount: Int = -1): List<Commit>
     fun logAll(): List<Commit>

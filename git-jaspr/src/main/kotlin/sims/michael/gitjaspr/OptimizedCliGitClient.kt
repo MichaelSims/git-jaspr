@@ -15,8 +15,8 @@ class OptimizedCliGitClient private constructor(
         return this
     }
 
-    override fun fetch(remoteName: String) {
-        cliGitClient.fetch(remoteName)
+    override fun fetch(remoteName: String, prune: Boolean) {
+        cliGitClient.fetch(remoteName, prune)
     }
 
     override fun push(refSpecs: List<RefSpec>) {

@@ -55,10 +55,10 @@ class JGitClient(
         }
     }
 
-    override fun fetch(remoteName: String) {
-        logger.trace("fetch {}", remoteName)
+    override fun fetch(remoteName: String, prune: Boolean) {
+        logger.trace("fetch {}{}", remoteName, if (prune) " (with prune)" else "")
         try {
-            useGit { git -> git.fetch().setRemote(remoteName).call() }
+            useGit { git -> git.fetch().setRemote(remoteName).setRemoveDeletedRefs(prune).call() }
         } catch (e: TransportException) {
             throw GitJasprException("Failed to fetch from $remoteName; consider enabling the CLI git client", e)
         }
