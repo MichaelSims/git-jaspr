@@ -128,9 +128,9 @@ interface GitJasprTest {
             val actual = getAndPrintStatusString()
             assertEquals(
                 """
-                    |[ㄧㄧㄧㄧㄧㄧ] one
-                    |[ㄧㄧㄧㄧㄧㄧ] two
-                    |[ㄧㄧㄧㄧㄧㄧ] three
+                    |[ㄧㄧㄧㄧㄧㄧ] %s : one
+                    |[ㄧㄧㄧㄧㄧㄧ] %s : two
+                    |[ㄧㄧㄧㄧㄧㄧ] %s : three
                 """
                     .trimMargin()
                     .toStatusString(actual),
@@ -161,9 +161,9 @@ interface GitJasprTest {
             val actual = getAndPrintStatusString()
             assertEquals(
                 """
-                    |[✅ㄧㄧㄧㄧㄧ] one
-                    |[ㄧㄧㄧㄧㄧㄧ] two
-                    |[ㄧㄧㄧㄧㄧㄧ] three
+                    |[✅ㄧㄧㄧㄧㄧ] %s : one
+                    |[ㄧㄧㄧㄧㄧㄧ] %s : two
+                    |[ㄧㄧㄧㄧㄧㄧ] %s : three
                 """
                     .trimMargin()
                     .toStatusString(actual),
@@ -199,9 +199,9 @@ interface GitJasprTest {
             val actual = getAndPrintStatusString()
             assertEquals(
                 """
-                    |[✅✅⌛✅ㄧㄧ] %s : one
-                    |[ㄧㄧㄧㄧㄧㄧ] two
-                    |[ㄧㄧㄧㄧㄧㄧ] three
+                    |[✅✅⌛✅ㄧㄧ] %s : %s : one
+                    |[ㄧㄧㄧㄧㄧㄧ] %s : two
+                    |[ㄧㄧㄧㄧㄧㄧ] %s : three
                 """
                     .trimMargin()
                     .toStatusString(actual),
@@ -240,9 +240,9 @@ interface GitJasprTest {
             val actual = getAndPrintStatusString()
             assertEquals(
                 """
-                    |[✅✅✅✅ㄧㄧ] %s : one
-                    |[ㄧㄧㄧㄧㄧㄧ] two
-                    |[ㄧㄧㄧㄧㄧㄧ] three
+                    |[✅✅✅✅ㄧㄧ] %s : %s : one
+                    |[ㄧㄧㄧㄧㄧㄧ] %s : two
+                    |[ㄧㄧㄧㄧㄧㄧ] %s : three
                 """
                     .trimMargin()
                     .toStatusString(actual),
@@ -298,9 +298,9 @@ interface GitJasprTest {
             val actual = getAndPrintStatusString()
             assertEquals(
                 """
-                    |[✅✅✅✅✅✅] %s : one
-                    |[✅✅✅✅ㄧㄧ] %s : two
-                    |[✅✅✅✅ㄧㄧ] %s : three
+                    |[✅✅✅✅✅✅] %s : %s : one
+                    |[✅✅✅✅ㄧㄧ] %s : %s : two
+                    |[✅✅✅✅ㄧㄧ] %s : %s : three
                 """
                     .trimMargin()
                     .toStatusString(actual),
@@ -367,9 +367,9 @@ interface GitJasprTest {
             val actual = getAndPrintStatusString()
             assertEquals(
                 """
-                    |[✅✅✅✅✅ㄧ] %s : one
-                    |[✅✅✅✅✅ㄧ] %s : two
-                    |[✅✅✅✅✅ㄧ] %s : three
+                    |[✅✅✅✅✅ㄧ] %s : %s : one
+                    |[✅✅✅✅✅ㄧ] %s : %s : two
+                    |[✅✅✅✅✅ㄧ] %s : %s : three
                     |
                     |Your stack is out-of-date with the base branch (1 commit behind main).
                     |You'll need to rebase it (`git rebase origin/main`) before your stack will be mergeable.
@@ -442,9 +442,9 @@ interface GitJasprTest {
             val actual = getAndPrintStatusString()
             assertEquals(
                 """
-                    |[✅✅✅✅✅ㄧ] %s : one
-                    |[✅✅✅✅✅ㄧ] %s : two
-                    |[✅✅✅✅✅ㄧ] %s : three
+                    |[✅✅✅✅✅ㄧ] %s : %s : one
+                    |[✅✅✅✅✅ㄧ] %s : %s : two
+                    |[✅✅✅✅✅ㄧ] %s : %s : three
                     |
                     |Your stack is out-of-date with the base branch (2 commits behind main).
                     |You'll need to rebase it (`git rebase origin/main`) before your stack will be mergeable.
@@ -505,9 +505,9 @@ interface GitJasprTest {
             val actual = getAndPrintStatusString()
             assertEquals(
                 """
-                    |[✅✅✅✅✅✅] %s : one
-                    |[✅✅✅✅✅✅] %s : two
-                    |[✅✅✅✅✅✅] %s : three
+                    |[✅✅✅✅✅✅] %s : %s : one
+                    |[✅✅✅✅✅✅] %s : %s : two
+                    |[✅✅✅✅✅✅] %s : %s : three
                 """
                     .trimMargin()
                     .toStatusString(actual),
@@ -568,9 +568,9 @@ interface GitJasprTest {
             val actual = getAndPrintStatusString()
             assertEquals(
                 """
-                    |[✅✅✅✅✅✅] %s : one
-                    |[✅✅✅✅✅✅] %s : two
-                    |[✅✅✅ㄧ✅ㄧ] %s : draft: three
+                    |[✅✅✅✅✅✅] %s : %s : one
+                    |[✅✅✅✅✅✅] %s : %s : two
+                    |[✅✅✅ㄧ✅ㄧ] %s : %s : draft: three
                 """
                     .trimMargin()
                     .toStatusString(actual),
@@ -628,9 +628,9 @@ interface GitJasprTest {
             val actual = getAndPrintStatusString()
             assertEventuallyEquals(
                 """
-                    |[✅✅✅✅ㄧㄧ] %s : one
-                    |[✅✅✅✅✅ㄧ] %s : two
-                    |[✅✅✅✅ㄧㄧ] %s : three
+                    |[✅✅✅✅ㄧㄧ] %s : %s : one
+                    |[✅✅✅✅✅ㄧ] %s : %s : two
+                    |[✅✅✅✅ㄧㄧ] %s : %s : three
                 """
                     .trimMargin()
                     .toStatusString(actual),
@@ -687,9 +687,9 @@ interface GitJasprTest {
             val actual = getAndPrintStatusString()
             assertEquals(
                 """
-                    |[✅✅✅✅ㄧㄧ] %s : one
-                    |[✅✅❌✅ㄧㄧ] %s : two
-                    |[✅✅✅✅ㄧㄧ] %s : three
+                    |[✅✅✅✅ㄧㄧ] %s : %s : one
+                    |[✅✅❌✅ㄧㄧ] %s : %s : two
+                    |[✅✅✅✅ㄧㄧ] %s : %s : three
                 """
                     .trimMargin()
                     .toStatusString(actual),
@@ -734,7 +734,7 @@ interface GitJasprTest {
             val actual = getAndPrintStatusString(RefSpec("development", "development"))
             assertEquals(
                 """
-                    |[✅✅✅✅✅✅] %s : three
+                    |[✅✅✅✅✅✅] %s : %s : three
                 """
                     .trimMargin()
                     .toStatusString(actual),
@@ -823,9 +823,9 @@ interface GitJasprTest {
             val actual = getAndPrintStatusString(RefSpec("development", "main"))
             assertEquals(
                 """
-                    |[✅✅✅✅✅✅] %s : one
-                    |[❗✅✅✅✅ㄧ] %s : three
-                    |[❗✅✅✅✅ㄧ] %s : four
+                    |[✅✅✅✅✅✅] %s : %s : one
+                    |[❗✅✅✅✅ㄧ] %s : %s : three
+                    |[❗✅✅✅✅ㄧ] %s : %s : four
                 """
                     .trimMargin()
                     .toStatusString(actual),
@@ -860,9 +860,9 @@ interface GitJasprTest {
             val actual = getAndPrintStatusString()
             assertEquals(
                 """
-                    |[❗ㄧㄧㄧㄧㄧ] one
-                    |[❗ㄧㄧㄧㄧㄧ] two
-                    |[ㄧㄧㄧㄧㄧㄧ] three
+                    |[❗ㄧㄧㄧㄧㄧ] %s : one
+                    |[❗ㄧㄧㄧㄧㄧ] %s : two
+                    |[ㄧㄧㄧㄧㄧㄧ] %s : three
                     |
                     |Some commits in your local stack have duplicate IDs:
                     |- a: (one, two)
@@ -2844,14 +2844,19 @@ This is a body
     // these tests to break so that any such changes are very deliberate. This is a compromise between referencing the
     // same value from both tests and prod and the other extreme of repeating this header text manually in every test.
     fun String.toStatusString(actual: String): String {
-        // Extract URLs from the actual string and put them into the expected. For functional tests I can't predict what
+        // Extract commit hashes and URLs from the actual string and put them into the expected. I can't predict what
         // they will be, so I only want to validate that they are present.
-        val urls = "(http.*) :".toRegex().findAll(actual).map { result -> result.groupValues[1] }.toList()
+        val extracts = "] (.*?) : (?:(http.*?) : )?.*?\n"
+            .toRegex()
+            .findAll(actual)
+            .flatMap { result -> result.groupValues.drop(1) }
+            .filter { it.isNotEmpty() }
+            .toList()
 
         val formattedString = try {
-            format(*urls.toTypedArray())
+            format(*extracts.toTypedArray())
         } catch (e: MissingFormatArgumentException) {
-            logger.error("Format string doesn't have enough arguments, should have {}", urls.size)
+            logger.error("Format string doesn't have enough arguments, should have {}", extracts.size)
             this
         }
         return """

@@ -48,6 +48,8 @@ class GitJaspr(
                 val statusList = flags + if (stackCheck) SUCCESS else EMPTY
                 append(statusList.joinToString(separator = "", transform = Status::emoji))
                 append("] ")
+                append(status.localCommit.hash)
+                append(" : ")
                 val permalink = status.pullRequest?.permalink
                 if (permalink != null) {
                     append(status.pullRequest.permalink)
