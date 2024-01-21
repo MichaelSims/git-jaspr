@@ -286,8 +286,8 @@ class CliGitClientTest {
             val cliGit = CliGitClient(localGit.workingDirectory)
             val git = JGitClient(localGit.workingDirectory)
             assertEquals(
-                cliGit.getLocalCommitStack(DEFAULT_REMOTE_NAME, DEFAULT_TARGET_REF, DEFAULT_TARGET_REF),
-                git.getLocalCommitStack(DEFAULT_REMOTE_NAME, DEFAULT_TARGET_REF, DEFAULT_TARGET_REF),
+                cliGit.getLocalCommitStack(remoteName, DEFAULT_TARGET_REF, DEFAULT_TARGET_REF),
+                git.getLocalCommitStack(remoteName, DEFAULT_TARGET_REF, DEFAULT_TARGET_REF),
             )
         }
     }
@@ -455,8 +455,8 @@ class CliGitClientTest {
             val cliGit = CliGitClient(localGit.workingDirectory)
             val git = JGitClient(localGit.workingDirectory)
             assertEquals(
-                cliGit.getRemoteUriOrNull(DEFAULT_REMOTE_NAME),
-                git.getRemoteUriOrNull(DEFAULT_REMOTE_NAME),
+                cliGit.getRemoteUriOrNull(remoteName),
+                git.getRemoteUriOrNull(remoteName),
             )
         }
     }
@@ -645,7 +645,7 @@ This is a commit body
                 },
             )
             val git = CliGitClient(localGit.workingDirectory)
-            git.push(listOf(RefSpec("development", "main")))
+            git.push(listOf(RefSpec("development", "main")), remoteName)
             assertEquals("one", remoteGit.log("main", 1).single().shortMessage)
         }
     }

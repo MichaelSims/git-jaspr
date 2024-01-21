@@ -80,8 +80,8 @@ interface GitJasprTest {
                 },
             )
             push()
-            localGit.fetch(DEFAULT_REMOTE_NAME)
-            val stack = localGit.getLocalCommitStack(DEFAULT_REMOTE_NAME, DEFAULT_LOCAL_OBJECT, DEFAULT_TARGET_REF)
+            localGit.fetch(remoteName)
+            val stack = localGit.getLocalCommitStack(remoteName, DEFAULT_LOCAL_OBJECT, DEFAULT_TARGET_REF)
             val remoteCommitStatuses = getRemoteCommitStatuses(stack)
             assertEquals(localGit.log("HEAD", maxCount = 1).single(), remoteCommitStatuses.single().remoteCommit)
         }
@@ -372,7 +372,7 @@ interface GitJasprTest {
                     |[✅✅✅✅✅ㄧ] %s : %s : three
                     |
                     |Your stack is out-of-date with the base branch (1 commit behind main).
-                    |You'll need to rebase it (`git rebase origin/main`) before your stack will be mergeable.
+                    |You'll need to rebase it (`git rebase $remoteName/main`) before your stack will be mergeable.
                 """
                     .trimMargin()
                     .toStatusString(actual),
@@ -447,7 +447,7 @@ interface GitJasprTest {
                     |[✅✅✅✅✅ㄧ] %s : %s : three
                     |
                     |Your stack is out-of-date with the base branch (2 commits behind main).
-                    |You'll need to rebase it (`git rebase origin/main`) before your stack will be mergeable.
+                    |You'll need to rebase it (`git rebase $remoteName/main`) before your stack will be mergeable.
                 """
                     .trimMargin()
                     .toStatusString(actual),
@@ -929,7 +929,7 @@ interface GitJasprTest {
 
             assertEquals(
                 listOf("three", "two", "one"),
-                localGit.log("origin/main", maxCount = 3).map(Commit::shortMessage),
+                localGit.log("$remoteName/main", maxCount = 3).map(Commit::shortMessage),
             )
         }
     }
@@ -1155,7 +1155,7 @@ commit-id: 0
 
             assertEquals(
                 (1..3).map { buildRemoteRef(it.toString()) },
-                localGit.getRemoteBranches().map(RemoteBranch::name) - DEFAULT_TARGET_REF,
+                localGit.getRemoteBranches(remoteName).map(RemoteBranch::name) - DEFAULT_TARGET_REF,
             )
         }
     }
@@ -1210,7 +1210,7 @@ commit-id: 0
                 listOf("a", "a_01", "b", "b_01", "c", "c_01", "d", "e", "z")
                     .map { name -> buildRemoteRef(name) },
                 localGit
-                    .getRemoteBranches()
+                    .getRemoteBranches(remoteName)
                     .map(RemoteBranch::name)
                     .filter { name -> name.startsWith(RemoteRefEncoding.DEFAULT_REMOTE_BRANCH_PREFIX) }
                     .sorted(),
@@ -1867,7 +1867,7 @@ This is a body
 
             assertEquals(
                 emptyList(),
-                localGit.getLocalCommitStack(DEFAULT_REMOTE_NAME, "development", DEFAULT_TARGET_REF),
+                localGit.getLocalCommitStack(remoteName, "development", DEFAULT_TARGET_REF),
             )
         }
     }
@@ -1935,7 +1935,7 @@ This is a body
 
             assertEquals(
                 emptyList(),
-                localGit.getLocalCommitStack(DEFAULT_REMOTE_NAME, "main", DEFAULT_TARGET_REF),
+                localGit.getLocalCommitStack(remoteName, "main", DEFAULT_TARGET_REF),
             )
         }
     }
@@ -1967,7 +1967,7 @@ This is a body
 
             assertEquals(
                 emptyList(),
-                localGit.getLocalCommitStack(DEFAULT_REMOTE_NAME, "development", DEFAULT_TARGET_REF),
+                localGit.getLocalCommitStack(remoteName, "development", DEFAULT_TARGET_REF),
             )
         }
     }
@@ -2020,7 +2020,7 @@ This is a body
 
             assertEquals(
                 emptyList(),
-                localGit.getLocalCommitStack(DEFAULT_REMOTE_NAME, "development", DEFAULT_TARGET_REF),
+                localGit.getLocalCommitStack(remoteName, "development", DEFAULT_TARGET_REF),
             )
         }
     }
@@ -2096,7 +2096,7 @@ This is a body
             assertEquals(
                 listOf("five"),
                 localGit
-                    .getLocalCommitStack(DEFAULT_REMOTE_NAME, "development", DEFAULT_TARGET_REF)
+                    .getLocalCommitStack(remoteName, "development", DEFAULT_TARGET_REF)
                     .map(Commit::shortMessage),
             )
         }
@@ -2162,7 +2162,7 @@ This is a body
             assertEquals(
                 listOf("one", "two", "three"), // Nothing was merged
                 localGit
-                    .getLocalCommitStack(DEFAULT_REMOTE_NAME, "development", DEFAULT_TARGET_REF)
+                    .getLocalCommitStack(remoteName, "development", DEFAULT_TARGET_REF)
                     .map(Commit::shortMessage),
             )
         }
@@ -2240,7 +2240,7 @@ This is a body
                 // All mergeable commits were merged, leaving c, d, and e as the only one not merged
                 listOf("draft: c", "d", "e"),
                 localGit
-                    .getLocalCommitStack(DEFAULT_REMOTE_NAME, "development", DEFAULT_TARGET_REF)
+                    .getLocalCommitStack(remoteName, "development", DEFAULT_TARGET_REF)
                     .map(Commit::shortMessage),
             )
         }
@@ -2583,7 +2583,7 @@ This is a body
                     buildRemoteRef("c_01"),
                     "main",
                 ),
-                localGit.getRemoteBranches().map(RemoteBranch::name),
+                localGit.getRemoteBranches(remoteName).map(RemoteBranch::name),
             )
         }
     }
@@ -2755,7 +2755,7 @@ This is a body
                 // One was merged, leaving three and four unmerged
                 listOf("three", "four"),
                 localGit
-                    .getLocalCommitStack(DEFAULT_REMOTE_NAME, "development", DEFAULT_TARGET_REF)
+                    .getLocalCommitStack(remoteName, "development", DEFAULT_TARGET_REF)
                     .map(Commit::shortMessage),
             )
         }
@@ -2835,7 +2835,7 @@ This is a body
                     buildRemoteRef("z"),
                     "main",
                 ),
-                localGit.getRemoteBranches().map(RemoteBranch::name),
+                localGit.getRemoteBranches(remoteName).map(RemoteBranch::name),
             )
         }
     }

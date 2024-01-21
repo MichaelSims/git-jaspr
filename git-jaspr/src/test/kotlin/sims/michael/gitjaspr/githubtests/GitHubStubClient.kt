@@ -6,7 +6,11 @@ import sims.michael.gitjaspr.Commit
 import sims.michael.gitjaspr.PullRequest
 import sims.michael.gitjaspr.RemoteRefEncoding.getCommitIdFromRemoteRef
 
-class GitHubStubClient(private val remoteBranchPrefix: String, private val localGit: GitClient) : GitHubClient {
+class GitHubStubClient(
+    private val remoteBranchPrefix: String,
+    private val remoteName: String,
+    private val localGit: GitClient,
+) : GitHubClient {
 
     private val logger = LoggerFactory.getLogger(GitHubStubClient::class.java)
 
@@ -92,13 +96,13 @@ class GitHubStubClient(private val remoteBranchPrefix: String, private val local
     // PRs so that the PR state is always viewed consistently with the git repo state
     override fun autoClosePrs() {
         logger.trace("autoClosePrs")
-        val remoteBranchesById = localGit.getRemoteBranchesById()
+        val remoteBranchesById = localGit.getRemoteBranchesById(remoteName)
         synchronized(prs) {
             for (i in 0 until prs.size) {
                 val pr = prs[i].pullRequest
                 val commitId = pr.commitId ?: continue // Commit missing ID
                 val remoteBranch = remoteBranchesById[commitId] ?: continue // No remote branch for commit
-                val range = localGit.logRange("$DEFAULT_REMOTE_NAME/${DEFAULT_TARGET_REF}", remoteBranch.commit.hash)
+                val range = localGit.logRange("$remoteName/${DEFAULT_TARGET_REF}", remoteBranch.commit.hash)
                 // Close it if it's already been merged
                 if (range.isEmpty()) {
                     logger.trace("autoClosePrs closing {}", prs[i])

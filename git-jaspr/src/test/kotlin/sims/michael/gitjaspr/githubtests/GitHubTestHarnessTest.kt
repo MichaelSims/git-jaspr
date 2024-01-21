@@ -143,7 +143,7 @@ class GitHubTestHarnessTest {
                 assertEquals(commitOneTwo.copy(shortMessage = "commit_one_one"), commitOneTwo)
             }
 
-            localGit.logRange("$DEFAULT_REMOTE_NAME/one~2", "$DEFAULT_REMOTE_NAME/one").let { log ->
+            localGit.logRange("$remoteName/one~2", "$remoteName/one").let { log ->
                 assertEquals(2, log.size)
                 val (commitOneOne, commitOneTwo) = log
                 assertEquals(commitOneOne.copy(shortMessage = "commit_one_one"), commitOneOne)

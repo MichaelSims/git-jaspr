@@ -10,8 +10,8 @@ class OptimizedCliGitClient private constructor(
     private val jGitClient: JGitClient,
 ) : GitClient by jGitClient {
 
-    override fun clone(uri: String, bare: Boolean): GitClient {
-        cliGitClient.clone(uri, bare)
+    override fun clone(uri: String, remoteName: String, bare: Boolean): GitClient {
+        cliGitClient.clone(uri, remoteName, bare)
         return this
     }
 
@@ -19,8 +19,8 @@ class OptimizedCliGitClient private constructor(
         cliGitClient.fetch(remoteName)
     }
 
-    override fun push(refSpecs: List<RefSpec>) {
-        cliGitClient.push(refSpecs)
+    override fun push(refSpecs: List<RefSpec>, remoteName: String) {
+        cliGitClient.push(refSpecs, remoteName)
     }
 
     companion object {

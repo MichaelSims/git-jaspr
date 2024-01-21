@@ -48,10 +48,16 @@ class JGitClient(
         }
     }
 
-    override fun clone(uri: String, bare: Boolean): GitClient {
+    override fun clone(uri: String, remoteName: String, bare: Boolean): GitClient {
         logger.trace("clone {}", uri)
         return apply {
-            Git.cloneRepository().setDirectory(workingDirectory).setURI(uri).setBare(bare).call().close()
+            Git.cloneRepository()
+                .setDirectory(workingDirectory)
+                .setURI(uri)
+                .setBare(bare)
+                .setRemote(remoteName)
+                .call()
+                .close()
         }
     }
 
@@ -245,7 +251,7 @@ class JGitClient(
         }
     }
 
-    override fun push(refSpecs: List<RefSpec>) {
+    override fun push(refSpecs: List<RefSpec>, remoteName: String) {
         logger.trace("push {}", refSpecs)
         if (refSpecs.isNotEmpty()) {
             useGit { git ->
@@ -255,6 +261,7 @@ class JGitClient(
                 checkNoPushErrors(
                     git
                         .push()
+                        .setRemote(remoteName)
                         .setAtomic(true)
                         .setRefSpecs(specs)
                         .call(),

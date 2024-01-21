@@ -114,7 +114,7 @@ class GitJaspr(
             outOfDateBranches.map(RefSpec::remoteRef),
         )
         val refSpecs = outOfDateBranches.map(RefSpec::forcePush) + revisionHistoryRefs
-        gitClient.push(refSpecs)
+        gitClient.push(refSpecs, config.remoteName)
         logger.info(
             "Pushed {} commit {} and {} history {}",
             outOfDateBranches.size,
@@ -225,7 +225,7 @@ class GitJaspr(
         }
 
         val refSpecs = listOf(RefSpec(lastMergeableStatus.localCommit.hash, refSpec.remoteRef))
-        gitClient.push(refSpecs)
+        gitClient.push(refSpecs, remoteName)
         logger.info("Merged {} {} to {}", indexLastMergeable + 1, refOrRefs(indexLastMergeable + 1), refSpec.remoteRef)
 
         val prsToClose = statuses.slice(0 until indexLastMergeable).mapNotNull(RemoteCommitStatus::pullRequest)
@@ -322,7 +322,7 @@ class GitJaspr(
         }
         if (!dryRun) {
             logger.info("Deleting {} {}", orphanedBranches.size, branchOrBranches(orphanedBranches.size))
-            gitClient.push(orphanedBranches.map { RefSpec(FORCE_PUSH_PREFIX, it) })
+            gitClient.push(orphanedBranches.map { RefSpec(FORCE_PUSH_PREFIX, it) }, config.remoteName)
         }
     }
 
@@ -447,7 +447,7 @@ class GitJaspr(
 
     internal suspend fun getRemoteCommitStatuses(stack: List<Commit>): List<RemoteCommitStatus> {
         logger.trace("getRemoteCommitStatuses")
-        val remoteBranchesById = gitClient.getRemoteBranchesById()
+        val remoteBranchesById = gitClient.getRemoteBranchesById(config.remoteName)
         val prsById = if (stack.isNotEmpty()) {
             ghClient.getPullRequests(stack.filter { commit -> commit.id != null }).associateBy(PullRequest::commitId)
         } else {
@@ -506,7 +506,7 @@ class GitJaspr(
         var tries = 0
         while (true) {
             try {
-                gitClient.push(branchesToDelete)
+                gitClient.push(branchesToDelete, config.remoteName)
                 break
             } catch (e: Exception) {
                 tries++

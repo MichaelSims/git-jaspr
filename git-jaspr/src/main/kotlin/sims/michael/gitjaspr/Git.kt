@@ -28,5 +28,5 @@ fun generateUuid(length: Int = 8): String {
 }
 
 fun refsHeads(branch: String) = if (!branch.startsWith(GitClient.R_HEADS)) "${GitClient.R_HEADS}$branch" else branch
-fun refsRemotes(branch: String, remote: String = DEFAULT_REMOTE_NAME) =
+fun refsRemotes(branch: String, remote: String) =
     if (!branch.startsWith(GitClient.R_REMOTES)) "${GitClient.R_REMOTES}$remote/$branch" else branch

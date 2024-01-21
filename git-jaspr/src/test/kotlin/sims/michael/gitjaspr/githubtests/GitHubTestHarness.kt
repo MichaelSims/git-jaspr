@@ -26,6 +26,7 @@ class GitHubTestHarness private constructor(
     val localRepo: File,
     val remoteRepo: File,
     val remoteUri: String,
+    val remoteName: String,
     private val gitHubInfo: GitHubInfo,
     private val remoteBranchPrefix: String = DEFAULT_REMOTE_BRANCH_PREFIX,
     private val configByUserKey: Map<String, UserConfig>,
@@ -66,6 +67,7 @@ class GitHubTestHarness private constructor(
         } else {
             GitHubStubClient(
                 remoteBranchPrefix,
+                remoteName,
                 localGit,
             )
         }
@@ -78,7 +80,7 @@ class GitHubTestHarness private constructor(
     val gitJaspr = GitJaspr(
         ghClient = gitHub,
         localGit,
-        Config(localRepo, DEFAULT_REMOTE_NAME, gitHubInfo, remoteBranchPrefix = remoteBranchPrefix),
+        Config(localRepo, remoteName, gitHubInfo, remoteBranchPrefix = remoteBranchPrefix),
         ids::next,
         commitIdentOverride = DEFAULT_COMMITTER,
     )
@@ -89,10 +91,10 @@ class GitHubTestHarness private constructor(
         } else {
             val remoteSource = scratchDir.resolve("remote-source")
             JGitClient(remoteSource).init().createInitialCommit()
-            remoteGit.clone(remoteSource.toURI().toString(), bare = true)
+            remoteGit.clone(remoteSource.toURI().toString(), remoteName, bare = true)
             remoteRepo.toURI().toString()
         }
-        localGit.clone(uriToClone)
+        localGit.clone(uriToClone, remoteName)
     }
 
     suspend fun createCommitsFrom(testCase: TestCaseData) {
@@ -177,7 +179,7 @@ class GitHubTestHarness private constructor(
                 }
 
                 for (remoteRef in commitData.remoteRefs) {
-                    localGit.push(listOf(RefSpec("${FORCE_PUSH_PREFIX}HEAD", remoteRef)))
+                    localGit.push(listOf(RefSpec("${FORCE_PUSH_PREFIX}HEAD", remoteRef)), remoteName)
                 }
 
                 if (commitData.branches.isNotEmpty()) {
@@ -277,7 +279,7 @@ class GitHubTestHarness private constructor(
             }
         val refSpecs = (toRestore + toDelete).distinct().map(RefSpec::forcePush)
         logger.debug("Pushing {}", refSpecs)
-        localGit.push(refSpecs)
+        localGit.push(refSpecs, remoteName)
         localGit.deleteBranches(
             names = toRestore.map(RefSpec::localRef) + toDelete.map(RefSpec::remoteRef),
             force = true,
@@ -414,6 +416,7 @@ class GitHubTestHarness private constructor(
             rollBackChanges: Boolean = true,
             configPropertiesFile: File = File(System.getenv("HOME")).resolve(CONFIG_FILE_NAME),
             remoteBranchPrefix: String = DEFAULT_REMOTE_BRANCH_PREFIX,
+            remoteName: String = DEFAULT_REMOTE_NAME,
             block: suspend GitHubTestHarness.() -> Unit,
         ): GitHubTestHarness {
             val scratchDir = createTempDir()
@@ -445,6 +448,7 @@ class GitHubTestHarness private constructor(
                     localRepo,
                     remoteRepo,
                     remoteUri = githubUri.orEmpty(),
+                    remoteName,
                     gitHubInfo,
                     remoteBranchPrefix,
                     configByUserKey,
@@ -477,6 +481,11 @@ class GitHubTestHarness private constructor(
         private const val PROPERTY_GITHUB_TOKEN = "githubToken"
         private val RESTORE_PREFIX = "${GitHubTestHarness::class.java.simpleName.lowercase()}-restore/"
         private val DELETE_PREFIX = "${GitHubTestHarness::class.java.simpleName.lowercase()}-delete/"
+
+        // Use a default remote name that is something other than "origin". Previously there was lots of code that made
+        // assumptions about the remote name being "origin" or didn't parameterize it at all. I want to make sure I
+        // don't repeat that mistake, so we'll use something other than "origin" by default.
+        private const val DEFAULT_REMOTE_NAME = "git-hub-test-harness-remote"
 
         private fun File.toStringWithClickableURI(): String = "$this (${toURI().toString().replaceFirst("/", "///")})"
         private fun File.createRepoDirs() = resolve(LOCAL_REPO_SUBDIR) to resolve(REMOTE_REPO_SUBDIR)

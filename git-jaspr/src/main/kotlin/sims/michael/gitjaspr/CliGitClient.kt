@@ -26,19 +26,28 @@ class CliGitClient(
         executeCommand(listOf("git", "checkout", refName))
     }
 
-    override fun clone(uri: String, bare: Boolean): GitClient {
+    override fun clone(uri: String, remoteName: String, bare: Boolean): GitClient {
         logger.trace("clone {} {}", uri, bare)
         // The CLI doesn't support file:// URIs, so we need to strip the prefix
         val sanitizedUri = uri.removePrefix("file:")
         require(workingDirectory.exists() || workingDirectory.mkdir()) {
             "Working directory does not exist and could not be created: $workingDirectory"
         }
-        val bareOption = if (bare) listOf("--bare") else emptyList()
-        val command = listOf("git", "clone") + bareOption + listOf(sanitizedUri, workingDirectory.absolutePath)
+        val command = buildList {
+            add("git")
+            add("clone")
+            if (bare) {
+                add("--bare")
+            }
+            add("--origin")
+            add(remoteName)
+            add(sanitizedUri)
+            add(workingDirectory.absolutePath)
+        }
         return apply {
             executeCommand(command)
-            // Remove refs/remotes/origin/HEAD to match JGitClient's behavior
-            executeCommand(listOf("git", "remote", "set-head", DEFAULT_REMOTE_NAME, "-d"))
+            // Remove refs/remotes/<remoteName>/HEAD to match JGitClient's behavior
+            executeCommand(listOf("git", "remote", "set-head", remoteName, "-d"))
         }
     }
 
@@ -248,13 +257,13 @@ class CliGitClient(
         return log("HEAD", 1).single()
     }
 
-    override fun push(refSpecs: List<RefSpec>) {
+    override fun push(refSpecs: List<RefSpec>, remoteName: String) {
         logger.trace("push {}", refSpecs)
         val filteredRefSpecs = refSpecs
             .filterNot { refSpec ->
                 // Cli push doesn't like it when you try to force push a branch that doesn't exist
                 // Since we want it deleted anyway, don't complain, just filter it out
-                refSpec.localRef == FORCE_PUSH_PREFIX && !refExists(refsRemotes(refSpec.remoteRef))
+                refSpec.localRef == FORCE_PUSH_PREFIX && !refExists(refsRemotes(refSpec.remoteRef, remoteName))
             }
             .map { refSpec ->
                 // In this context we want to use the full ref name, so we can push HEAD to new branches
@@ -270,7 +279,7 @@ class CliGitClient(
                 listOf(
                     "git",
                     "push",
-                    "origin",
+                    remoteName,
                     "--atomic",
                 ) + filteredRefSpecs.map(RefSpec::toString),
             )

@@ -42,11 +42,11 @@ class GitJasprFunctionalExternalProcessTest : GitJasprTest {
         executeCli(
             scratchDir = scratchDir,
             remoteUri = remoteUri,
-            remoteName = DEFAULT_REMOTE_NAME,
+            remoteName = remoteName,
             extraCliArgs = emptyList(),
             homeDirConfig = buildHomeDirConfig(),
             repoDirConfig = emptyMap(),
-            strings = listOf("push"),
+            strings = listOf("push", remoteName),
             invokeLocation = localRepo,
             javaOptions = javaOptions,
         ).lines().drop(1).joinToString("\n") // Hacky, drop the first line which is debug output.
@@ -56,11 +56,11 @@ class GitJasprFunctionalExternalProcessTest : GitJasprTest {
         return executeCli(
             scratchDir = scratchDir,
             remoteUri = remoteUri,
-            remoteName = DEFAULT_REMOTE_NAME,
+            remoteName = remoteName,
             extraCliArgs = emptyList(),
             homeDirConfig = buildHomeDirConfig(),
             repoDirConfig = emptyMap(),
-            strings = listOf("status", DEFAULT_REMOTE_NAME, refSpec.toString()),
+            strings = listOf("status", remoteName, refSpec.toString()),
             invokeLocation = localRepo,
             javaOptions = javaOptions,
 
@@ -71,11 +71,11 @@ class GitJasprFunctionalExternalProcessTest : GitJasprTest {
         executeCli(
             scratchDir = scratchDir,
             remoteUri = remoteUri,
-            remoteName = DEFAULT_REMOTE_NAME,
+            remoteName = remoteName,
             extraCliArgs = emptyList(),
             homeDirConfig = buildHomeDirConfig(),
             repoDirConfig = emptyMap(),
-            strings = listOf("merge", DEFAULT_REMOTE_NAME, refSpec.toString()),
+            strings = listOf("merge", remoteName, refSpec.toString()),
             invokeLocation = localRepo,
             javaOptions = javaOptions,
         )
@@ -85,13 +85,13 @@ class GitJasprFunctionalExternalProcessTest : GitJasprTest {
         executeCli(
             scratchDir = scratchDir,
             remoteUri = remoteUri,
-            remoteName = DEFAULT_REMOTE_NAME,
+            remoteName = remoteName,
             extraCliArgs = emptyList(),
             homeDirConfig = buildHomeDirConfig(),
             repoDirConfig = emptyMap(),
             strings = listOf(
                 "auto-merge",
-                DEFAULT_REMOTE_NAME,
+                remoteName,
                 refSpec.toString(),
                 "--interval",
                 pollingIntervalSeconds.toString(),
