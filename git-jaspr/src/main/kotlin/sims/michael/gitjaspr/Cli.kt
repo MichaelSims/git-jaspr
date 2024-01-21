@@ -346,11 +346,6 @@ you'll need to re-enable it again.
         val rootLogger = loggerContext.getLogger(Logger.ROOT_LOGGER_NAME)
         val fileAppender = if (logFileDirectory != null) createFileAppender(loggerContext, logFileDirectory) else null
 
-        if (fileAppender != null) {
-            rootLogger.addAppender(fileAppender)
-            Cli.logger.debug("Logging to {}", fileAppender.file)
-        }
-
         rootLogger.getAppender("STDOUT").apply {
             clearAllFilters()
             addFilter(
@@ -359,6 +354,11 @@ you'll need to re-enable it again.
                     start()
                 },
             )
+        }
+
+        if (fileAppender != null) {
+            rootLogger.addAppender(fileAppender)
+            Cli.logger.debug("Logging to {}", fileAppender.file)
         }
 
         return loggerContext to fileAppender?.file
