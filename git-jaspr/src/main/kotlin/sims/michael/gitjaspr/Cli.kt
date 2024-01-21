@@ -323,6 +323,7 @@ you'll need to re-enable it again.
         val (loggingContext, logFile) = initLogging(config.logLevel, config.logsDirectory)
         runBlocking {
             val logger = Cli.logger
+            logger.debug("{} version {}", GitJaspr::class.java.simpleName, VERSION)
             try {
                 doRun()
             } catch (e: GitJasprException) {
@@ -434,7 +435,7 @@ object Cli {
         is handled via an abstract base class.
          */
         NoOpCliktCommand(name = "git jaspr")
-            .versionOption("v17-beta")
+            .versionOption(VERSION)
             .subcommands(
                 listOf(
                     Status(),
@@ -450,6 +451,7 @@ object Cli {
     }
 }
 
+const val VERSION = "v17-beta"
 const val WORKING_DIR_PROPERTY_NAME = "git-jaspr-working-dir"
 const val CONFIG_FILE_NAME = ".git-jaspr.properties"
 const val DEFAULT_LOCAL_OBJECT = GitClient.HEAD
