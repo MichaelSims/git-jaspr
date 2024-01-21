@@ -51,9 +51,18 @@ class CliGitClient(
         }
     }
 
-    override fun fetch(remoteName: String) {
-        logger.trace("fetch {}", remoteName)
-        executeCommand(listOf("git", "fetch", remoteName))
+    override fun fetch(remoteName: String, prune: Boolean) {
+        logger.trace("fetch {}{}", remoteName, if (prune) " (with prune)" else "")
+        executeCommand(
+            buildList {
+                add("git")
+                add("fetch")
+                if (prune) {
+                    add("--prune")
+                }
+                add(remoteName)
+            },
+        )
     }
 
     override fun log(): List<Commit> {

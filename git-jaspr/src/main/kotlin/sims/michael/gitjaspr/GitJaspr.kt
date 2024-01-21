@@ -300,10 +300,10 @@ class GitJaspr(
         }
     }
 
-    suspend fun clean(dryRun: Boolean) {
-        logger.trace("clean{}", if (dryRun) " (dryRun)" else "")
+    internal suspend fun getOrphanedBranches(): List<String> {
+        logger.trace("getOrphanedBranches")
         val pullRequests = ghClient.getPullRequests().map(PullRequest::headRefName).toSet()
-        gitClient.fetch(config.remoteName)
+        gitClient.fetch(config.remoteName, prune = true)
         val orphanedBranches = gitClient
             .getRemoteBranches(config.remoteName)
             .map(RemoteBranch::name)
@@ -316,6 +316,13 @@ class GitJaspr(
                     false
                 }
             }
+        return orphanedBranches
+    }
+
+    suspend fun clean(dryRun: Boolean) {
+        logger.trace("clean{}", if (dryRun) " (dryRun)" else "")
+        gitClient.fetch(config.remoteName)
+        val orphanedBranches = getOrphanedBranches()
         for (branch in orphanedBranches) {
             val shortMessage = gitClient.log("${config.remoteName}/$branch", 1).singleOrNull()?.shortMessage
             logger.info("{}{} is orphaned", branch, if (shortMessage != null) " ($shortMessage)" else "")

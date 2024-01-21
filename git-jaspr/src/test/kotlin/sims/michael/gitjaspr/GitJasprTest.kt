@@ -2762,6 +2762,7 @@ This is a body
     }
     //endregion
 
+    //region clean tests
     @Test
     fun `clean deletes expected branches`() {
         withTestSetup(useFakeRemote) {
@@ -2839,6 +2840,90 @@ This is a body
             )
         }
     }
+
+    @Test
+    fun `getOrphanedBranches prunes stale tracking branches`() {
+        withTestSetup(useFakeRemote, rollBackChanges = false) {
+            createCommitsFrom(
+                testCase {
+                    repository {
+                        commit {
+                            title = "a"
+                            willPassVerification = true
+                            remoteRefs += buildRemoteRef("a_01")
+                        }
+                        commit {
+                            title = "b"
+                            willPassVerification = true
+                            remoteRefs += buildRemoteRef("b_01")
+                        }
+                        commit {
+                            title = "c"
+                            localRefs += "dev1"
+                            willPassVerification = true
+                            remoteRefs += buildRemoteRef("c_01")
+                        }
+                    }
+                },
+            )
+            createCommitsFrom(
+                testCase {
+                    repository {
+                        commit {
+                            title = "z"
+                            willPassVerification = true
+                            remoteRefs += buildRemoteRef("z")
+                        }
+                        commit {
+                            title = "a"
+                            willPassVerification = true
+                            remoteRefs += buildRemoteRef("a")
+                        }
+                        commit {
+                            title = "b"
+                            willPassVerification = true
+                            remoteRefs += buildRemoteRef("b")
+                        }
+                        commit {
+                            title = "c"
+                            willPassVerification = true
+                            localRefs += "dev2"
+                            remoteRefs += buildRemoteRef("c")
+                        }
+                    }
+                    pullRequest {
+                        headRef = buildRemoteRef("z")
+                        baseRef = "main"
+                        title = "z"
+                        willBeApprovedByUserKey = "michael"
+                    }
+                    pullRequest {
+                        headRef = buildRemoteRef("a")
+                        baseRef = buildRemoteRef("z")
+                        title = "a"
+                        willBeApprovedByUserKey = "michael"
+                    }
+                },
+            )
+
+            remoteGit.deleteBranches(
+                listOf(
+                    buildRemoteRef("c"),
+                    buildRemoteRef("c_01"),
+                ),
+                force = true,
+            )
+
+            assertEquals(
+                listOf(
+                    buildRemoteRef("b"),
+                    buildRemoteRef("b_01"),
+                ),
+                gitJaspr.getOrphanedBranches().sorted(),
+            )
+        }
+    }
+    //endregion
 
     // It may seem silly to repeat what is already defined in GitJaspr.HEADER, but if a dev changes the header I want
     // these tests to break so that any such changes are very deliberate. This is a compromise between referencing the
