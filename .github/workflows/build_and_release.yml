@@ -62,7 +62,7 @@ jobs:
     needs: ['create_release', 'native_builds']
     runs-on: 'ubuntu-latest'
     steps:
-      - uses: eregon/publish-release@v1.0.5
+      - uses: eregon/publish-release@v1.0.6
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
