@@ -214,10 +214,10 @@ the following methods:
 
 - Create a file named $CONFIG_FILE_NAME in your home
   directory with the following contents:
-    githubToken=<your token here>
+    github-token=<your token here>
 - Create a file named $CONFIG_FILE_NAME in your working
   directory with the following contents:
-    githubToken=<your token here>
+    github-token=<your token here>
 - Set the environment variable $GITHUB_TOKEN_ENV_VAR to
   your token
 
