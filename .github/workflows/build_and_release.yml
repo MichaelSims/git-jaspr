@@ -29,7 +29,7 @@ jobs:
         include:
           - os: 'ubuntu-20.04'
             label: 'linux'
-          - os: 'macos-14-large'
+          - os: 'macos-14'
             label: 'mac'
     runs-on: ${{matrix.os}}
     steps:
