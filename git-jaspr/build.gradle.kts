@@ -31,7 +31,7 @@ graalvmNative {
 
 graphql {
     client {
-        sdlEndpoint = "https://docs.github.com/public/schema.docs.graphql"
+        sdlEndpoint = "https://docs.github.com/public/fpt/schema.docs.graphql"
         queryFileDirectory = "src/graphql"
         packageName = "sims.michael.gitjaspr.generated"
         serializer = GraphQLSerializer.KOTLINX
