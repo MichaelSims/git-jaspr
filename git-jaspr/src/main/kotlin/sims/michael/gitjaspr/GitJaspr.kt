@@ -40,11 +40,21 @@ class GitJaspr(
         val numCommitsBehind = gitClient.logRange(stack.last().hash, "$remoteName/${refSpec.remoteRef}").size
         return buildString {
             append(HEADER)
-            var stackCheck = numCommitsBehind == 0
-            for (status in statuses) {
+
+            val stackChecks = if (numCommitsBehind != 0) {
+                List(statuses.size) { false } // If the stack is out-of-date, no commits are mergeable
+            } else {
+                statuses.fold(emptyList()) { currentStack, status ->
+                    val allFlagsAreSuccess = status.toStatusList(commitsWithDuplicateIds).all { it == SUCCESS }
+                    val currentStackIsAllTrue = currentStack.all { it }
+                    currentStack + (currentStackIsAllTrue && allFlagsAreSuccess)
+                }
+            }
+
+            for (statusAndStackCheck in statuses.reversed().zip(stackChecks.reversed())) {
+                val (status, stackCheck) = statusAndStackCheck
                 append("[")
                 val flags = status.toStatusList(commitsWithDuplicateIds)
-                if (!flags.all { it == SUCCESS }) stackCheck = false
                 val statusList = flags + if (stackCheck) SUCCESS else EMPTY
                 append(statusList.joinToString(separator = "", transform = Status::emoji))
                 append("] ")
@@ -650,7 +660,12 @@ class GitJaspr(
 
         @Suppress("unused")
         enum class Status(val emoji: String) {
-            SUCCESS("✅"), FAIL("❌"), PENDING("⌛"), UNKNOWN("❓"), EMPTY("ㄧ"), WARNING("❗")
+            SUCCESS("✅"),
+            FAIL("❌"),
+            PENDING("⌛"),
+            UNKNOWN("❓"),
+            EMPTY("ㄧ"),
+            WARNING("❗"),
         }
     }
 
