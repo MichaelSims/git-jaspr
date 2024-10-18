@@ -61,7 +61,14 @@ class GitHubClientWiring(
     }
 
     val graphQLClient: GraphQLClient<*> by lazy {
-        GitHubGraphQLClient(GraphQLKtorClient(URL("https://api.github.com/graphql"), httpClient))
+        ErrorMappingGraphQLClient(
+            GitHubGraphQLClient(
+                GraphQLKtorClient(
+                    URL("https://api.github.com/graphql"),
+                    httpClient,
+                ),
+            ),
+        )
     }
 
     val gitHubClient: GitHubClient by lazy {
