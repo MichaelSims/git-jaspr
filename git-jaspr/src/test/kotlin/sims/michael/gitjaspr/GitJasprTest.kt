@@ -59,7 +59,7 @@ interface GitJasprTest {
                     localWillBeDirty = true
                 },
             )
-            val exception = assertThrows<IllegalStateException> {
+            val exception = assertThrows<GitJasprException> {
                 push()
             }
             logger.info("Exception message is {}", exception.message)
