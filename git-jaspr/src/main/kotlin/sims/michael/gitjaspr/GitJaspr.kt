@@ -526,6 +526,10 @@ class GitJaspr(
         while (true) {
             try {
                 gitClient.push(branchesToDelete, config.remoteName)
+                tries++
+                if (tries > 1) {
+                    logger.info("Successfully deleted branches after {} tries.", tries)
+                }
                 break
             } catch (e: Exception) {
                 tries++
