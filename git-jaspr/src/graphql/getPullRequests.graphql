@@ -12,7 +12,8 @@ query getPullRequests(
     }
     repository(owner:$repo_owner, name:$repo_name) {
         id
-        pullRequests(first:60, states:[OPEN]) {
+        # TODO - We should use pagination to get all PRs, rather than hardcoding a limit of 120
+        pullRequests(first:120, states:[OPEN]) {
             nodes {
                 id
                 number
