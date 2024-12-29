@@ -42,6 +42,7 @@ class GitHubClientWiring(
     private val githubToken: String,
     private val gitHubInfo: GitHubInfo,
     private val remoteBranchPrefix: String,
+    private val getPullRequestsPageSize: Int = GitHubClient.GET_PULL_REQUESTS_DEFAULT_PAGE_SIZE,
 ) {
     private val bearerTokens by lazy {
         BearerTokens(githubToken, githubToken)
@@ -72,6 +73,6 @@ class GitHubClientWiring(
     }
 
     val gitHubClient: GitHubClient by lazy {
-        GitHubClientImpl(graphQLClient, gitHubInfo, remoteBranchPrefix)
+        GitHubClientImpl(graphQLClient, gitHubInfo, remoteBranchPrefix, getPullRequestsPageSize)
     }
 }

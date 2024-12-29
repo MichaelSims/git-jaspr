@@ -9,6 +9,7 @@ import sims.michael.gitjaspr.generated.*
 import sims.michael.gitjaspr.generated.enums.PullRequestReviewDecision
 import sims.michael.gitjaspr.generated.enums.PullRequestReviewEvent
 import sims.michael.gitjaspr.generated.enums.StatusState
+import sims.michael.gitjaspr.generated.getpullrequests.RateLimit
 import sims.michael.gitjaspr.generated.inputs.AddPullRequestReviewInput
 import sims.michael.gitjaspr.generated.inputs.ClosePullRequestInput
 import sims.michael.gitjaspr.generated.inputs.CreatePullRequestInput
@@ -26,12 +27,16 @@ interface GitHubClient {
     suspend fun closePullRequest(pullRequest: PullRequest)
     suspend fun approvePullRequest(pullRequest: PullRequest)
     fun autoClosePrs()
+    companion object {
+        const val GET_PULL_REQUESTS_DEFAULT_PAGE_SIZE = 100
+    }
 }
 
 class GitHubClientImpl(
     private val delegate: GraphQLClient<*>,
     private val gitHubInfo: GitHubInfo,
     private val remoteBranchPrefix: String,
+    private val getPullRequestsPageSize: Int,
 ) : GitHubClient {
     private val logger = LoggerFactory.getLogger(GitHubClient::class.java)
 
@@ -49,16 +54,28 @@ class GitHubClientImpl(
         // It'd be nice if the server could filter this for us but there doesn't seem to be a good way to do that.
         val ids = commitFilter?.requireNoNulls()?.toSet()
 
-        val response = delegate
-            .execute(GetPullRequests(GetPullRequests.Variables(gitHubInfo.owner, gitHubInfo.name)))
-            .data
-        logger.logRateLimitInfo(response?.rateLimit?.toCanonicalRateLimitInfo())
-        return response
-            ?.repository
-            ?.pullRequests
-            ?.nodes
-            .orEmpty()
-            .filterNotNull()
+        // Recursively fetch all PR pages and concatenate them into a single list
+        suspend fun getPullRequests(afterCursor: String? = null): Pair<List<GetPullRequestsPullRequest>, RateLimit?> {
+            val variables = GetPullRequests.Variables(
+                gitHubInfo.owner,
+                gitHubInfo.name,
+                getPullRequestsPageSize,
+                afterCursor,
+            )
+            val resultData = delegate.execute(GetPullRequests(variables)).data
+            val pullRequests = resultData?.repository?.pullRequests
+            val pageInfo = pullRequests?.pageInfo
+            val nodes = pullRequests?.nodes.orEmpty().filterNotNull() + if (pageInfo?.hasNextPage == true) {
+                getPullRequests(pageInfo.endCursor).first
+            } else {
+                emptyList()
+            }
+            return nodes to resultData?.rateLimit
+        }
+        val (prs, rateLimit) = getPullRequests()
+
+        logger.logRateLimitInfo(rateLimit?.toCanonicalRateLimitInfo())
+        return prs
             .mapNotNull { pr ->
                 val commitId = getCommitIdFromRemoteRef(pr.headRefName, remoteBranchPrefix)
                 if (ids?.contains(commitId) != false) {

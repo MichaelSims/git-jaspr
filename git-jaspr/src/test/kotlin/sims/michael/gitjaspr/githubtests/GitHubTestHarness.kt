@@ -31,6 +31,7 @@ class GitHubTestHarness private constructor(
     private val remoteBranchPrefix: String = DEFAULT_REMOTE_BRANCH_PREFIX,
     private val configByUserKey: Map<String, UserConfig>,
     private val useFakeRemote: Boolean = true,
+    private val getPullRequestsPageSize: Int,
 ) {
 
     val localGit: GitClient = OptimizedCliGitClient(localRepo)
@@ -39,7 +40,15 @@ class GitHubTestHarness private constructor(
     private val ghClientsByUserKey: Map<String, GitHubClient> by lazy {
         if (!useFakeRemote) {
             configByUserKey
-                .map { (k, v) -> k to GitHubClientWiring(v.githubToken, gitHubInfo, remoteBranchPrefix).gitHubClient }
+                .map { (k, v) ->
+                    val wiring = GitHubClientWiring(
+                        v.githubToken,
+                        gitHubInfo,
+                        remoteBranchPrefix,
+                        getPullRequestsPageSize,
+                    )
+                    k to wiring.gitHubClient
+                }
                 .toMap()
         } else {
             emptyMap()
@@ -417,6 +426,7 @@ class GitHubTestHarness private constructor(
             configPropertiesFile: File = File(System.getenv("HOME")).resolve(CONFIG_FILE_NAME),
             remoteBranchPrefix: String = DEFAULT_REMOTE_BRANCH_PREFIX,
             remoteName: String = DEFAULT_REMOTE_NAME,
+            getPullRequestsPageSize: Int = GitHubClient.GET_PULL_REQUESTS_DEFAULT_PAGE_SIZE,
             block: suspend GitHubTestHarness.() -> Unit,
         ): GitHubTestHarness {
             val scratchDir = createTempDir()
@@ -453,6 +463,7 @@ class GitHubTestHarness private constructor(
                     remoteBranchPrefix,
                     configByUserKey,
                     useFakeRemote,
+                    getPullRequestsPageSize,
                 )
                 testHarness.apply {
                     try {

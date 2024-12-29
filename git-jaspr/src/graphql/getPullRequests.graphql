@@ -1,6 +1,10 @@
 query getPullRequests(
     $repo_owner: String!,
     $repo_name: String!,
+    # This default is specified for convenience when executing this query directly in the IDE... the application defines
+    # its own default elsewhere.
+    $page_size: Int = 100,
+    $after_cursor: String,
 ){
     rateLimit {
         cost
@@ -12,8 +16,7 @@ query getPullRequests(
     }
     repository(owner:$repo_owner, name:$repo_name) {
         id
-        # TODO - We should use pagination to get all PRs, rather than hardcoding a limit of 120
-        pullRequests(first:100, states:[OPEN]) {
+        pullRequests(first:$page_size, states:[OPEN], after: $after_cursor) {
             nodes {
                 id
                 number
@@ -48,6 +51,12 @@ query getPullRequests(
                         }
                     }
                 }
+            }
+            pageInfo {
+                endCursor
+                startCursor
+                hasNextPage
+                hasPreviousPage
             }
         }
     }
