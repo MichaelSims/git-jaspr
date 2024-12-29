@@ -1,5 +1,6 @@
 package sims.michael.gitjaspr
 
+import com.github.ajalt.mordant.rendering.TextStyles
 import kotlinx.coroutines.delay
 import org.slf4j.LoggerFactory
 import sims.michael.gitjaspr.CommitParsers.getSubjectAndBodyFromFullMessage
@@ -38,7 +39,19 @@ class GitJaspr(
             .aggregate { _, accumulator: List<RemoteCommitStatus>?, element, _ -> accumulator.orEmpty() + element }
             .filter { (_, statuses) -> statuses.size > 1 }
         val numCommitsBehind = gitClient.logRange(stack.last().hash, "$remoteName/${refSpec.remoteRef}").size
+
+        val namedStackPrefix = "${config.remoteNamedStackBranchPrefix}/"
+        val stackName = gitClient
+            .getUpstreamBranchName(remoteName)
+            ?.takeIf { upstream -> upstream.startsWith(namedStackPrefix) }
+            ?.removePrefix(namedStackPrefix)
+
         return buildString {
+            if (stackName != null) {
+                appendLine(TextStyles.bold("$stackName:"))
+                appendLine()
+            }
+
             append(HEADER)
 
             val stackChecks = if (numCommitsBehind != 0) {

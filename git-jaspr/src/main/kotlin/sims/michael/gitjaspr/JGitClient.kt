@@ -9,6 +9,7 @@ import org.eclipse.jgit.api.Git
 import org.eclipse.jgit.api.ListBranchCommand
 import org.eclipse.jgit.api.ResetCommand
 import org.eclipse.jgit.api.errors.TransportException
+import org.eclipse.jgit.lib.BranchConfig
 import org.eclipse.jgit.lib.Constants
 import org.eclipse.jgit.lib.PersonIdent
 import org.eclipse.jgit.revwalk.RevCommit
@@ -282,6 +283,15 @@ class JGitClient(
 
     override fun getRemoteUriOrNull(remoteName: String): String? = useGit { git ->
         git.remoteList().call().singleOrNull { it.name == remoteName }?.urIs?.firstOrNull()?.toASCIIString()
+    }
+
+    override fun getUpstreamBranchName(remoteName: String): String? = useGit { git ->
+        val prefix = "${Constants.R_REMOTES}$remoteName/"
+        val repository = git.repository
+        BranchConfig(repository.config, repository.branch)
+            .trackingBranch
+            ?.takeIf { name -> name.startsWith(prefix) }
+            ?.removePrefix(prefix)
     }
 
     private inline fun <T> useGit(block: (Git) -> T): T = Git.open(workingDirectory).use(block)

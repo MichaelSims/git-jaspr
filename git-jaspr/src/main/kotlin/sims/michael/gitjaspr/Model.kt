@@ -3,6 +3,7 @@ package sims.michael.gitjaspr
 import ch.qos.logback.classic.Level
 import kotlinx.serialization.Serializable
 import sims.michael.gitjaspr.RemoteRefEncoding.DEFAULT_REMOTE_BRANCH_PREFIX
+import sims.michael.gitjaspr.RemoteRefEncoding.DEFAULT_REMOTE_NAMED_STACK_BRANCH_PREFIX
 import sims.michael.gitjaspr.serde.FileSerializer
 import sims.michael.gitjaspr.serde.LevelSerializer
 import java.io.File
@@ -21,6 +22,7 @@ data class Config(
     val remoteName: String,
     val gitHubInfo: GitHubInfo,
     val remoteBranchPrefix: String = DEFAULT_REMOTE_BRANCH_PREFIX,
+    val remoteNamedStackBranchPrefix: String = DEFAULT_REMOTE_NAMED_STACK_BRANCH_PREFIX,
     @Serializable(with = LevelSerializer::class)
     val logLevel: Level = Level.INFO,
     @Serializable(with = FileSerializer::class)
