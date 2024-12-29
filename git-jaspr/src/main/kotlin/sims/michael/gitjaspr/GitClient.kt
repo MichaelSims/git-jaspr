@@ -30,7 +30,7 @@ interface GitClient {
     fun cherryPick(commit: Commit, commitIdent: Ident? = null): Commit
     fun push(refSpecs: List<RefSpec>, remoteName: String = DEFAULT_REMOTE_NAME)
     fun getRemoteUriOrNull(remoteName: String): String?
-    fun getUpstreamBranchName(remoteName: String): String?
+    fun getUpstreamBranch(remoteName: String): RemoteBranch?
 
     companion object {
         const val HEAD = Constants.HEAD

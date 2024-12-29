@@ -285,13 +285,16 @@ class JGitClient(
         git.remoteList().call().singleOrNull { it.name == remoteName }?.urIs?.firstOrNull()?.toASCIIString()
     }
 
-    override fun getUpstreamBranchName(remoteName: String): String? = useGit { git ->
+    override fun getUpstreamBranch(remoteName: String): RemoteBranch? = useGit { git ->
         val prefix = "${Constants.R_REMOTES}$remoteName/"
         val repository = git.repository
         BranchConfig(repository.config, repository.branch)
             .trackingBranch
             ?.takeIf { name -> name.startsWith(prefix) }
-            ?.removePrefix(prefix)
+            ?.let { trackingBranchName ->
+                val trackingBranchSimpleName = trackingBranchName.removePrefix(prefix)
+                getRemoteBranches(remoteName).firstOrNull { branch -> branch.name == trackingBranchSimpleName }
+            }
     }
 
     private inline fun <T> useGit(block: (Git) -> T): T = Git.open(workingDirectory).use(block)

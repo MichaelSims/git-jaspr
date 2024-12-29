@@ -40,13 +40,8 @@ class GitJaspr(
             .filter { (_, statuses) -> statuses.size > 1 }
         val numCommitsBehind = gitClient.logRange(stack.last().hash, "$remoteName/${refSpec.remoteRef}").size
 
-        val namedStackPrefix = "${config.remoteNamedStackBranchPrefix}/"
-        val stackName = gitClient
-            .getUpstreamBranchName(remoteName)
-            ?.takeIf { upstream -> upstream.startsWith(namedStackPrefix) }
-            ?.removePrefix(namedStackPrefix)
-
         return buildString {
+            val stackName = getStackNameOrNull()
             if (stackName != null) {
                 appendLine(TextStyles.bold("$stackName:"))
                 appendLine()
@@ -102,11 +97,11 @@ class GitJaspr(
     suspend fun push(refSpec: RefSpec = RefSpec(DEFAULT_LOCAL_OBJECT, DEFAULT_TARGET_REF)) {
         logger.trace("push {}", refSpec)
 
-        if (!gitClient.isWorkingDirectoryClean()) {
-            throw GitJasprException(
-                "Your working directory has local changes. Please commit or stash them and re-run the command.",
-            )
-        }
+//        if (!gitClient.isWorkingDirectoryClean()) {
+//            throw GitJasprException(
+//                "Your working directory has local changes. Please commit or stash them and re-run the command.",
+//            )
+//        }
 
         val remoteName = config.remoteName
         gitClient.fetch(remoteName)
@@ -131,19 +126,31 @@ class GitJaspr(
         val pullRequestsRebased = pullRequests.updateBaseRefForReorderedPrsIfAny(stack, refSpec.remoteRef)
 
         val remoteBranches = gitClient.getRemoteBranches(config.remoteName)
-        val outOfDateBranches = stack.map { c -> c.toRefSpec() } - remoteBranches.map { b -> b.toRefSpec() }.toSet()
+        val remoteRefSpecs = remoteBranches.map { b -> b.toRefSpec() }
+        val outOfDateBranches = stack.map { c -> c.toRefSpec() } - remoteRefSpecs.toSet()
         val revisionHistoryRefs = getRevisionHistoryRefs(
             stack,
             remoteBranches,
             remoteName,
             outOfDateBranches.map(RefSpec::remoteRef),
         )
-        val refSpecs = outOfDateBranches.map(RefSpec::forcePush) + revisionHistoryRefs
+        val namedStackRefSpec = gitClient
+            .getUpstreamBranch(remoteName)
+            ?.takeIf { branch -> branch.name.startsWith("${config.remoteNamedStackBranchPrefix}/") }
+            ?.let { branch ->
+                // Convert symbolic refs (i.e. HEAD) to short hash so our comparison matches below
+                val localRef = gitClient.log(refSpec.localRef, 1).single().hash
+                RefSpec(localRef, branch.name)
+            }
+        val outOfDateNamedStackBranch = listOfNotNull(namedStackRefSpec) - remoteRefSpecs.toSet()
+        val refSpecs = outOfDateBranches.map(RefSpec::forcePush) + outOfDateNamedStackBranch + revisionHistoryRefs
         gitClient.push(refSpecs, config.remoteName)
         logger.info(
-            "Pushed {} commit {} and {} history {}",
+            "Pushed {} commit {}, {} named stack {}, and {} history {}",
             outOfDateBranches.size,
             refOrRefs(outOfDateBranches.size),
+            outOfDateNamedStackBranch.size,
+            refOrRefs(outOfDateNamedStackBranch.size),
             revisionHistoryRefs.size,
             refOrRefs(revisionHistoryRefs.size),
         )
@@ -663,6 +670,15 @@ class GitJaspr(
         }
 
         return updatedPullRequests
+    }
+
+    private fun getStackNameOrNull(): String? {
+        val namedStackPrefix = "${config.remoteNamedStackBranchPrefix}/"
+        return gitClient
+            .getUpstreamBranch(config.remoteName)
+            ?.name
+            ?.takeIf { upstream -> upstream.startsWith(namedStackPrefix) }
+            ?.removePrefix(namedStackPrefix)
     }
 
     private fun Commit.toRefSpec(): RefSpec = RefSpec(hash, toRemoteRefName())
