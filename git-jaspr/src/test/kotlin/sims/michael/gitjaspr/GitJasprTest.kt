@@ -3,12 +3,14 @@ package sims.michael.gitjaspr
 import org.junit.jupiter.api.*
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.slf4j.Logger
+import sims.michael.gitjaspr.RemoteRefEncoding.DEFAULT_REMOTE_NAMED_STACK_BRANCH_PREFIX
 import sims.michael.gitjaspr.RemoteRefEncoding.buildRemoteRef
 import sims.michael.gitjaspr.githubtests.GitHubTestHarness
 import sims.michael.gitjaspr.githubtests.GitHubTestHarness.Companion.withTestSetup
 import sims.michael.gitjaspr.githubtests.TestCaseData
 import sims.michael.gitjaspr.githubtests.generatedtestdsl.testCase
 import java.util.MissingFormatArgumentException
+import kotlin.test.assertContains
 import kotlin.test.assertEquals
 
 interface GitJasprTest {
@@ -1569,6 +1571,107 @@ commit-id: 0
             push()
             // No assert here... I'm basically just testing that this doesn't throw an unhandled error, like it would
             // if we tried to push multiple source refs to the same destination ref
+        }
+    }
+
+    @Test
+    fun `push new named stack`() {
+        withTestSetup(useFakeRemote) {
+            createCommitsFrom(
+                testCase {
+                    repository {
+                        commit { title = "one" }
+                        commit { title = "two" }
+                        commit { title = "three" }
+                        commit { title = "four" }
+                        commit {
+                            title = "five"
+                            localRefs += "main"
+                        }
+                    }
+                },
+            )
+
+            localGit.checkout("main") // createCommitsFrom leaves us in detached HEAD state, so fix that
+            val stackName = "my-stack-name"
+            gitJaspr.push(stackName = stackName)
+            assertEquals(
+                "$DEFAULT_REMOTE_NAMED_STACK_BRANCH_PREFIX/$stackName",
+                localGit.getUpstreamBranch(remoteName)?.name,
+            )
+        }
+    }
+
+    @Test
+    fun `push new named stack from detached HEAD is unsupported`() {
+        withTestSetup(useFakeRemote) {
+            createCommitsFrom(
+                testCase {
+                    repository {
+                        commit { title = "one" }
+                        commit { title = "two" }
+                        commit { title = "three" }
+                        commit { title = "four" }
+                        commit {
+                            title = "five"
+                            localRefs += "main"
+                        }
+                    }
+                },
+            )
+
+            localGit.checkout(localGit.log().first().hash)
+            val message = assertThrows<GitJasprException> {
+                gitJaspr.push(stackName = "my-stack-name")
+            }.message
+            assertContains(message, "detached HEAD")
+        }
+    }
+
+    @Test
+    fun `push existing named stack`() {
+        withTestSetup(useFakeRemote) {
+            createCommitsFrom(
+                testCase {
+                    repository {
+                        commit { title = "one" }
+                        commit { title = "two" }
+                        commit { title = "three" }
+                        commit { title = "four" }
+                        commit {
+                            title = "five"
+                            localRefs += "main"
+                        }
+                    }
+                },
+            )
+
+            val stackName = "my-stack-name"
+            localGit.checkout("main") // createCommitsFrom leaves us in detached HEAD state, so fix that
+            gitJaspr.push(stackName = stackName)
+
+            createCommitsFrom(
+                testCase {
+                    repository {
+                        commit { title = "one" }
+                        commit { title = "two" }
+                        commit { title = "three" }
+                        commit { title = "four" }
+                        commit { title = "five" }
+                        commit {
+                            title = "six"
+                            localRefs += "main"
+                        }
+                    }
+                },
+            )
+
+            localGit.checkout("main") // createCommitsFrom leaves us in detached HEAD state, so fix that
+            gitJaspr.push()
+            assertEquals(
+                "$DEFAULT_REMOTE_NAMED_STACK_BRANCH_PREFIX/$stackName",
+                localGit.getUpstreamBranch(remoteName)?.name,
+            )
         }
     }
     //endregion
