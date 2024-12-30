@@ -5,6 +5,7 @@ import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.assertThrows
 import org.slf4j.LoggerFactory
 import sims.michael.gitjaspr.RemoteRefEncoding.buildRemoteRef
+import sims.michael.gitjaspr.githubtests.GitHubTestHarness.Companion.INITIAL_COMMIT_SHORT_MESSAGE
 import sims.michael.gitjaspr.githubtests.GitHubTestHarness.Companion.withTestSetup
 import sims.michael.gitjaspr.githubtests.generatedtestdsl.testCase
 import sims.michael.gitjaspr.testing.DEFAULT_COMMITTER
@@ -462,6 +463,18 @@ class CliGitClientTest {
     }
 
     @Test
+    fun `compare getUpstreamBranch`() {
+        withTestSetup {
+            val cliGit = CliGitClient(localGit.workingDirectory)
+            val git = JGitClient(localGit.workingDirectory)
+            assertEquals(
+                cliGit.getUpstreamBranch(remoteName),
+                git.getUpstreamBranch(remoteName),
+            )
+        }
+    }
+
+    @Test
     fun testInit() {
         withTestSetup {
             val git = CliGitClient(localGit.workingDirectory.resolve("new-repo"))
@@ -702,6 +715,21 @@ This is a commit body
             val git = CliGitClient(localGit.workingDirectory)
             assertTrue(git.refExists("main"))
             assertFalse(git.refExists("nonexistent"))
+        }
+    }
+
+    @Test
+    fun testGetUpstreamBranch() {
+        withTestSetup {
+            val git = CliGitClient(localGit.workingDirectory)
+            val actual = checkNotNull(git.getUpstreamBranch(remoteName))
+            assertEquals(
+                actual.copy(
+                    name = "main",
+                    commit = actual.commit.copy(shortMessage = INITIAL_COMMIT_SHORT_MESSAGE),
+                ),
+                actual,
+            )
         }
     }
 }

@@ -302,6 +302,21 @@ class CliGitClient(
             .trim()
             .takeIf(String::isNotBlank)
 
+    override fun getUpstreamBranch(remoteName: String): RemoteBranch? {
+        logger.trace("getUpstreamBranch {}", remoteName)
+        val prefix = "$remoteName/"
+        return executeCommand(listOf("git", "rev-parse", "--abbrev-ref", "--symbolic-full-name", "@{u}"))
+            .output
+            .string
+            .trim()
+            .takeIf(String::isNotBlank)
+            ?.takeIf { name -> name.startsWith(prefix) }
+            ?.let { trackingBranchName ->
+                val trackingBranchSimpleName = trackingBranchName.removePrefix(prefix)
+                getRemoteBranches(remoteName).firstOrNull { branch -> branch.name == trackingBranchSimpleName }
+            }
+    }
+
     private fun gitLog(vararg logArg: String): List<Commit> {
         // Thanks to https://www.nushell.sh/cookbook/parsing_git_log.html for inspiration here
         val prettyFormat = listOf(
