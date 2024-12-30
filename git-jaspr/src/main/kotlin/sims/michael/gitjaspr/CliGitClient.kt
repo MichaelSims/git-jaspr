@@ -317,6 +317,11 @@ class CliGitClient(
             }
     }
 
+    override fun setUpstreamBranch(remoteName: String, branchName: String) {
+        logger.trace("setUpstreamBranch {} {}", remoteName, branchName)
+        executeCommand(listOf("git", "branch", "--set-upstream-to", "$remoteName/$branchName"))
+    }
+
     override fun reflog(): List<Commit> {
         logger.trace("reflog")
         return gitLog("-g")

@@ -10,6 +10,7 @@ import sims.michael.gitjaspr.githubtests.GitHubTestHarness.Companion.withTestSet
 import sims.michael.gitjaspr.githubtests.generatedtestdsl.testCase
 import sims.michael.gitjaspr.testing.DEFAULT_COMMITTER
 import sims.michael.gitjaspr.testing.toStringWithClickableURI
+import java.io.File
 import java.nio.file.Files
 
 class CliGitClientTest {
@@ -475,6 +476,27 @@ class CliGitClientTest {
     }
 
     @Test
+    fun `compare setUpstreamBranch`() {
+        fun setAndGetUpstream(createGitClient: (File) -> GitClient): String {
+            val harness = withTestSetup {
+                with(createGitClient(localGit.workingDirectory)) {
+                    val branchName = "new-branch"
+                    branch(branchName)
+                    push(listOf(RefSpec(branchName, branchName)), remoteName)
+                    setUpstreamBranch(remoteName, branchName)
+                }
+            }
+            val git = harness.localGit
+            val remoteName = harness.remoteName
+            val remoteBranch = checkNotNull(git.getUpstreamBranch(remoteName)) {
+                "No upstream branch found for remote $remoteName"
+            }
+            return remoteBranch.name
+        }
+        assertEquals(setAndGetUpstream(::CliGitClient), setAndGetUpstream(::JGitClient))
+    }
+
+    @Test
     fun `compare reflog`() {
         withTestSetup {
             val titles = (1..4).map(Int::toString)
@@ -753,6 +775,18 @@ This is a commit body
                 ),
                 actual,
             )
+        }
+    }
+
+    @Test
+    fun testSetUpstreamBranch() {
+        withTestSetup {
+            val git = CliGitClient(localGit.workingDirectory)
+            val branchName = "new-branch"
+            git.branch(branchName)
+            git.push(listOf(RefSpec(branchName, branchName)), remoteName)
+            git.setUpstreamBranch(remoteName, branchName)
+            assertEquals(branchName, git.getUpstreamBranch(remoteName)?.name)
         }
     }
 
