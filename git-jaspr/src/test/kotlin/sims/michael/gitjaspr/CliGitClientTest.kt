@@ -532,6 +532,23 @@ class CliGitClientTest {
     }
 
     @Test
+    fun `compare isHeadDetached`() {
+        withTestSetup {
+            val cliGit = CliGitClient(localGit.workingDirectory)
+            val git = JGitClient(localGit.workingDirectory)
+            assertEquals(
+                cliGit.isHeadDetached(),
+                git.isHeadDetached(),
+            )
+            cliGit.checkout(cliGit.log().first().hash)
+            assertEquals(
+                cliGit.isHeadDetached(),
+                git.isHeadDetached(),
+            )
+        }
+    }
+
+    @Test
     fun testInit() {
         withTestSetup {
             val git = CliGitClient(localGit.workingDirectory.resolve("new-repo"))
@@ -840,6 +857,16 @@ This is a commit body
         withTestSetup {
             val git = CliGitClient(localGit.workingDirectory)
             assertEquals("main", git.getCurrentBranchName())
+        }
+    }
+
+    @Test
+    fun testIsHeadDetached() {
+        withTestSetup {
+            val git = CliGitClient(localGit.workingDirectory)
+            assertFalse(git.isHeadDetached())
+            git.checkout(git.log().first().hash)
+            assertTrue(git.isHeadDetached())
         }
     }
 }

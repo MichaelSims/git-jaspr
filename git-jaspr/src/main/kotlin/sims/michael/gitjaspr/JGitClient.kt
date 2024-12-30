@@ -336,6 +336,13 @@ class JGitClient(
         return useGit { git -> git.repository.branch }
     }
 
+    override fun isHeadDetached(): Boolean {
+        logger.trace("isHeadDetached")
+        return useGit { git ->
+            !git.repository.exactRef(Constants.HEAD).isSymbolic
+        }
+    }
+
     private inline fun <T> useGit(block: (Git) -> T): T = Git.open(workingDirectory).use(block)
 
     companion object {
