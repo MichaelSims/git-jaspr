@@ -71,6 +71,7 @@ class CliGitClient(
     }
 
     override fun log(revision: String, maxCount: Int): List<Commit> {
+        logger.trace("log {} {}", revision, maxCount)
         return if (maxCount == -1) gitLog(revision) else gitLog(revision, "-$maxCount")
     }
 
@@ -85,6 +86,7 @@ class CliGitClient(
     }
 
     override fun getParents(commit: Commit): List<Commit> {
+        logger.trace("getParents {}", commit)
         return executeCommand(listOf("git", "log", commit.hash, "--pretty=%P", "-1"))
             .output
             .string
@@ -117,6 +119,7 @@ class CliGitClient(
     }
 
     override fun getRemoteBranches(remoteName: String): List<RemoteBranch> {
+        logger.trace("getRemoteBranches {}", remoteName)
         val command = listOf(
             "git",
             "branch",
@@ -186,8 +189,8 @@ class CliGitClient(
     }
 
     override fun deleteBranches(names: List<String>, force: Boolean): List<String> {
-        val filteredNames = names.filter { name -> refExists(name) }
         logger.trace("deleteBranches {} {}", names, force)
+        val filteredNames = names.filter { name -> refExists(name) }
         if (filteredNames.isNotEmpty()) {
             val forceOption = if (force) listOf("-D") else listOf("-d")
             executeCommand(listOf("git", "branch") + forceOption + filteredNames)
@@ -295,12 +298,18 @@ class CliGitClient(
         }
     }
 
-    override fun getRemoteUriOrNull(remoteName: String): String? =
-        executeCommand(listOf("git", "remote", "get-url", remoteName))
+    override fun getRemoteUriOrNull(remoteName: String): String? {
+        // Intentionally avoiding trace logging since this is called during initialization and shows up in the output
+        // of --show-config, which I want to avoid.
+        // It might be better in the future to either log everything to STDERR, or conditionally log to STDERR depending
+        // on the command + options (i.e. git jaspr status --show-config should log to STDERR to separate logging from
+        // that command's output.
+        return executeCommand(listOf("git", "remote", "get-url", remoteName))
             .output
             .string
             .trim()
             .takeIf(String::isNotBlank)
+    }
 
     override fun getUpstreamBranch(remoteName: String): RemoteBranch? {
         logger.trace("getUpstreamBranch {}", remoteName)
