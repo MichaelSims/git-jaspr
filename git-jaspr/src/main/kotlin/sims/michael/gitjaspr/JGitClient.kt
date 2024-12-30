@@ -10,6 +10,9 @@ import org.eclipse.jgit.api.ListBranchCommand
 import org.eclipse.jgit.api.ResetCommand
 import org.eclipse.jgit.api.errors.TransportException
 import org.eclipse.jgit.lib.BranchConfig
+import org.eclipse.jgit.lib.ConfigConstants.CONFIG_BRANCH_SECTION
+import org.eclipse.jgit.lib.ConfigConstants.CONFIG_KEY_MERGE
+import org.eclipse.jgit.lib.ConfigConstants.CONFIG_KEY_REMOTE
 import org.eclipse.jgit.lib.Constants
 import org.eclipse.jgit.lib.PersonIdent
 import org.eclipse.jgit.revwalk.RevCommit
@@ -298,6 +301,23 @@ class JGitClient(
                 val trackingBranchSimpleName = trackingBranchName.removePrefix(prefix)
                 getRemoteBranches(remoteName).firstOrNull { branch -> branch.name == trackingBranchSimpleName }
             }
+    }
+
+    override fun setUpstreamBranch(remoteName: String, branchName: String) {
+        logger.trace("setUpstreamBranch {} {}", remoteName, branchName)
+        require(getRemoteBranches(remoteName).map(RemoteBranch::name).contains(branchName)) {
+            "Remote $remoteName does not contain branch $branchName"
+        }
+        useGit { git ->
+            val r = git.repository
+            val config = r.config
+            val currentBranch = r.branch
+            with(config) {
+                setString(CONFIG_BRANCH_SECTION, currentBranch, CONFIG_KEY_REMOTE, remoteName)
+                setString(CONFIG_BRANCH_SECTION, currentBranch, CONFIG_KEY_MERGE, "${Constants.R_HEADS}$branchName")
+                save()
+            }
+        }
     }
 
     override fun reflog(): List<Commit> {
