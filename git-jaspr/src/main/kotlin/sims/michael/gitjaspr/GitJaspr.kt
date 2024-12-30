@@ -195,19 +195,13 @@ class GitJaspr(
 
         val numCommitsBehind = gitClient.logRange(refSpec.localRef, "$remoteName/${refSpec.remoteRef}").size
         if (numCommitsBehind > 0) {
-            val commits = if (numCommitsBehind > 1) "commits" else "commit"
-            logger.warn(
-                "Cannot merge because your stack is out-of-date with the base branch ({} {} behind {}).",
-                numCommitsBehind,
-                commits,
-                refSpec.remoteRef,
-            )
+            logMergeOutOfDateWarning(numCommitsBehind, if (numCommitsBehind > 1) "commits" else "commit", refSpec)
             return
         }
 
         val stack = gitClient.getLocalCommitStack(remoteName, refSpec.localRef, refSpec.remoteRef)
         if (stack.isEmpty()) {
-            logger.warn("Stack is empty.")
+            logStackIsEmptyWarning()
             return
         }
 
@@ -272,18 +266,13 @@ class GitJaspr(
             val numCommitsBehind = gitClient.logRange(refSpec.localRef, "$remoteName/${refSpec.remoteRef}").size
             if (numCommitsBehind > 0) {
                 val commits = if (numCommitsBehind > 1) "commits" else "commit"
-                logger.warn(
-                    "Cannot merge because your stack is out-of-date with the base branch ({} {} behind {}).",
-                    numCommitsBehind,
-                    commits,
-                    refSpec.remoteRef,
-                )
+                logMergeOutOfDateWarning(numCommitsBehind, commits, refSpec)
                 break
             }
 
             val stack = gitClient.getLocalCommitStack(remoteName, refSpec.localRef, refSpec.remoteRef)
             if (stack.isEmpty()) {
-                logger.warn("Stack is empty.")
+                logStackIsEmptyWarning()
                 break
             }
 
@@ -651,6 +640,16 @@ class GitJaspr(
 
         return updatedPullRequests
     }
+
+    private fun logStackIsEmptyWarning() = logger.warn("Stack is empty.")
+
+    private fun logMergeOutOfDateWarning(numCommitsBehind: Int, commits: String, refSpec: RefSpec) =
+        logger.warn(
+            "Cannot merge because your stack is out-of-date with the base branch ({} {} behind {}).",
+            numCommitsBehind,
+            commits,
+            refSpec.remoteRef,
+        )
 
     private fun Commit.toRefSpec(): RefSpec = RefSpec(hash, toRemoteRefName())
     private fun Commit.toRemoteRefName(): String = buildRemoteRef(checkNotNull(id), prefix = config.remoteBranchPrefix)
