@@ -3,12 +3,14 @@ package sims.michael.gitjaspr
 import org.junit.jupiter.api.*
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.slf4j.Logger
+import sims.michael.gitjaspr.RemoteRefEncoding.DEFAULT_REMOTE_NAMED_STACK_BRANCH_PREFIX
 import sims.michael.gitjaspr.RemoteRefEncoding.buildRemoteRef
 import sims.michael.gitjaspr.githubtests.GitHubTestHarness
 import sims.michael.gitjaspr.githubtests.GitHubTestHarness.Companion.withTestSetup
 import sims.michael.gitjaspr.githubtests.TestCaseData
 import sims.michael.gitjaspr.githubtests.generatedtestdsl.testCase
 import java.util.MissingFormatArgumentException
+import kotlin.test.assertContains
 import kotlin.test.assertEquals
 
 interface GitJasprTest {
@@ -999,6 +1001,268 @@ interface GitJasprTest {
             )
         }
     }
+
+    @Test
+    fun `named stack up to date`() {
+        withTestSetup(useFakeRemote) {
+            createCommitsFrom(
+                testCase {
+                    repository {
+                        commit {
+                            title = "one"
+                            willPassVerification = true
+                            remoteRefs += buildRemoteRef("one")
+                        }
+                        commit {
+                            title = "two"
+                            willPassVerification = true
+                            localRefs += "development"
+                            remoteRefs += buildRemoteRef("two")
+                        }
+                    }
+                    pullRequest {
+                        headRef = buildRemoteRef("one")
+                        baseRef = "main"
+                        title = "one"
+                        willBeApprovedByUserKey = "michael"
+                    }
+                    pullRequest {
+                        headRef = buildRemoteRef("two")
+                        baseRef = buildRemoteRef("one")
+                        title = "two"
+                        willBeApprovedByUserKey = "michael"
+                    }
+                    checkout = "development"
+                },
+            )
+
+            val stackName = "my-stack-name"
+            gitJaspr.push(stackName = stackName)
+
+            waitForChecksToConclude("one", "two")
+
+            val actual = getAndPrintStatusString()
+
+            assertEquals(
+                """
+                    |[✅✅✅✅✅✅] %s : %s : two
+                    |[✅✅✅✅✅✅] %s : %s : one
+                """
+                    .trimMargin()
+                    .toStatusString(actual, NamedStackInfo(stackName, 0, 0, remoteName)),
+                actual,
+            )
+        }
+    }
+
+    @Test
+    fun `named stack behind`() {
+        withTestSetup(useFakeRemote) {
+            createCommitsFrom(
+                testCase {
+                    repository {
+                        commit {
+                            title = "one"
+                            willPassVerification = true
+                            localRefs += "behind"
+                            remoteRefs += buildRemoteRef("one")
+                        }
+                        commit {
+                            title = "two"
+                            willPassVerification = true
+                            localRefs += "development"
+                            remoteRefs += buildRemoteRef("two")
+                        }
+                    }
+                    pullRequest {
+                        headRef = buildRemoteRef("one")
+                        baseRef = "main"
+                        title = "one"
+                        willBeApprovedByUserKey = "michael"
+                    }
+                    pullRequest {
+                        headRef = buildRemoteRef("two")
+                        baseRef = buildRemoteRef("one")
+                        title = "two"
+                        willBeApprovedByUserKey = "michael"
+                    }
+                    checkout = "development"
+                },
+            )
+
+            val stackName = "my-stack-name"
+            gitJaspr.push(stackName = stackName)
+
+            waitForChecksToConclude("one", "two")
+
+            localGit.checkout("behind")
+            localGit.setUpstreamBranch(remoteName, "$DEFAULT_REMOTE_NAMED_STACK_BRANCH_PREFIX/$stackName")
+            val actual = getAndPrintStatusString()
+
+            assertEquals(
+                """
+                    |[✅✅✅✅✅✅] %s : %s : one
+                """
+                    .trimMargin()
+                    .toStatusString(
+                        actual,
+                        NamedStackInfo(stackName, numCommitsAhead = 0, numCommitsBehind = 1, remoteName),
+                    ),
+                actual,
+            )
+        }
+    }
+
+    @Test
+    fun `named stack ahead`() {
+        withTestSetup(useFakeRemote) {
+            createCommitsFrom(
+                testCase {
+                    repository {
+                        commit {
+                            title = "one"
+                            willPassVerification = true
+                            localRefs += "development"
+                            remoteRefs += buildRemoteRef("one")
+                        }
+                    }
+                    pullRequest {
+                        headRef = buildRemoteRef("one")
+                        baseRef = "main"
+                        title = "one"
+                        willBeApprovedByUserKey = "michael"
+                    }
+                    checkout = "development"
+                },
+            )
+
+            val stackName = "my-stack-name"
+            gitJaspr.push(stackName = stackName)
+
+            waitForChecksToConclude("one")
+
+            createCommitsFrom(
+                testCase {
+                    repository {
+                        commit {
+                            title = "one"
+                            willPassVerification = true
+                            remoteRefs += buildRemoteRef("one")
+                        }
+                        commit {
+                            title = "two"
+                            willPassVerification = true
+                            localRefs += "development"
+                            remoteRefs += buildRemoteRef("two")
+                        }
+                    }
+                    pullRequest {
+                        headRef = buildRemoteRef("one")
+                        baseRef = "main"
+                        title = "one"
+                        willBeApprovedByUserKey = "michael"
+                    }
+                    checkout = "development"
+                },
+            )
+
+            val actual = getAndPrintStatusString()
+
+            assertEquals(
+                """
+                    |[✅ㄧㄧㄧㄧㄧ] %s : two
+                    |[✅✅✅✅✅✅] %s : %s : one
+                """
+                    .trimMargin()
+                    .toStatusString(
+                        actual,
+                        NamedStackInfo(stackName, numCommitsAhead = 1, numCommitsBehind = 0, remoteName),
+                    ),
+                actual,
+            )
+        }
+    }
+
+    @Test
+    fun `named stack diverged`() {
+        withTestSetup(useFakeRemote) {
+            createCommitsFrom(
+                testCase {
+                    repository {
+                        commit {
+                            title = "one"
+                            willPassVerification = true
+                            remoteRefs += buildRemoteRef("one")
+                        }
+                        commit {
+                            title = "two"
+                            willPassVerification = true
+                            localRefs += "development"
+                            remoteRefs += buildRemoteRef("two")
+                        }
+                    }
+                    pullRequest {
+                        headRef = buildRemoteRef("one")
+                        baseRef = "main"
+                        title = "one"
+                        willBeApprovedByUserKey = "michael"
+                    }
+                    pullRequest {
+                        headRef = buildRemoteRef("two")
+                        baseRef = buildRemoteRef("one")
+                        title = "two"
+                        willBeApprovedByUserKey = "michael"
+                    }
+                    checkout = "development"
+                },
+            )
+
+            val stackName = "my-stack-name"
+            gitJaspr.push(stackName = stackName)
+
+            waitForChecksToConclude("one")
+
+            createCommitsFrom(
+                testCase {
+                    repository {
+                        commit {
+                            title = "one"
+                            willPassVerification = true
+                            remoteRefs += buildRemoteRef("one")
+                        }
+                        commit {
+                            title = "three"
+                            willPassVerification = true
+                            localRefs += "development"
+                            remoteRefs += buildRemoteRef("three")
+                        }
+                    }
+                    pullRequest {
+                        headRef = buildRemoteRef("one")
+                        baseRef = "main"
+                        title = "one"
+                        willBeApprovedByUserKey = "michael"
+                    }
+                    checkout = "development"
+                },
+            )
+
+            val actual = getAndPrintStatusString()
+
+            assertEquals(
+                """
+                    |[✅ㄧㄧㄧㄧㄧ] %s : three
+                    |[✅✅✅✅✅✅] %s : %s : one
+                """
+                    .trimMargin()
+                    .toStatusString(
+                        actual,
+                        NamedStackInfo(stackName, numCommitsAhead = 1, numCommitsBehind = 1, remoteName),
+                    ),
+                actual,
+            )
+        }
+    }
     //endregion
 
     //region push tests
@@ -1569,6 +1833,107 @@ commit-id: 0
             push()
             // No assert here... I'm basically just testing that this doesn't throw an unhandled error, like it would
             // if we tried to push multiple source refs to the same destination ref
+        }
+    }
+
+    @Test
+    fun `push new named stack`() {
+        withTestSetup(useFakeRemote) {
+            createCommitsFrom(
+                testCase {
+                    repository {
+                        commit { title = "one" }
+                        commit { title = "two" }
+                        commit { title = "three" }
+                        commit { title = "four" }
+                        commit {
+                            title = "five"
+                            localRefs += "main"
+                        }
+                    }
+                    checkout = "main"
+                },
+            )
+
+            val stackName = "my-stack-name"
+            gitJaspr.push(stackName = stackName)
+            assertEquals(
+                "$DEFAULT_REMOTE_NAMED_STACK_BRANCH_PREFIX/$stackName",
+                localGit.getUpstreamBranch(remoteName)?.name,
+            )
+        }
+    }
+
+    @Test
+    fun `push new named stack from detached HEAD is unsupported`() {
+        withTestSetup(useFakeRemote) {
+            createCommitsFrom(
+                testCase {
+                    repository {
+                        commit { title = "one" }
+                        commit { title = "two" }
+                        commit { title = "three" }
+                        commit { title = "four" }
+                        commit {
+                            title = "five"
+                            localRefs += "main"
+                        }
+                    }
+                },
+            )
+
+            localGit.checkout(localGit.log().first().hash)
+            val message = assertThrows<GitJasprException> {
+                gitJaspr.push(stackName = "my-stack-name")
+            }.message
+            assertContains(message, "detached HEAD")
+        }
+    }
+
+    @Test
+    fun `push existing named stack`() {
+        withTestSetup(useFakeRemote) {
+            createCommitsFrom(
+                testCase {
+                    repository {
+                        commit { title = "one" }
+                        commit { title = "two" }
+                        commit { title = "three" }
+                        commit { title = "four" }
+                        commit {
+                            title = "five"
+                            localRefs += "main"
+                        }
+                    }
+                    checkout = "main"
+                },
+            )
+
+            val stackName = "my-stack-name"
+            gitJaspr.push(stackName = stackName)
+
+            createCommitsFrom(
+                testCase {
+                    repository {
+                        commit { title = "one" }
+                        commit { title = "two" }
+                        commit { title = "three" }
+                        commit { title = "four" }
+                        commit { title = "five" }
+                        commit {
+                            title = "six"
+                            localRefs += "main"
+                        }
+                    }
+                    checkout = "main"
+                },
+            )
+
+            gitJaspr.push()
+            assertEquals(
+                "$DEFAULT_REMOTE_NAMED_STACK_BRANCH_PREFIX/$stackName",
+                localGit.getUpstreamBranch(remoteName)?.name,
+            )
         }
     }
     //endregion
@@ -3021,10 +3386,20 @@ This is a body
     }
     //endregion
 
+    private data class NamedStackInfo(
+        val name: String,
+        val numCommitsAhead: Int,
+        val numCommitsBehind: Int,
+        val remoteName: String,
+    )
+
     // It may seem silly to repeat what is already defined in GitJaspr.HEADER, but if a dev changes the header I want
     // these tests to break so that any such changes are very deliberate. This is a compromise between referencing the
     // same value from both tests and prod and the other extreme of repeating this header text manually in every test.
-    fun String.toStatusString(actual: String): String {
+    private fun String.toStatusString(
+        actual: String,
+        namedStackInfo: NamedStackInfo? = null,
+    ): String {
         // Extract commit hashes and URLs from the actual string and put them into the expected. I can't predict what
         // they will be, so I only want to validate that they are present.
         val extracts = "] (.*?) : (?:(http.*?) : )?.*?\n"
@@ -3040,6 +3415,31 @@ This is a body
             logger.error("Format string doesn't have enough arguments, should have {}", extracts.size)
             this
         }
+        val namedStackInfoString = buildString {
+            // As above, this duplicates the string building logic defined in GitJaspr, but this is so any changes
+            // to the rendering is done very deliberately.
+            if (namedStackInfo != null) {
+                appendLine()
+                appendLine("Stack name: ${namedStackInfo.name}")
+                with(namedStackInfo) {
+                    appendLine(
+                        if (numCommitsBehind == 0 && numCommitsAhead == 0) {
+                            "Your stack is up to date with the remote stack in '$remoteName'."
+                        } else if (numCommitsBehind > 0 && numCommitsAhead == 0) {
+                            "Your stack is behind the remote stack in '$remoteName' by " +
+                                "$numCommitsBehind ${commitOrCommits(numCommitsBehind)}."
+                        } else if (numCommitsBehind == 0) { // && numCommitsAhead > 0
+                            "Your stack is ahead of the remote stack in '$remoteName' by " +
+                                "$numCommitsAhead ${commitOrCommits(numCommitsAhead)}."
+                        } else { // numCommitsBehind > 0 && numCommitsAhead > 0
+                            "Your stack and the remote stack in '$remoteName' have diverged, and have " +
+                                "$numCommitsAhead and $numCommitsBehind different commits each, " +
+                                "respectively."
+                        },
+                    )
+                }
+            }
+        }
         return """
             | ┌─────────── commit pushed
             | │ ┌─────────── exists       ┐
@@ -3050,7 +3450,7 @@ This is a body
             | │ │ │ │ │ │ 
             |$formattedString
 
-        """.trimMargin()
+        """.trimMargin() + namedStackInfoString
     }
 
     // Much like toStatusString above, this repeats the PR body footer. See notes there for the rationale.
@@ -3084,6 +3484,8 @@ This is a body
             "⚠️ *Part of a stack created by [jaspr](https://github.com/MichaelSims/git-jaspr). " +
             "Do not merge manually using the UI - doing so may have unexpected results.*\n"
     }
+
+    private fun commitOrCommits(count: Int) = if (count == 1) "commit" else "commits"
 
     /**
      * Returns a copy of the string with the commit ID replaced with 0. Useful for comparing full commit messages in

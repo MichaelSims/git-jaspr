@@ -69,6 +69,15 @@ Show status of current stack
 }
 
 class Push : GitJasprCommand(help = "Push local commits to the remote and open PRs for each one") {
+    private val name by option()
+        .help {
+            "The \"friendly\" name of the stack. If provided, HEAD will be force-pushed to <prefix>/<name> " +
+                "where <prefix> is determined by ${remoteNamedStackBranchPrefixDelegate.names.single()} and the " +
+                "current branch's upstream will be set to this ref."
+        }
+        .convert { value -> value.trim() }
+        .validate { value -> value.isNotBlank() }
+
     private val refSpec by argument()
         .convert(conversion = ArgumentTransformContext::convertRefSpecString)
         .help {
@@ -82,7 +91,7 @@ class Push : GitJasprCommand(help = "Push local commits to the remote and open P
         }
         .defaultLazy { RefSpec(DEFAULT_LOCAL_OBJECT, defaultTargetRef) }
 
-    override suspend fun doRun() = appWiring.gitJaspr.push(refSpec)
+    override suspend fun doRun() = appWiring.gitJaspr.push(refSpec, stackName = name)
 }
 
 class Merge : GitJasprCommand(help = "Merge all local commits that are mergeable") {
@@ -280,7 +289,7 @@ you'll need to re-enable it again.
             }
         }
 
-    private val remoteNamedStackBranchPrefix by option()
+    val remoteNamedStackBranchPrefixDelegate = option()
         .default(DEFAULT_REMOTE_NAMED_STACK_BRANCH_PREFIX)
         .help { "The prefix to use when pushing named stacks (example: $DEFAULT_REMOTE_NAMED_STACK_BRANCH_PREFIX)" }
         .validate { value ->
@@ -294,6 +303,7 @@ you'll need to re-enable it again.
                 fail("The remote named stack branch prefix should not be the same as the remote branch prefix")
             }
         }
+    private val remoteNamedStackBranchPrefix by remoteNamedStackBranchPrefixDelegate
 
     private val showConfig by option(hidden = true).flag("--no-show-config", default = false)
         .help { "Print the effective configuration to standard output (for debugging)" }
