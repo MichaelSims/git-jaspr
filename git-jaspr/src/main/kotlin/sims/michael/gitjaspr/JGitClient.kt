@@ -280,8 +280,11 @@ class JGitClient(
         check(pushErrors.isEmpty()) { "A git push operation failed, please check the logs" }
     }
 
-    override fun getRemoteUriOrNull(remoteName: String): String? = useGit { git ->
-        git.remoteList().call().singleOrNull { it.name == remoteName }?.urIs?.firstOrNull()?.toASCIIString()
+    override fun getRemoteUriOrNull(remoteName: String): String? {
+        // Intentionally avoiding trace logging here. See comment in CliGitClient.getRemoteUriOrNull
+        return useGit { git ->
+            git.remoteList().call().singleOrNull { it.name == remoteName }?.urIs?.firstOrNull()?.toASCIIString()
+        }
     }
 
     private inline fun <T> useGit(block: (Git) -> T): T = Git.open(workingDirectory).use(block)
