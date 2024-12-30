@@ -5,7 +5,11 @@ import org.slf4j.LoggerFactory
 import sims.michael.gitjaspr.CommitParsers.getSubjectAndBodyFromFullMessage
 import sims.michael.gitjaspr.CommitParsers.trimFooters
 import sims.michael.gitjaspr.GitJaspr.StatusBits.Status
-import sims.michael.gitjaspr.GitJaspr.StatusBits.Status.*
+import sims.michael.gitjaspr.GitJaspr.StatusBits.Status.EMPTY
+import sims.michael.gitjaspr.GitJaspr.StatusBits.Status.FAIL
+import sims.michael.gitjaspr.GitJaspr.StatusBits.Status.PENDING
+import sims.michael.gitjaspr.GitJaspr.StatusBits.Status.SUCCESS
+import sims.michael.gitjaspr.GitJaspr.StatusBits.Status.WARNING
 import sims.michael.gitjaspr.RemoteRefEncoding.REV_NUM_DELIMITER
 import sims.michael.gitjaspr.RemoteRefEncoding.buildRemoteRef
 import sims.michael.gitjaspr.RemoteRefEncoding.getRemoteRefParts
@@ -138,6 +142,7 @@ class GitJaspr(
         val existingPrsByCommitId = pullRequestsRebased.associateBy(PullRequest::commitId)
 
         val isDraftRegex = "^(draft|wip)\\b.*$".toRegex(IGNORE_CASE)
+        val remoteBranchNames = gitClient.getRemoteBranches(config.remoteName).map(RemoteBranch::name)
         val prsToMutate = stack
             .windowedPairs()
             .map { (prevCommit, currentCommit) ->
@@ -152,7 +157,7 @@ class GitJaspr(
                     // commit is the remote ref name (i.e. jaspr/<commit-id>) of the previous commit in the stack
                     baseRefName = prevCommit?.toRemoteRefName() ?: refSpec.remoteRef,
                     title = currentCommit.shortMessage,
-                    body = buildPullRequestBody(currentCommit.fullMessage, emptyList(), existingPr),
+                    body = buildPullRequestBody(currentCommit.fullMessage, emptyList(), existingPr, remoteBranchNames),
                     checksPass = existingPr?.checksPass,
                     approved = existingPr?.approved,
                     checkConclusionStates = existingPr?.checkConclusionStates.orEmpty(),
@@ -375,6 +380,7 @@ class GitJaspr(
         val stackPrsReordered = stack.fold(emptyList<PullRequest>()) { prs, commit ->
             prs + checkNotNull(prsById[checkNotNull(commit.id)])
         }
+        val remoteBranchNames = gitClient.getRemoteBranches(config.remoteName).map(RemoteBranch::name)
         val prsNeedingBodyUpdate = stackPrsReordered
             .map { existingPr ->
                 val commit = checkNotNull(stackById[existingPr.commitId]) {
@@ -384,6 +390,7 @@ class GitJaspr(
                     fullMessage = commit.fullMessage,
                     pullRequests = stackPrsReordered.reversed(),
                     existingPr,
+                    remoteBranchNames,
                 )
                 existingPr.copy(body = newBody)
             }
@@ -395,8 +402,8 @@ class GitJaspr(
         fullMessage: String,
         pullRequests: List<PullRequest> = emptyList(),
         existingPr: PullRequest? = null,
+        remoteBranchNames: List<String>,
     ): String {
-        val remoteBranches: List<String> = gitClient.getRemoteBranches(config.remoteName).map(RemoteBranch::name)
         val jasprStartComment = "<!-- jaspr start -->"
         return buildString {
             if (existingPr != null && existingPr.body.contains(jasprStartComment)) {
@@ -421,7 +428,7 @@ class GitJaspr(
                         append(" ⬅")
                     }
                     appendLine()
-                    appendHistoryLinksIfApplicable(pr, remoteBranches)
+                    appendHistoryLinksIfApplicable(pr, remoteBranchNames)
                 }
                 appendLine()
             }
