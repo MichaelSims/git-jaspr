@@ -520,6 +520,18 @@ class CliGitClientTest {
     }
 
     @Test
+    fun `compare getCurrentBranchName`() {
+        withTestSetup {
+            val cliGit = CliGitClient(localGit.workingDirectory)
+            val git = JGitClient(localGit.workingDirectory)
+            assertEquals(
+                cliGit.getCurrentBranchName(),
+                git.getCurrentBranchName(),
+            )
+        }
+    }
+
+    @Test
     fun testInit() {
         withTestSetup {
             val git = CliGitClient(localGit.workingDirectory.resolve("new-repo"))
@@ -820,6 +832,14 @@ This is a commit body
                 }
             }.reversed()
             assertEquals(expectedShortMessages, reflog.map(Commit::shortMessage))
+        }
+    }
+
+    @Test
+    fun testGetCurrentBranchName() {
+        withTestSetup {
+            val git = CliGitClient(localGit.workingDirectory)
+            assertEquals("main", git.getCurrentBranchName())
         }
     }
 }
