@@ -33,6 +33,7 @@ interface GitClient {
     fun getUpstreamBranch(remoteName: String): RemoteBranch?
     fun setUpstreamBranch(remoteName: String, branchName: String)
     fun reflog(): List<Commit>
+    fun getCurrentBranchName(): String
 
     companion object {
         const val HEAD = Constants.HEAD

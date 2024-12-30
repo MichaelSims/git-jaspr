@@ -336,6 +336,14 @@ class CliGitClient(
         return gitLog("-g")
     }
 
+    override fun getCurrentBranchName(): String {
+        logger.trace("getCurrentBranchName")
+        return executeCommand(listOf("git", "branch", "--show-current"))
+            .output
+            .string
+            .trim()
+    }
+
     private fun gitLog(vararg logArg: String): List<Commit> {
         // Thanks to https://www.nushell.sh/cookbook/parsing_git_log.html for inspiration here
         val prettyFormat = listOf(

@@ -331,6 +331,11 @@ class JGitClient(
         }
     }
 
+    override fun getCurrentBranchName(): String {
+        logger.trace("getCurrentBranchName")
+        return useGit { git -> git.repository.branch }
+    }
+
     private inline fun <T> useGit(block: (Git) -> T): T = Git.open(workingDirectory).use(block)
 
     companion object {
