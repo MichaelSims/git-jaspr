@@ -335,6 +335,11 @@ class CliGitClient(
             .trim()
     }
 
+    override fun isHeadDetached(): Boolean {
+        logger.trace("isHeadDetached")
+        return getCurrentBranchName().isEmpty()
+    }
+
     private fun gitLog(vararg logArg: String): List<Commit> {
         // Thanks to https://www.nushell.sh/cookbook/parsing_git_log.html for inspiration here
         val prettyFormat = listOf(
