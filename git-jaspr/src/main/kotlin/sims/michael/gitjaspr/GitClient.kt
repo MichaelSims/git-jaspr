@@ -31,6 +31,7 @@ interface GitClient {
     fun push(refSpecs: List<RefSpec>, remoteName: String = DEFAULT_REMOTE_NAME)
     fun getRemoteUriOrNull(remoteName: String): String?
     fun getUpstreamBranch(remoteName: String): RemoteBranch?
+    fun reflog(): List<Commit>
 
     companion object {
         const val HEAD = Constants.HEAD

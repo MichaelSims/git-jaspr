@@ -326,6 +326,11 @@ class CliGitClient(
             }
     }
 
+    override fun reflog(): List<Commit> {
+        logger.trace("reflog")
+        return gitLog("-g")
+    }
+
     private fun gitLog(vararg logArg: String): List<Commit> {
         // Thanks to https://www.nushell.sh/cookbook/parsing_git_log.html for inspiration here
         val prettyFormat = listOf(
