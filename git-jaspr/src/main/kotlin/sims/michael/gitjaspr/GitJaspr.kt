@@ -1,5 +1,6 @@
 package sims.michael.gitjaspr
 
+import com.github.ajalt.mordant.rendering.TextStyles
 import kotlinx.coroutines.delay
 import org.slf4j.LoggerFactory
 import sims.michael.gitjaspr.CommitParsers.getSubjectAndBodyFromFullMessage
@@ -43,6 +44,16 @@ class GitJaspr(
             .filter { (_, statuses) -> statuses.size > 1 }
         val numCommitsBehind = gitClient.logRange(stack.last().hash, "$remoteName/${refSpec.remoteRef}").size
         return buildString {
+            val namedStackPrefix = "${config.remoteNamedStackBranchPrefix}/"
+            val namedStackBranch = gitClient
+                .getUpstreamBranch(config.remoteName)
+                ?.takeIf { upstream -> upstream.name.startsWith(namedStackPrefix) }
+            if (namedStackBranch != null) {
+                val stackName = namedStackBranch.name.removePrefix(namedStackPrefix)
+                appendLine(TextStyles.bold("$stackName:"))
+                appendLine()
+            }
+
             append(HEADER)
 
             val stackChecks = if (numCommitsBehind != 0) {
@@ -711,6 +722,7 @@ class GitJaspr(
     private fun commitOrCommits(count: Int) = if (count == 1) "commit" else "commits"
 
     companion object {
+        // TODO consider renaming this since now it doesn't necessarily appear at the top of the status output
         private val HEADER = """
             | ┌─────────── commit pushed
             | │ ┌─────────── exists       ┐
