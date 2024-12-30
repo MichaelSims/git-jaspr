@@ -2,6 +2,7 @@ package sims.michael.gitjaspr
 
 object RemoteRefEncoding {
     const val DEFAULT_REMOTE_BRANCH_PREFIX = "jaspr"
+    const val DEFAULT_REMOTE_NAMED_STACK_BRANCH_PREFIX = "jaspr-named"
 
     const val REV_NUM_DELIMITER = "_"
 

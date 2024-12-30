@@ -28,6 +28,7 @@ import org.intellij.lang.annotations.Language
 import org.slf4j.Logger
 import org.slf4j.LoggerFactory
 import sims.michael.gitjaspr.RemoteRefEncoding.DEFAULT_REMOTE_BRANCH_PREFIX
+import sims.michael.gitjaspr.RemoteRefEncoding.DEFAULT_REMOTE_NAMED_STACK_BRANCH_PREFIX
 import java.io.File
 
 //region Commands
@@ -269,7 +270,30 @@ you'll need to re-enable it again.
 
     private val remoteBranchPrefix by option()
         .default(DEFAULT_REMOTE_BRANCH_PREFIX)
-        .help { "The prefix to use for all git jaspr created branches in the remote" }
+        .help {
+            "The prefix to use when encoding unique commit IDs into remote ref names " +
+                "(example: $DEFAULT_REMOTE_BRANCH_PREFIX)"
+        }
+        .validate { value ->
+            if (value.contains("/")) {
+                fail("The remote branch prefix should not contain a forward slash; one will be appended automatically")
+            }
+        }
+
+    private val remoteNamedStackBranchPrefix by option()
+        .default(DEFAULT_REMOTE_NAMED_STACK_BRANCH_PREFIX)
+        .help { "The prefix to use when pushing named stacks (example: $DEFAULT_REMOTE_NAMED_STACK_BRANCH_PREFIX)" }
+        .validate { value ->
+            if (value.contains("/")) {
+                fail(
+                    "The remote named stack branch prefix should not contain a forward slash; one will be appended " +
+                        "automatically",
+                )
+            }
+            if (value == remoteBranchPrefix) {
+                fail("The remote named stack branch prefix should not be the same as the remote branch prefix")
+            }
+        }
 
     private val showConfig by option(hidden = true).flag("--no-show-config", default = false)
         .help { "Print the effective configuration to standard output (for debugging)" }
@@ -291,6 +315,7 @@ you'll need to re-enable it again.
             remoteName,
             githubInfo,
             remoteBranchPrefix,
+            remoteNamedStackBranchPrefix,
             logLevel,
             logsDirectory.takeIf { logToFiles },
         )

@@ -226,6 +226,74 @@ class CliTest {
         assertTrue(scratchDir.repoDir().resolve(".git").resolve("hooks").resolve("commit-msg").canExecute())
     }
 
+    @Test
+    fun `fails if remoteBranchPrefix contains a forward slash`() {
+        val scratchDir = createTempDir()
+        val thrownMessage = assertThrows<IllegalStateException> {
+            executeCli(
+                scratchDir,
+                "git@github.com:SomeOwner/some-repo-name.git",
+                DEFAULT_REMOTE_NAME,
+                strings = listOf(
+                    "no-op",
+                    "--remote-branch-prefix",
+                    "jaspr/",
+                ),
+            )
+        }.message
+        assertNotNull(thrownMessage)
+        assertContains(
+            thrownMessage,
+            "The remote branch prefix should not contain a forward slash",
+        )
+    }
+
+    @Test
+    fun `fails if remoteNamedStackBranchPrefix contains a forward slash`() {
+        val scratchDir = createTempDir()
+        val thrownMessage = assertThrows<IllegalStateException> {
+            executeCli(
+                scratchDir,
+                "git@github.com:SomeOwner/some-repo-name.git",
+                DEFAULT_REMOTE_NAME,
+                strings = listOf(
+                    "no-op",
+                    "--remote-named-stack-branch-prefix",
+                    "jaspr-named/",
+                ),
+            )
+        }.message
+        assertNotNull(thrownMessage)
+        assertContains(
+            thrownMessage,
+            "The remote named stack branch prefix should not contain a forward slash",
+        )
+    }
+
+    @Test
+    fun `fails if remoteBranchPrefix and remoteNamedStackBranchPrefix are the same`() {
+        val scratchDir = createTempDir()
+        val thrownMessage = assertThrows<IllegalStateException> {
+            executeCli(
+                scratchDir,
+                "git@github.com:SomeOwner/some-repo-name.git",
+                DEFAULT_REMOTE_NAME,
+                strings = listOf(
+                    "no-op",
+                    "--remote-branch-prefix",
+                    "joe",
+                    "--remote-named-stack-branch-prefix",
+                    "joe",
+                ),
+            )
+        }.message
+        assertNotNull(thrownMessage)
+        assertContains(
+            thrownMessage,
+            "The remote named stack branch prefix should not be the same as the remote branch prefix",
+        )
+    }
+
     private fun config(workingDirectory: File, gitHubInfo: GitHubInfo, logsDirectory: File) = Config(
         workingDirectory,
         remoteName = DEFAULT_REMOTE_NAME,
