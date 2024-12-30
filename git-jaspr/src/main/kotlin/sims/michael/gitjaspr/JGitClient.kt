@@ -297,6 +297,17 @@ class JGitClient(
             }
     }
 
+    override fun reflog(): List<Commit> {
+        logger.trace("reflog")
+        return useGit { git ->
+            val reader = git.repository.newObjectReader()
+            git
+                .reflog()
+                .call()
+                .flatMap { entry -> log(reader.abbreviate(entry.newId).name(), 1) }
+        }
+    }
+
     private inline fun <T> useGit(block: (Git) -> T): T = Git.open(workingDirectory).use(block)
 
     companion object {

@@ -475,6 +475,29 @@ class CliGitClientTest {
     }
 
     @Test
+    fun `compare reflog`() {
+        withTestSetup {
+            val titles = (1..4).map(Int::toString)
+            for (thisTitle in titles) {
+                createCommitsFrom(
+                    testCase {
+                        repository {
+                            commit {
+                                id = "same"
+                                title = thisTitle
+                                localRefs += "development"
+                            }
+                        }
+                    },
+                )
+            }
+            val cliGit = CliGitClient(localGit.workingDirectory)
+            val git = JGitClient(localGit.workingDirectory)
+            assertEquals(cliGit.reflog(), git.reflog())
+        }
+    }
+
+    @Test
     fun testInit() {
         withTestSetup {
             val git = CliGitClient(localGit.workingDirectory.resolve("new-repo"))
@@ -730,6 +753,39 @@ This is a commit body
                 ),
                 actual,
             )
+        }
+    }
+
+    @Test
+    fun testReflog() {
+        withTestSetup {
+            val titles = (1..4).map(Int::toString)
+            for (thisTitle in titles) {
+                // "amend" this commit 4 times
+                createCommitsFrom(
+                    testCase {
+                        repository {
+                            commit {
+                                id = "same"
+                                title = thisTitle
+                                localRefs += "development"
+                            }
+                        }
+                    },
+                )
+            }
+            val git = CliGitClient(localGit.workingDirectory)
+            val reflog = git.reflog()
+            // Build a list of short messages in the order that HEAD moved, then reverse it to match the reflog order
+            // This bakes some assumptions about how our test harness works, so if that changes this will break
+            val expectedShortMessages = buildList {
+                add(INITIAL_COMMIT_SHORT_MESSAGE) // The result of "git init"
+                for (title in titles) {
+                    add(INITIAL_COMMIT_SHORT_MESSAGE)
+                    add(title)
+                }
+            }.reversed()
+            assertEquals(expectedShortMessages, reflog.map(Commit::shortMessage))
         }
     }
 }
