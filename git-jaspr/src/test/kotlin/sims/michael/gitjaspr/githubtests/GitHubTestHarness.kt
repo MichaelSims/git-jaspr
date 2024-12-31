@@ -289,10 +289,20 @@ class GitHubTestHarness private constructor(
         val refSpecs = (toRestore + toDelete).distinct().map(RefSpec::forcePush)
         logger.debug("Pushing {}", refSpecs)
         localGit.push(refSpecs, remoteName)
-        localGit.deleteBranches(
+        fun deleteBranches() = localGit.deleteBranches(
             names = toRestore.map(RefSpec::localRef) + toDelete.map(RefSpec::remoteRef),
             force = true,
         )
+        if (localGit.getCurrentBranchName() in toDelete.map(RefSpec::remoteRef)) {
+            try {
+                localGit.checkout(localGit.log("HEAD", 1).single().hash)
+                deleteBranches()
+            } finally {
+                localGit.checkout("main")
+            }
+        } else {
+            deleteBranches()
+        }
     }
 
     private val canRunGit = AtomicBoolean(true)
