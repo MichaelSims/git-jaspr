@@ -201,6 +201,12 @@ class GitHubTestHarness private constructor(
         }
 
         testCase.repository.createCommits()
+
+        val checkout = testCase.checkout
+        if (checkout != null) {
+            localGit.checkout(checkout)
+        }
+
         if (testCase.localWillBeDirty) {
             localRepo
                 .walk()

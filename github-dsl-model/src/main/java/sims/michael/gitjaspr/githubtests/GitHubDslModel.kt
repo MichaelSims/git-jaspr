@@ -5,6 +5,7 @@ import sims.michael.gitjaspr.dataclassfragment.*
 @GenerateDataClassFragmentDataClass
 interface TestCase : DataClassFragment {
     val repository: NestedPropertyNotNull<Branch>
+    val checkout: StringProperty
     val localWillBeDirty: BooleanPropertyNotNull
 
     @GenerateDataClassFragmentDataClass.TestDataDslName("pullRequest")
