@@ -194,8 +194,8 @@ class GitHubTestHarness private constructor(
                 if (commitData.branches.isNotEmpty()) {
                     for (childBranch in commitData.branches) {
                         childBranch.createCommits()
+                        localGit.checkout(commit.hash)
                     }
-                    localGit.checkout(commit.hash)
                 }
             }
         }
