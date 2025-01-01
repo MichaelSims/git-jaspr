@@ -500,9 +500,9 @@ private const val GITHUB_TOKEN_ENV_VAR = "GIT_JASPR_TOKEN"
 private val helpEpilog = """
 **${TextColors.rgb("#E5C07B").invoke("Note on supplying config options via configuration files")}**
 
-Any option above can be supplied via the per-user config file ($CONFIG_FILE_NAME in your home directory) or the per-working copy config file ($CONFIG_FILE_NAME in your working directory). For example, you can supply the --use-cli-git-client flag in the config file like so:
+Any option above can be supplied via the per-user config file ($CONFIG_FILE_NAME in your home directory) or the per-working copy config file ($CONFIG_FILE_NAME in your working directory). For example, you can supply the --log-level option in the config file like so:
 
 ```
-use-cli-git-client=true
+log-level=WARN
 ```
 """.trimIndent()

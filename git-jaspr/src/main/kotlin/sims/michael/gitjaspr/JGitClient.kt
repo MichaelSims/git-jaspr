@@ -354,7 +354,7 @@ class JGitClient(
 
         init {
             // Enable support for an SSH agent for those who use passphrases for their keys
-            // Note that this doesn't work on OS X. Users on OS X will need to use the CLI git client
+            // Note that this doesn't work on OS X. This is why OptimizedCliGitClient exists.
             SshSessionFactory.setInstance(
                 object : JschConfigSessionFactory() {
                     override fun configureJSch(jsch: JSch) {

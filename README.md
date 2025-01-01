@@ -24,11 +24,11 @@ Where `<GH PAT>` is a GitHub Personal Access Token (classic) with the permission
 
 ### Configuration file
 Note that _any_ option for any Jaspr command can be supplied via your global config file or your repo-specific config
-file. For example, if you need to use `---use-cli-git-client` because you're using ssh-agent on a Mac, you don't have to
+file. For example, if you want to use `--log-level=WARN`, you don't have to
 supply this to every command but can instead add it to your config file:
 
 ```properties
-use-cli-git-client=true
+log-level=WARN
 ```
 
 ## Using
