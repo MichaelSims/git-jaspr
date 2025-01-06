@@ -11,6 +11,20 @@ import kotlin.test.assertEquals
 class CommitParsersTest {
 
     @Test
+    fun `what is broken`() {
+        val message = """
+            This is a subject
+
+            This is a body
+        """.trimIndent()
+
+        assertEquals(
+            SubjectAndBody("This is a subject with three lines but still a subject", "This is a body"),
+            getSubjectAndBodyFromFullMessage(message),
+        )
+    }
+
+    @Test
     fun `getSubjectAndBodyFromFullMessage - subject only`() {
         assertEquals(
             SubjectAndBody("This is a subject", null),
