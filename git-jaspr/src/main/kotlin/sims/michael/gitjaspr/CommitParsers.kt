@@ -59,7 +59,7 @@ object CommitParsers {
         val maybeFooterSection = fullMessageTrimmed.substringAfterLast("\n\n")
         if (maybeFooterSection == fullMessageTrimmed) return emptyMap() // Just a subject
 
-        val footerLineRegex = "^([^\\s:]+): ([^\\s:]+)$".toRegex()
+        val footerLineRegex = "^([^\\s:]+): ([^:]+)$".toRegex()
 
         val maybeFooterLines = maybeFooterSection.lines()
         return if (maybeFooterLines.all { line -> footerLineRegex.matches(line) }) {

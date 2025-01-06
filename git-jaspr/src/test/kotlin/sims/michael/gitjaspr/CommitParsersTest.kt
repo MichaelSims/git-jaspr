@@ -151,6 +151,35 @@ class CommitParsersTest {
     }
 
     @Test
+    fun `getFooters - footer value with spaces`() {
+        val message = """
+This is a commit subject
+
+Co-authored-by: John Carmack <jcarmack@idsoftware.com>
+commit-id: I0e9e0b26
+        """.trimIndent()
+
+        assertEquals(
+            mapOf("Co-authored-by" to "John Carmack <jcarmack@idsoftware.com>", "commit-id" to "I0e9e0b26"),
+            getFooters(message),
+        )
+    }
+
+    @Test
+    fun `getFooters - footer key with spaces`() {
+        val message = """
+This is a commit subject
+
+keys with spaces are not allowed: value
+        """.trimIndent()
+
+        assertEquals(
+            emptyMap(),
+            getFooters(message),
+        )
+    }
+
+    @Test
     fun `addFooters - subject only`() {
         assertEquals(
             """
