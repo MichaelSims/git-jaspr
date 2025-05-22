@@ -12,7 +12,7 @@ For more rationale see this [excellent blog post](https://jg.gg/2018/09/29/stack
 ## Installing
 
 Download the appropriate standalone binary for your platform (Linux or OS X, sorry Windows users, you can run the Java
-version maybe?) and install it into your `PATH` somewhere (`~/.local/bin`?) and then create a configuration file in 
+version maybe?), install it into your `PATH` somewhere (`~/.local/bin`?) renamed as `git-jaspr` (don't forget to set the executable bit w/chmod) and then create a configuration file in 
 `~/.git-jaspr.properties` with the following contents:
 
 ```properties
