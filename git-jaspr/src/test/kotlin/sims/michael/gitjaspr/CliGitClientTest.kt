@@ -1,5 +1,6 @@
 package sims.michael.gitjaspr
 
+import org.eclipse.jgit.lib.Constants
 import org.junit.jupiter.api.Assertions.*
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.assertThrows
@@ -368,6 +369,51 @@ class CliGitClientTest {
     }
 
     @Test
+    fun `getRemoteBranches should not include HEAD`() {
+        // If we've pushed to HEAD, ensure that getRemoteBranches does not return it. At some point git changed its
+        // behavior to include HEAD in the list of remote branches, which we don't want.
+        withTestSetup {
+            createCommitsFrom(
+                testCase {
+                    repository {
+                        commit {
+                            title = "one"
+                            branch {
+                                commit { title = "a" }
+                                commit { title = "b" }
+                                commit { title = "c" }
+                                commit {
+                                    title = "d"
+                                    localRefs += "development"
+                                }
+                            }
+                        }
+                        commit { title = "two" }
+                        commit {
+                            title = "three"
+                            body = "This is a body"
+                            remoteRefs += listOf(
+                                "main",
+                                Constants.HEAD,
+                            )
+                        }
+                    }
+                },
+            )
+            val cliGit = CliGitClient(localGit.workingDirectory)
+            val git = JGitClient(localGit.workingDirectory)
+            assertFalse(
+                cliGit.getRemoteBranches(remoteName).any { branch -> branch.name.endsWith("/${Constants.HEAD}") },
+                "List of remote branches should not be empty",
+            )
+            assertEquals(
+                cliGit.getRemoteBranches(remoteName),
+                git.getRemoteBranches(remoteName),
+            )
+        }
+    }
+
+    @Test
     fun `compare getRemoteBranches`() {
         withTestSetup {
             createCommitsFrom(
@@ -389,16 +435,23 @@ class CliGitClientTest {
                         commit {
                             title = "three"
                             body = "This is a body"
-                            remoteRefs += "main"
+                            remoteRefs += listOf(
+                                "main",
+                                Constants.HEAD,
+                            )
                         }
                     }
                 },
             )
             val cliGit = CliGitClient(localGit.workingDirectory)
             val git = JGitClient(localGit.workingDirectory)
+            assertFalse(
+                cliGit.getRemoteBranches(remoteName).isEmpty(),
+                "List of remote branches should not be empty",
+            )
             assertEquals(
-                cliGit.getRemoteBranches(),
-                git.getRemoteBranches(),
+                cliGit.getRemoteBranches(remoteName),
+                git.getRemoteBranches(remoteName),
             )
         }
     }
@@ -444,9 +497,13 @@ class CliGitClientTest {
             )
             val cliGit = CliGitClient(localGit.workingDirectory)
             val git = JGitClient(localGit.workingDirectory)
+            assertFalse(
+                cliGit.getRemoteBranchesById(remoteName).isEmpty(),
+                "Map of remote branches should not be empty",
+            )
             assertEquals(
-                cliGit.getRemoteBranchesById(),
-                git.getRemoteBranchesById(),
+                cliGit.getRemoteBranchesById(remoteName),
+                git.getRemoteBranchesById(remoteName),
             )
         }
     }

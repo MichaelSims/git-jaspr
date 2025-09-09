@@ -9,4 +9,4 @@ import java.io.File
  */
 fun File.toStringWithClickableURI(): String = "$this (${toURI().toString().replaceFirst("/", "///")})"
 
-val DEFAULT_COMMITTER: Ident = Ident("Frank Grimes", "grimey@springfield.example.com")
+val DEFAULT_COMMITTER: Ident = Ident("Frank Grimes", "grimey@example.com")

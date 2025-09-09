@@ -168,6 +168,7 @@ class JGitClient(
                 .setListMode(ListBranchCommand.ListMode.REMOTE)
                 .call()
                 .filter { it.name.startsWith(Constants.R_REMOTES) }
+                .filterNot { ref -> ref.name == Constants.R_REMOTES + "$remoteName/HEAD" }
                 .mapNotNull { ref ->
                     val r = git.repository
                     val (thisRemoteName, shortBranchName) =

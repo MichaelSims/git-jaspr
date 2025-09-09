@@ -1,5 +1,6 @@
 package sims.michael.gitjaspr
 
+import org.eclipse.jgit.lib.Constants
 import org.slf4j.LoggerFactory
 import org.zeroturnaround.exec.ProcessExecutor
 import org.zeroturnaround.exec.ProcessResult
@@ -133,7 +134,7 @@ class CliGitClient(
             .mapNotNull { line ->
                 val (nameWithRemote, hash) = line.split(GIT_FORMAT_SEPARATOR)
                 val (thisRemoteName, name) = nameWithRemote.split("/", limit = 2)
-                if (thisRemoteName == remoteName) {
+                if (thisRemoteName == remoteName && name != Constants.HEAD) {
                     RemoteBranch(name, log(hash, 1).single())
                 } else {
                     null
