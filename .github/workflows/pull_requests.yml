@@ -10,7 +10,7 @@ jobs:
 
   cancel-previous-runs:
     name: Cancel Previous Runs
-    runs-on: [ ubuntu-20.04 ]
+    runs-on: ubuntu-latest
 
     steps:
       - name: Cancel Previous Runs
@@ -20,7 +20,7 @@ jobs:
 
   check-commit-message:
     name: Check Commit Message
-    runs-on: [ ubuntu-20.04 ]
+    runs-on: ubuntu-latest
     steps:
       - name: Check commit message line length
         uses: gsactions/commit-message-checker@16fa2d5de096ae0d35626443bcd24f1e756cafee  # v2.0.0
@@ -44,7 +44,7 @@ jobs:
   gradle:
     name: Gradle Build
     needs: cancel-previous-runs
-    runs-on: [ ubuntu-20.04 ]
+    runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
         with:
