@@ -405,7 +405,7 @@ private fun getInvokeCliList(workingDir: File = findNearestGitDir(), javaOptions
     ) + javaOptions + Cli::class.java.name
 }
 
-private fun findNearestGitDir() = File(".").findNearestGitDir()
+private fun findNearestGitDir() = File(".").findNearestGitDirOrFile()
 
 private val json = Json {
     prettyPrint = true

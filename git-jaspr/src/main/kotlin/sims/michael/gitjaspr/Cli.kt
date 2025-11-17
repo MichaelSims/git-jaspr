@@ -189,7 +189,7 @@ private fun ArgumentTransformContext.convertRefSpecString(refSpecString: String)
 
 abstract class GitJasprCommand(help: String = "", hidden: Boolean = false) :
     CliktCommand(hidden = hidden, help = help, epilog = helpEpilog) {
-    private val workingDirectory = File(System.getProperty(WORKING_DIR_PROPERTY_NAME) ?: ".").findNearestGitDir()
+    private val workingDirectory = File(System.getProperty(WORKING_DIR_PROPERTY_NAME) ?: ".").findNearestGitDirOrFile()
         .canonicalFile
         .also { dir ->
             require(dir.exists()) { "${dir.absolutePath} does not exist" }
@@ -446,9 +446,9 @@ you'll need to re-enable it again.
     abstract suspend fun doRun()
 }
 
-internal fun File.findNearestGitDir(): File {
+internal fun File.findNearestGitDirOrFile(): File {
     val parentFiles = generateSequence(canonicalFile) { it.parentFile }
-    return checkNotNull(parentFiles.firstOrNull { it.resolve(".git").isDirectory }) {
+    return checkNotNull(parentFiles.firstOrNull { it.resolve(".git").exists() }) {
         "Can't find a git dir in $canonicalFile or any of its parent directories"
     }
 }
