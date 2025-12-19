@@ -448,8 +448,22 @@ you'll need to re-enable it again.
 
 internal fun File.findNearestGitDir(): File {
     val parentFiles = generateSequence(canonicalFile) { it.parentFile }
-    return checkNotNull(parentFiles.firstOrNull { it.resolve(".git").isDirectory }) {
+    return checkNotNull(parentFiles.firstOrNull { it.isGitWorkingDirectory() }) {
         "Can't find a git dir in $canonicalFile or any of its parent directories"
+    }
+}
+
+/**
+ * Returns true if this directory is a git working directory.
+ * This handles both regular repositories (where .git is a directory) and
+ * worktrees (where .git is a file containing a gitdir pointer).
+ */
+internal fun File.isGitWorkingDirectory(): Boolean {
+    val dotGit = resolve(".git")
+    return when {
+        dotGit.isDirectory -> true
+        dotGit.isFile -> dotGit.readText().trim().startsWith("gitdir:")
+        else -> false
     }
 }
 

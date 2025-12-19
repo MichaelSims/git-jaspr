@@ -9,6 +9,7 @@ import org.eclipse.jgit.api.Git
 import org.eclipse.jgit.api.ListBranchCommand
 import org.eclipse.jgit.api.ResetCommand
 import org.eclipse.jgit.api.errors.TransportException
+import org.eclipse.jgit.storage.file.FileRepositoryBuilder
 import org.eclipse.jgit.lib.BranchConfig
 import org.eclipse.jgit.lib.ConfigConstants.CONFIG_BRANCH_SECTION
 import org.eclipse.jgit.lib.ConfigConstants.CONFIG_KEY_MERGE
@@ -343,7 +344,45 @@ class JGitClient(
         }
     }
 
-    private inline fun <T> useGit(block: (Git) -> T): T = Git.open(workingDirectory).use(block)
+    private inline fun <T> useGit(block: (Git) -> T): T = openRepository().use(block)
+
+    /**
+     * Opens the git repository, handling both regular repos (where .git is a directory)
+     * and worktrees (where .git is a file containing a gitdir pointer).
+     *
+     * JGit doesn't fully support git worktrees, so for worktrees we use the main repository's
+     * git directory (found via the commondir file) to access refs and objects, while still
+     * using the worktree's working directory for file operations.
+     */
+    private fun openRepository(): Git {
+        val dotGit = workingDirectory.resolve(".git")
+        return if (dotGit.isFile) {
+            // This is a worktree - .git is a file containing "gitdir: <path>"
+            val gitDirPath = dotGit.readText().trim().removePrefix("gitdir:").trim()
+            val worktreeGitDir = File(gitDirPath).let { if (it.isAbsolute) it else workingDirectory.resolve(it) }
+
+            // JGit doesn't support the commondir mechanism, so we need to use the main
+            // repository's git directory for refs/objects, but the worktree's working directory
+            val commondirFile = worktreeGitDir.resolve("commondir")
+            val mainGitDir = if (commondirFile.isFile) {
+                val commondirPath = commondirFile.readText().trim()
+                worktreeGitDir.resolve(commondirPath).canonicalFile
+            } else {
+                // Fallback to worktree git dir if commondir doesn't exist
+                worktreeGitDir
+            }
+
+            Git.wrap(
+                FileRepositoryBuilder()
+                    .setWorkTree(workingDirectory)
+                    .setGitDir(mainGitDir)
+                    .build(),
+            )
+        } else {
+            // Regular repository
+            Git.open(workingDirectory)
+        }
+    }
 
     companion object {
         private val SUCCESSFUL_PUSH_STATUSES = setOf(
