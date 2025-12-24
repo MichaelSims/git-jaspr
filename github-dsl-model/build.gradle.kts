@@ -2,6 +2,7 @@ plugins {
     alias(libs.plugins.kotlin)
     alias(libs.plugins.kotlin.kapt)
     alias(libs.plugins.spotless)
+    alias(libs.plugins.ksp)
 }
 
 group = "org.example"
@@ -19,7 +20,7 @@ dependencies {
     implementation(libs.slf4j.api)
     implementation(libs.logback.classic)
     implementation(project(":data-class-fragment"))
-    kapt(project(":data-class-fragment"))
+    ksp(project(":data-class-fragment"))
 
     annotationProcessor(libs.auto.service)
     implementation(libs.auto.service)
@@ -29,7 +30,7 @@ dependencies {
 // Apply a specific Java toolchain to ease working on different environments.
 java {
     toolchain {
-        languageVersion.set(JavaLanguageVersion.of(11))
+        languageVersion.set(JavaLanguageVersion.of(17))
     }
 }
 

@@ -1,3 +1,5 @@
+import org.jetbrains.kotlin.gradle.tasks.KotlinCompile
+
 plugins {
     alias(libs.plugins.kotlin)
     alias(libs.plugins.kotlin.kapt)
@@ -20,7 +22,10 @@ dependencies {
     implementation(libs.logback.classic)
 
     implementation(libs.kotlinpoet)
+    implementation(libs.kotlinpoet.ksp)
     implementation(libs.kotlinpoet.metadata)
+    implementation(libs.ksp.api)
+    implementation(libs.arrowkt.core)
     kapt(libs.auto.service)
     annotationProcessor(libs.auto.service)
     compileOnly(libs.auto.service)
@@ -32,7 +37,7 @@ dependencies {
 // Apply a specific Java toolchain to ease working on different environments.
 java {
     toolchain {
-        languageVersion.set(JavaLanguageVersion.of(11))
+        languageVersion.set(JavaLanguageVersion.of(17))
     }
 }
 
@@ -49,5 +54,15 @@ spotless {
     kotlinGradle {
         toggleOffOn()
         ktlint()
+    }
+}
+
+tasks.withType<KotlinCompile> {
+    compilerOptions {
+        freeCompilerArgs.addAll(
+            listOf(
+                "-Xcontext-parameters",
+            )
+        )
     }
 }
