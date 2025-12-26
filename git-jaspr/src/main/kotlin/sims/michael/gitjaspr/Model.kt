@@ -1,36 +1,32 @@
 package sims.michael.gitjaspr
 
 import ch.qos.logback.classic.Level
-import kotlinx.serialization.Serializable
-import sims.michael.gitjaspr.RemoteRefEncoding.DEFAULT_REMOTE_BRANCH_PREFIX
-import sims.michael.gitjaspr.RemoteRefEncoding.DEFAULT_REMOTE_NAMED_STACK_BRANCH_PREFIX
-import sims.michael.gitjaspr.serde.FileSerializer
-import sims.michael.gitjaspr.serde.LevelSerializer
 import java.io.File
 import java.time.Instant
 import java.time.LocalDateTime
 import java.time.ZoneId
 import java.time.ZonedDateTime
+import kotlinx.serialization.Serializable
+import sims.michael.gitjaspr.RemoteRefEncoding.DEFAULT_REMOTE_BRANCH_PREFIX
+import sims.michael.gitjaspr.RemoteRefEncoding.DEFAULT_REMOTE_NAMED_STACK_BRANCH_PREFIX
 import sims.michael.gitjaspr.generated.getpullrequests.RateLimit as GetPullRequestsRateLimit
 import sims.michael.gitjaspr.generated.getpullrequestsbyheadref.RateLimit as GetPullRequestsByHeadRefRateLimit
 import sims.michael.gitjaspr.generated.getrepositoryid.RateLimit as GetRepositoryIdRateLimit
+import sims.michael.gitjaspr.serde.FileSerializer
+import sims.michael.gitjaspr.serde.LevelSerializer
 
 @Serializable
 data class Config(
-    @Serializable(with = FileSerializer::class)
-    val workingDirectory: File,
+    @Serializable(with = FileSerializer::class) val workingDirectory: File,
     val remoteName: String,
     val gitHubInfo: GitHubInfo,
     val remoteBranchPrefix: String = DEFAULT_REMOTE_BRANCH_PREFIX,
     val remoteNamedStackBranchPrefix: String = DEFAULT_REMOTE_NAMED_STACK_BRANCH_PREFIX,
-    @Serializable(with = LevelSerializer::class)
-    val logLevel: Level = Level.INFO,
-    @Serializable(with = FileSerializer::class)
-    val logsDirectory: File? = null,
+    @Serializable(with = LevelSerializer::class) val logLevel: Level = Level.INFO,
+    @Serializable(with = FileSerializer::class) val logsDirectory: File? = null,
 )
 
-@Serializable
-data class GitHubInfo(val host: String, val owner: String, val name: String)
+@Serializable data class GitHubInfo(val host: String, val owner: String, val name: String)
 
 data class Commit(
     val hash: String,
@@ -49,7 +45,9 @@ data class Ident(val name: String, val email: String) {
 
 data class RefSpec(val localRef: String, val remoteRef: String) {
     override fun toString() = "$localRef:$remoteRef"
-    fun forcePush() = if (!localRef.startsWith(FORCE_PUSH_PREFIX)) copy(localRef = "+$localRef") else this
+
+    fun forcePush() =
+        if (!localRef.startsWith(FORCE_PUSH_PREFIX)) copy(localRef = "+$localRef") else this
 }
 
 data class RemoteBranch(val name: String, val commit: Commit) {
@@ -64,10 +62,11 @@ data class RemoteCommitStatus(
     val isDraft: Boolean?,
     val approved: Boolean?,
 ) {
-    val isMergeable = localCommit.hash == remoteCommit?.hash &&
-        checksPass == true &&
-        isDraft != true &&
-        approved == true
+    val isMergeable =
+        localCommit.hash == remoteCommit?.hash &&
+            checksPass == true &&
+            isDraft != true &&
+            approved == true
 }
 
 data class PullRequest(
@@ -89,7 +88,8 @@ data class PullRequest(
         return "PR$numberString($headToBaseString, title=$title, id=$id)"
     }
 
-    val headToBaseString: String get() = "$headRefName -> $baseRefName"
+    val headToBaseString: String
+        get() = "$headRefName -> $baseRefName"
 }
 
 data class GitHubRateLimitInfo(

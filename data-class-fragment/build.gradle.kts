@@ -1,3 +1,5 @@
+import org.jetbrains.kotlin.gradle.tasks.KotlinCompile
+
 plugins {
     alias(libs.plugins.kotlin)
     alias(libs.plugins.kotlin.kapt)
@@ -5,6 +7,7 @@ plugins {
 }
 
 group = "org.example"
+
 version = "unspecified"
 
 repositories {
@@ -20,7 +23,10 @@ dependencies {
     implementation(libs.logback.classic)
 
     implementation(libs.kotlinpoet)
+    implementation(libs.kotlinpoet.ksp)
     implementation(libs.kotlinpoet.metadata)
+    implementation(libs.ksp.api)
+    implementation(libs.arrowkt.core)
     kapt(libs.auto.service)
     annotationProcessor(libs.auto.service)
     compileOnly(libs.auto.service)
@@ -29,25 +35,20 @@ dependencies {
     testImplementation(libs.junit.jupiter.engine)
 }
 
-// Apply a specific Java toolchain to ease working on different environments.
-java {
-    toolchain {
-        languageVersion.set(JavaLanguageVersion.of(11))
-    }
-}
-
-tasks.test {
-    useJUnitPlatform()
-}
+tasks.test { useJUnitPlatform() }
 
 spotless {
     kotlin {
         toggleOffOn()
-        ktlint().setEditorConfigPath("$rootDir/.editorconfig")
-        targetExclude("build/generated/")
+        targetExclude("build/**/*")
+        ktfmt(libs.versions.ktfmt.get()).kotlinlangStyle()
     }
     kotlinGradle {
         toggleOffOn()
-        ktlint()
+        ktfmt(libs.versions.ktfmt.get()).kotlinlangStyle()
     }
+}
+
+tasks.withType<KotlinCompile> {
+    compilerOptions { freeCompilerArgs.addAll(listOf("-Xcontext-parameters")) }
 }

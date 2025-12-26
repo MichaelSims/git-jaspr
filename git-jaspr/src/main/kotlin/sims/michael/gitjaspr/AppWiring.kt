@@ -6,9 +6,9 @@ import io.ktor.client.*
 import io.ktor.client.engine.cio.*
 import io.ktor.client.plugins.auth.*
 import io.ktor.client.plugins.auth.providers.*
+import java.net.URL
 import kotlinx.serialization.json.Json
 import sims.michael.gitjaspr.graphql.GitHubGraphQLClient
-import java.net.URL
 
 interface AppWiring {
     val gitJaspr: GitJaspr
@@ -23,17 +23,18 @@ class DefaultAppWiring(
     override val gitClient: GitClient,
 ) : AppWiring {
 
-    private val gitHubClientWiring = GitHubClientWiring(githubToken, config.gitHubInfo, config.remoteBranchPrefix)
+    private val gitHubClientWiring =
+        GitHubClientWiring(githubToken, config.gitHubInfo, config.remoteBranchPrefix)
 
     @Suppress("unused")
-    val graphQLClient: GraphQLClient<*> get() = gitHubClientWiring.graphQLClient
+    val graphQLClient: GraphQLClient<*>
+        get() = gitHubClientWiring.graphQLClient
 
     @Suppress("MemberVisibilityCanBePrivate")
-    val gitHubClient: GitHubClient get() = gitHubClientWiring.gitHubClient
+    val gitHubClient: GitHubClient
+        get() = gitHubClientWiring.gitHubClient
 
-    override val json: Json = Json {
-        prettyPrint = true
-    }
+    override val json: Json = Json { prettyPrint = true }
 
     override val gitJaspr: GitJaspr by lazy { GitJaspr(gitHubClient, gitClient, config) }
 }
@@ -44,31 +45,19 @@ class GitHubClientWiring(
     private val remoteBranchPrefix: String,
     private val getPullRequestsPageSize: Int = GitHubClient.GET_PULL_REQUESTS_DEFAULT_PAGE_SIZE,
 ) {
-    private val bearerTokens by lazy {
-        BearerTokens(githubToken, githubToken)
-    }
+    private val bearerTokens by lazy { BearerTokens(githubToken, githubToken) }
 
     private val httpClient by lazy {
-        HttpClient(engineFactory = CIO)
-            .config {
-                install(Auth) {
-                    bearer {
-                        loadTokens {
-                            bearerTokens
-                        }
-                    }
-                }
-            }
+        HttpClient(engineFactory = CIO).config {
+            install(Auth) { bearer { loadTokens { bearerTokens } } }
+        }
     }
 
     val graphQLClient: GraphQLClient<*> by lazy {
         ErrorMappingGraphQLClient(
             GitHubGraphQLClient(
-                GraphQLKtorClient(
-                    URL("https://api.github.com/graphql"),
-                    httpClient,
-                ),
-            ),
+                GraphQLKtorClient(URL("https://api.github.com/graphql"), httpClient)
+            )
         )
     }
 

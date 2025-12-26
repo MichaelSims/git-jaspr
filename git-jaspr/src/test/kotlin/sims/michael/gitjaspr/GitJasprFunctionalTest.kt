@@ -1,5 +1,6 @@
 package sims.michael.gitjaspr
 
+import kotlin.test.assertEquals
 import kotlinx.coroutines.async
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
@@ -8,7 +9,6 @@ import org.slf4j.Logger
 import org.slf4j.LoggerFactory
 import sims.michael.gitjaspr.githubtests.GitHubTestHarness
 import sims.michael.gitjaspr.testing.FunctionalTest
-import kotlin.test.assertEquals
 
 @FunctionalTest
 class GitJasprFunctionalTest : GitJasprTest {
@@ -32,21 +32,23 @@ class GitJasprFunctionalTest : GitJasprTest {
             }
         }
     }
+
     override suspend fun <T> assertEventuallyEquals(expected: T, getActual: suspend () -> T) {
         assertEquals(
             expected,
             withTimeout(30_000L) {
-                async {
-                    var actual: T = getActual()
-                    while (actual != expected) {
-                        logger.trace("Actual {}", actual)
-                        logger.trace("Expected {}", expected)
-                        delay(5_000L)
-                        actual = getActual()
+                    async {
+                        var actual: T = getActual()
+                        while (actual != expected) {
+                            logger.trace("Actual {}", actual)
+                            logger.trace("Expected {}", expected)
+                            delay(5_000L)
+                            actual = getActual()
+                        }
+                        actual
                     }
-                    actual
                 }
-            }.await(),
+                .await(),
         )
     }
 }

@@ -1,5 +1,6 @@
 package sims.michael.gitjaspr.githubtests
 
+import kotlin.test.assertEquals
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.TestInfo
 import org.junit.jupiter.api.assertThrows
@@ -10,7 +11,6 @@ import sims.michael.gitjaspr.RemoteRefEncoding.buildRemoteRef
 import sims.michael.gitjaspr.githubtests.GitHubTestHarness.Companion.withTestSetup
 import sims.michael.gitjaspr.githubtests.generatedtestdsl.testCase
 import sims.michael.gitjaspr.testing.DEFAULT_COMMITTER
-import kotlin.test.assertEquals
 
 class GitHubTestHarnessTest {
 
@@ -32,25 +32,20 @@ class GitHubTestHarnessTest {
             createCommitsFrom(
                 testCase {
                     repository {
-                        commit {
-                            title = "commit_one"
-                        }
+                        commit { title = "commit_one" }
                         commit {
                             title = "commit_two"
                             localRefs += "main"
                         }
                     }
-                },
+                }
             )
 
             JGitClient(localRepo).logRange("main~2", "main").let { log ->
                 assertEquals(2, log.size)
                 val (commitOne, commitThree) = log
                 assertEquals(
-                    commitOne.copy(
-                        shortMessage = "commit_one",
-                        committer = DEFAULT_COMMITTER,
-                    ),
+                    commitOne.copy(shortMessage = "commit_one", committer = DEFAULT_COMMITTER),
                     commitOne,
                 )
                 assertEquals(commitThree.copy(shortMessage = "commit_two"), commitThree)
@@ -67,9 +62,7 @@ class GitHubTestHarnessTest {
                         commit {
                             title = "commit_one"
                             branch {
-                                commit {
-                                    title = "commit_one_one"
-                                }
+                                commit { title = "commit_one_one" }
                                 commit {
                                     title = "commit_one_two"
                                     localRefs += "one"
@@ -81,7 +74,7 @@ class GitHubTestHarnessTest {
                             localRefs += "main"
                         }
                     }
-                },
+                }
             )
             val jGitClient = JGitClient(localRepo)
 
@@ -126,7 +119,7 @@ class GitHubTestHarnessTest {
                             remoteRefs += "main"
                         }
                     }
-                },
+                }
             )
 
             localGit.logRange("main~2", "main").let { log ->
@@ -155,28 +148,23 @@ class GitHubTestHarnessTest {
     @Test
     fun `creating commits without named refs fails`(info: TestInfo) {
         withTestSetup {
-            val exception = assertThrows<IllegalArgumentException> {
-                createCommitsFrom(
-                    testCase {
-                        repository {
-                            commit {
-                                title = "Commit one"
-                                branch {
-                                    commit {
-                                        title = "Commit one.one"
-                                    }
-                                    commit {
-                                        title = "Commit one.two"
+            val exception =
+                assertThrows<IllegalArgumentException> {
+                    createCommitsFrom(
+                        testCase {
+                            repository {
+                                commit {
+                                    title = "Commit one"
+                                    branch {
+                                        commit { title = "Commit one.one" }
+                                        commit { title = "Commit one.two" }
                                     }
                                 }
-                            }
-                            commit {
-                                title = "Commit two"
+                                commit { title = "Commit two" }
                             }
                         }
-                    },
-                )
-            }
+                    )
+                }
             logger.info("{}: {}", info.displayName, exception.message)
         }
     }
@@ -184,30 +172,29 @@ class GitHubTestHarnessTest {
     @Test
     fun `duplicated commit titles are not allowed`(info: TestInfo) {
         withTestSetup {
-            val exception = assertThrows<IllegalArgumentException> {
-                createCommitsFrom(
-                    testCase {
-                        repository {
-                            commit {
-                                title = "Commit one"
-                                branch {
-                                    commit {
-                                        title = "Commit one.one"
-                                    }
-                                    commit {
-                                        title = "Commit one.two"
-                                        localRefs += "feature-one"
+            val exception =
+                assertThrows<IllegalArgumentException> {
+                    createCommitsFrom(
+                        testCase {
+                            repository {
+                                commit {
+                                    title = "Commit one"
+                                    branch {
+                                        commit { title = "Commit one.one" }
+                                        commit {
+                                            title = "Commit one.two"
+                                            localRefs += "feature-one"
+                                        }
                                     }
                                 }
-                            }
-                            commit {
-                                title = "Commit one"
-                                localRefs += "main"
+                                commit {
+                                    title = "Commit one"
+                                    localRefs += "main"
+                                }
                             }
                         }
-                    },
-                )
-            }
+                    )
+                }
             logger.info("{}: {}", info.displayName, exception.message)
         }
     }
@@ -215,40 +202,39 @@ class GitHubTestHarnessTest {
     @Test
     fun `duplicated pr titles are not allowed`(info: TestInfo) {
         withTestSetup {
-            val exception = assertThrows<IllegalArgumentException> {
-                createCommitsFrom(
-                    testCase {
-                        repository {
-                            commit {
-                                title = "Commit one"
-                                branch {
-                                    commit {
-                                        title = "Commit one.one"
-                                    }
-                                    commit {
-                                        title = "Commit one.two"
-                                        localRefs += "feature-one"
+            val exception =
+                assertThrows<IllegalArgumentException> {
+                    createCommitsFrom(
+                        testCase {
+                            repository {
+                                commit {
+                                    title = "Commit one"
+                                    branch {
+                                        commit { title = "Commit one.one" }
+                                        commit {
+                                            title = "Commit one.two"
+                                            localRefs += "feature-one"
+                                        }
                                     }
                                 }
+                                commit {
+                                    title = "Commit two"
+                                    localRefs += "main"
+                                }
                             }
-                            commit {
-                                title = "Commit two"
-                                localRefs += "main"
+                            pullRequest {
+                                title = "One"
+                                baseRef = "main"
+                                headRef = "feature-one"
+                            }
+                            pullRequest {
+                                title = "One"
+                                baseRef = "main~1"
+                                headRef = "feature-one"
                             }
                         }
-                        pullRequest {
-                            title = "One"
-                            baseRef = "main"
-                            headRef = "feature-one"
-                        }
-                        pullRequest {
-                            title = "One"
-                            baseRef = "main~1"
-                            headRef = "feature-one"
-                        }
-                    },
-                )
-            }
+                    )
+                }
             logger.info("{}: {}", info.displayName, exception.message)
         }
     }
@@ -259,34 +245,26 @@ class GitHubTestHarnessTest {
             createCommitsFrom(
                 testCase {
                     repository {
-                        commit {
-                            title = "one"
-                        }
-                        commit {
-                            title = "two"
-                        }
+                        commit { title = "one" }
+                        commit { title = "two" }
                         commit {
                             title = "three"
                             localRefs += "one"
                         }
                     }
-                },
+                }
             )
             createCommitsFrom(
                 testCase {
                     repository {
-                        commit {
-                            title = "one"
-                        }
-                        commit {
-                            title = "three"
-                        }
+                        commit { title = "one" }
+                        commit { title = "three" }
                         commit {
                             title = "four"
                             localRefs += "one"
                         }
                     }
-                },
+                }
             )
             localGit.logRange("one~3", "one").let { log ->
                 assertEquals(3, log.size)
@@ -334,7 +312,7 @@ class GitHubTestHarnessTest {
                             remoteRefs += "main"
                         }
                     }
-                },
+                }
             )
             createCommitsFrom(
                 testCase {
@@ -369,7 +347,7 @@ class GitHubTestHarnessTest {
                             remoteRefs += "main"
                         }
                     }
-                },
+                }
             )
         }
         val jGitClient = JGitClient(harness.remoteRepo)
@@ -422,7 +400,7 @@ class GitHubTestHarnessTest {
                         title = "three"
                         willBeApprovedByUserKey = "michael"
                     }
-                },
+                }
             )
 
             gitJaspr.merge(RefSpec("development", "main"))
@@ -487,7 +465,7 @@ class GitHubTestHarnessTest {
                         title = "yet anothern"
                         userKey = "michael"
                     }
-                },
+                }
             )
 
             assertEquals(

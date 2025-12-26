@@ -40,17 +40,17 @@ class GitHubStubClient(
         logger.trace("getPullRequestsById {}", commitFilter ?: "")
         return synchronized(prs) {
             autoClosePrs()
-            prs
-                .openPullRequests()
-                .filter { pr ->
-                    if (commitFilter != null) pr.commitId in commitFilter else true
-                }
+            prs.openPullRequests().filter { pr ->
+                if (commitFilter != null) pr.commitId in commitFilter else true
+            }
         }
     }
 
     override suspend fun getPullRequestsByHeadRef(headRefName: String): List<PullRequest> {
         logger.trace("getPullRequestsByHeadRef {}", headRefName)
-        return synchronized(prs) { prs.map(PullRequestAndState::pullRequest).filter { it.headRefName == headRefName } }
+        return synchronized(prs) {
+            prs.map(PullRequestAndState::pullRequest).filter { it.headRefName == headRefName }
+        }
     }
 
     override suspend fun createPullRequest(pullRequest: PullRequest): PullRequest {
@@ -72,7 +72,8 @@ class GitHubStubClient(
     override suspend fun closePullRequest(pullRequest: PullRequest) {
         logger.trace("closePullRequest {}", pullRequest)
         synchronized(prs) {
-            val i = prs.map(PullRequestAndState::pullRequest).indexOfFirst { it.id == pullRequest.id }
+            val i =
+                prs.map(PullRequestAndState::pullRequest).indexOfFirst { it.id == pullRequest.id }
             require(i > -1) { "PR $pullRequest was not found" }
             prs[i] = prs[i].copy(open = false)
         }
@@ -86,14 +87,16 @@ class GitHubStubClient(
     override suspend fun updatePullRequest(pullRequest: PullRequest) {
         logger.trace("updatePullRequest {}", pullRequest)
         synchronized(prs) {
-            val i = prs.map(PullRequestAndState::pullRequest).indexOfFirst { it.id == pullRequest.id }
+            val i =
+                prs.map(PullRequestAndState::pullRequest).indexOfFirst { it.id == pullRequest.id }
             require(i > -1) { "PR with ID ${pullRequest.id} was not found" }
             prs[i] = prs[i].copy(pullRequest = pullRequest)
         }
     }
 
-    // Mimic GitHub's behavior since our program logic depends on it. Should be called from any method that returns
-    // PRs so that the PR state is always viewed consistently with the git repo state
+    // Mimic GitHub's behavior since our program logic depends on it. Should be called from any
+    // method that returns PRs so that the PR state is always viewed consistently with the git repo
+    // state
     override fun autoClosePrs() {
         logger.trace("autoClosePrs")
         val remoteBranchesById = localGit.getRemoteBranchesById(remoteName)
@@ -101,8 +104,10 @@ class GitHubStubClient(
             for (i in 0 until prs.size) {
                 val pr = prs[i].pullRequest
                 val commitId = pr.commitId ?: continue // Commit missing ID
-                val remoteBranch = remoteBranchesById[commitId] ?: continue // No remote branch for commit
-                val range = localGit.logRange("$remoteName/${DEFAULT_TARGET_REF}", remoteBranch.commit.hash)
+                val remoteBranch =
+                    remoteBranchesById[commitId] ?: continue // No remote branch for commit
+                val range =
+                    localGit.logRange("$remoteName/${DEFAULT_TARGET_REF}", remoteBranch.commit.hash)
                 // Close it if it's already been merged
                 if (range.isEmpty()) {
                     logger.trace("autoClosePrs closing {}", prs[i])

@@ -3,16 +3,16 @@ package sims.michael.gitjaspr
 import java.io.File
 
 /**
- * An optimized [GitClient] that uses [CliGitClient] for transport operations and [JGitClient] for everything else.
+ * An optimized [GitClient] that uses [CliGitClient] for transport operations and [JGitClient] for
+ * everything else.
  *
- * [JGitClient] transport operations do not work for users on OS X who use SSH agent (to supply the passphrase for
- * their keys). This class exists to work around this issue by using the CLI for transport operations and JGit for
- * everything else (since it is theoretically faster).
+ * [JGitClient] transport operations do not work for users on OS X who use SSH agent (to supply the
+ * passphrase for their keys). This class exists to work around this issue by using the CLI for
+ * transport operations and JGit for everything else (since it is theoretically faster).
  */
-class OptimizedCliGitClient private constructor(
-    private val cliGitClient: CliGitClient,
-    private val jGitClient: JGitClient,
-) : GitClient by jGitClient {
+class OptimizedCliGitClient
+private constructor(private val cliGitClient: CliGitClient, private val jGitClient: JGitClient) :
+    GitClient by jGitClient {
 
     override fun clone(uri: String, remoteName: String, bare: Boolean): GitClient {
         cliGitClient.clone(uri, remoteName, bare)

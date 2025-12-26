@@ -1,77 +1,91 @@
 package sims.michael.gitjaspr.dataclassfragment.codegen
 
 import com.google.auto.service.AutoService
-import com.squareup.kotlinpoet.*
+import com.google.devtools.ksp.KspExperimental
+import com.google.devtools.ksp.getAnnotationsByType
+import com.google.devtools.ksp.processing.Resolver
+import com.google.devtools.ksp.processing.SymbolProcessor
+import com.google.devtools.ksp.processing.SymbolProcessorEnvironment
+import com.google.devtools.ksp.processing.SymbolProcessorProvider
+import com.google.devtools.ksp.symbol.KSAnnotated
+import com.google.devtools.ksp.symbol.KSClassDeclaration
+import com.google.devtools.ksp.symbol.KSType
+import com.squareup.kotlinpoet.ClassName
+import com.squareup.kotlinpoet.CodeBlock
+import com.squareup.kotlinpoet.FileSpec
+import com.squareup.kotlinpoet.FunSpec
+import com.squareup.kotlinpoet.KModifier
+import com.squareup.kotlinpoet.LambdaTypeName
+import com.squareup.kotlinpoet.MemberName
+import com.squareup.kotlinpoet.ParameterSpec
+import com.squareup.kotlinpoet.ParameterizedTypeName
 import com.squareup.kotlinpoet.ParameterizedTypeName.Companion.parameterizedBy
-import kotlinx.metadata.KmProperty
-import kotlinx.metadata.jvm.syntheticMethodForAnnotations
+import com.squareup.kotlinpoet.PropertySpec
+import com.squareup.kotlinpoet.TypeName
+import com.squareup.kotlinpoet.TypeSpec
+import com.squareup.kotlinpoet.TypeVariableName
+import com.squareup.kotlinpoet.buildCodeBlock
+import com.squareup.kotlinpoet.ksp.toClassName
+import com.squareup.kotlinpoet.ksp.toTypeName
+import com.squareup.kotlinpoet.ksp.writeTo
+import java.time.Instant
 import org.slf4j.LoggerFactory
 import sims.michael.gitjaspr.dataclassfragment.GenerateDataClassFragmentDataClass
-import java.io.File
-import java.time.Instant
-import javax.annotation.processing.AbstractProcessor
-import javax.annotation.processing.Processor
-import javax.annotation.processing.RoundEnvironment
-import javax.annotation.processing.SupportedSourceVersion
-import javax.lang.model.SourceVersion
-import javax.lang.model.element.ElementKind
-import javax.lang.model.element.TypeElement
-import javax.tools.Diagnostic
 
 @Suppress("unused")
-@AutoService(Processor::class)
-@SupportedSourceVersion(SourceVersion.RELEASE_11)
-class DataClassFragmentTestDataDslGenerator : AbstractProcessor() {
+@AutoService(SymbolProcessorProvider::class)
+class DataClassFragmentTestDataDslGeneratorProvider : SymbolProcessorProvider {
+    override fun create(environment: SymbolProcessorEnvironment): SymbolProcessor =
+        context(environment) { DataClassFragmentTestDataDslGenerator(environment) }
+}
 
-    private val processorUtilities by lazy { DataClassFragmentProcessorUtilities(processingEnv) }
+@Suppress("unused")
+@OptIn(KspExperimental::class)
+class DataClassFragmentTestDataDslGenerator(private val environment: SymbolProcessorEnvironment) :
+    SymbolProcessor {
 
     @Suppress("unused")
     private val logger = LoggerFactory.getLogger(DataClassFragmentTestDataDslGenerator::class.java)
 
-    override fun getSupportedAnnotationTypes(): Set<String> = setOf(GenerateDataClassFragmentDataClass::class.java.name)
-
-    override fun process(annotations: MutableSet<out TypeElement>, roundEnv: RoundEnvironment): Boolean {
-        val fragments = processorUtilities
-            .collectFragments(
-                roundEnv
-                    .getElementsAnnotatedWith(GenerateDataClassFragmentDataClass::class.java),
-            )
-
-        for (fragment in fragments) {
-            val namedColumnProperties = processorUtilities.getNamedColumnProperties(fragment)
-            if (checkArrayColumnsHaveOnlySupportedIterableTypes(fragment, namedColumnProperties)) {
-                generateCodeForDataClassFragment(
-                    fragment,
-                    namedColumnProperties,
-                    processorUtilities.generatedSourcesDir,
-                )
+    @OptIn(KspExperimental::class)
+    override fun process(resolver: Resolver): List<KSAnnotated> {
+        context(environment) {
+            context(resolver) {
+                resolver.collectFragments().forEach {
+                    it.process {
+                        generateTestDataDslSpec()
+                            .writeTo(
+                                environment.codeGenerator,
+                                false,
+                                listOfNotNull(classDeclaration.containingFile),
+                            )
+                    }
+                }
             }
         }
 
-        // Don't "claim" these elements since the data class generator also needs to process them
-        return false
+        return emptyList()
     }
 
-    private fun generateCodeForDataClassFragment(
-        fragment: TypeElement,
-        namedColumnProperties: List<KmPropertyInfo>,
-        generatedSourcesDir: File,
-    ) {
-        FileSpec
-            .builder(
-                addDslPackageSuffix(processorUtilities.getPackageName(fragment)),
-                fragment.generatedBuilder.nameWithoutPackage,
-            )
+    context(_: Resolver)
+    private fun DataClassFragmentDescriptor.generateTestDataDslSpec(): FileSpec =
+        FileSpec.builder(generatedTestDataDslClassName)
             .indent(INDENT)
-            .addFunction(buildFactoryFunctionSpec(fragment))
-            .addType(buildTestModelBuilderClassSpec(fragment, namedColumnProperties))
+            .addFunction(buildFactoryFunctionSpec())
+            .addType(buildTestModelBuilderClassSpec())
             .build()
-            .writeTo(generatedSourcesDir)
-    }
+
+    private val KSClassDeclaration.generatedBuilder: ClassName
+        get() {
+            val generatedBuilderName = getGeneratedTestBuilderName(toClassName().nameWithoutPackage)
+            val parts = listOf(addDslPackageSuffix(packageName.asString()), generatedBuilderName)
+            val classNameString = parts.filter(String::isNotEmpty).joinToString(PACKAGE_DELIMITER)
+            return ClassName.bestGuess(classNameString)
+        }
 
     /**
-     * Builds the FunSpec for the main factory function for the given DataClassFragment. This is the "entry point"
-     * into the DSL.
+     * Builds the FunSpec for the main factory function for the given DataClassFragment. This is the
+     * "entry point" into the DSL.
      *
      * Example:
      * ```
@@ -81,31 +95,53 @@ class DataClassFragmentTestDataDslGenerator : AbstractProcessor() {
      *     .build()
      * ```
      */
-    private fun buildFactoryFunctionSpec(fragment: TypeElement): FunSpec {
-        val generatedBuilderWithTypeArg = fragment
-            .generatedBuilder
-            .parameterizedBy(processorUtilities.getGeneratedDataClass(fragment))
-        val lambdaType = LambdaTypeName.get(generatedBuilderWithTypeArg, returnType = ClassNames.unit)
-        return FunSpec
-            .builder(fragment.generatedBuilderDslFunctionName)
+    context(_: Resolver)
+    private fun DataClassFragmentDescriptor.buildFactoryFunctionSpec(): FunSpec {
+        val generatedBuilderWithTypeArg =
+            classDeclaration.generatedBuilder.parameterizedBy(generatedDataClassName)
+        val lambdaType =
+            LambdaTypeName.get(generatedBuilderWithTypeArg, returnType = ClassNames.unit)
+        return FunSpec.builder(classDeclaration.generatedBuilderDslFunctionName)
             .addParameter(ParameterSpec.builder("fn", lambdaType).build())
-            .returns(processorUtilities.getGeneratedDataClass(fragment))
+            .returns(generatedDataClassName)
             .addCode(
                 "return %T(%M(%T::doBuild)).apply(fn).build()",
-                fragment.generatedBuilder,
+                classDeclaration.generatedBuilder,
                 MemberNames.ignoringIsNull,
                 generatedBuilderWithTypeArg,
             )
             .addKdoc(
                 "Creates an instance of [%T] (generated from [%T])",
-                processorUtilities.getGeneratedDataClass(fragment),
-                fragment.toClassName(),
+                generatedDataClassName,
+                classDeclaration.toClassName(),
             )
             .build()
     }
 
+    @OptIn(KspExperimental::class)
+    private val KSClassDeclaration.generatedBuilderDslFunctionName: String
+        get() {
+            val overrideName =
+                getAnnotationsByType(GenerateDataClassFragmentDataClass::class)
+                    .first()
+                    .testDataDslFactoryFunctionName
+            return getGeneratedTestBuilderDslFunctionName(
+                if (overrideName.isBlank()) {
+                    toClassName().nameWithoutPackage
+                } else {
+                    val nameParts =
+                        toClassName()
+                            .nameWithoutPackage
+                            .split(PACKAGE_DELIMITER)
+                            .filterNot(String::isBlank)
+                            .dropLast(1) + overrideName
+                    nameParts.joinToString(PACKAGE_DELIMITER)
+                }
+            )
+        }
+
     /**
-     * Builds the TypeSpec for the model builder class for the given DataClassFragment.
+     * Builds the TypeSpec for the model builder class for the given SchemaFragment.
      *
      * Example:
      * ```
@@ -128,212 +164,345 @@ class DataClassFragmentTestDataDslGenerator : AbstractProcessor() {
      * }
      * ```
      */
-    private fun buildTestModelBuilderClassSpec(
-        fragment: TypeElement,
-        namedColumnProperties: List<KmPropertyInfo>,
-    ): TypeSpec {
-        val builderClassSpecBuilder = TypeSpec.classBuilder(fragment.generatedBuilder)
+    context(_: Resolver)
+    private fun DataClassFragmentDescriptor.buildTestModelBuilderClassSpec(): TypeSpec {
+        val builderClassSpecBuilder = TypeSpec.classBuilder(classDeclaration.generatedBuilder)
 
-        val typeVarT = TypeVariableName(
-            name = "T",
-            bounds = arrayOf(processorUtilities.getGeneratedDataClass(fragment).copy(nullable = true)),
-        )
+        val typeVarT =
+            TypeVariableName(
+                name = "T",
+                bounds = arrayOf(generatedDataClassName.copy(nullable = true)),
+            )
 
         builderClassSpecBuilder
             .addTypeVariable(typeVarT)
             .addSuperinterface(ClassNames.builder.parameterizedBy(typeVarT))
 
         val buildFnName = "build"
-        val buildFnType = LambdaTypeName.get(
-            fragment.generatedBuilder.parameterizedBy(typeVarT),
-            ClassNames.boolean,
-            returnType = typeVarT,
-        )
+        val buildFnType =
+            LambdaTypeName.get(
+                classDeclaration.generatedBuilder.parameterizedBy(typeVarT),
+                ClassNames.boolean,
+                returnType = typeVarT,
+            )
 
-        val primaryConstructor = FunSpec.constructorBuilder().addParameter(buildFnName, buildFnType).build()
+        val primaryConstructor =
+            FunSpec.constructorBuilder().addParameter(buildFnName, buildFnType).build()
         builderClassSpecBuilder.primaryConstructor(primaryConstructor)
 
         builderClassSpecBuilder.addProperty(
-            PropertySpec
-                .builder(buildFnName, buildFnType)
+            PropertySpec.builder(buildFnName, buildFnType)
                 .addModifiers(KModifier.PRIVATE)
                 .initializer(buildFnName)
-                .build(),
+                .build()
         )
 
-        val propertyAndAliases = namedColumnProperties
-            .map { propertyInfo -> AliasedKmProperty(propertyInfo, findAlias(fragment, propertyInfo.property)) }
-
-        for ((propertyInfo, propertyAlias) in propertyAndAliases) {
-            val (namedColumnProperty, returnType) = propertyInfo
-            val builderType = returnType.builderType()
-            val propSpec = PropertySpec
-                .builder(propertyAlias, builderType)
-                .mutable(returnType.isScalarColumn)
-                .initializer(builderType.buildInitializer())
-                .addKdoc(
-                    "Builder property for [%T.%L] (derived from [%T.%L])",
-                    processorUtilities.getGeneratedDataClass(fragment),
-                    namedColumnProperty.name,
-                    fragment.toClassName(),
-                    namedColumnProperty.name,
-                )
-                .build()
-            builderClassSpecBuilder.addProperty(propSpec)
+        context(environment) {
+            forEachProperty {
+                val builderType = propertyType.builderType()
+                val propSpec =
+                    PropertySpec.builder(propertyNameAlias(), builderType)
+                        .mutable(isScalarProperty())
+                        .initializer(builderType.buildInitializer())
+                        .addKdoc(
+                            "Builder property for [%T.%L] (derived from [%T.%L])",
+                            generatedDataClassName,
+                            propertyName,
+                            classDeclaration.toClassName(),
+                            propertyName,
+                        )
+                        .build()
+                builderClassSpecBuilder.addProperty(propSpec)
+            }
         }
 
         builderClassSpecBuilder.addProperty(
-            PropertySpec
-                .builder("isNull", Boolean::class)
+            PropertySpec.builder("isNull", Boolean::class)
                 .addModifiers(KModifier.OVERRIDE)
                 .mutable(true)
                 .initializer("false")
-                .build(),
+                .build()
         )
 
         builderClassSpecBuilder.addFunction(
-            FunSpec
-                .builder("build")
+            FunSpec.builder("build")
                 .addModifiers(KModifier.OVERRIDE)
                 .returns(typeVarT)
                 .addCode("return %L(isNull)", buildFnName)
-                .build(),
+                .build()
         )
 
-        builderClassSpecBuilder.addFunction(buildTestModelBuilderBuildFunction(fragment, propertyAndAliases))
+        builderClassSpecBuilder.addFunction(buildTestModelBuilderBuildFunction())
 
-        builderClassSpecBuilder.addFunction(buildFromFunction(typeVarT, propertyAndAliases))
+        builderClassSpecBuilder.addFunction(buildFromFunction(typeVarT))
 
-        builderClassSpecBuilder.addFunction(buildInvokeFunctionSpec(fragment, typeVarT))
+        builderClassSpecBuilder.addFunction(buildInvokeFunctionSpec(typeVarT))
         return builderClassSpecBuilder.build()
     }
 
     /**
-     * For a given DataClassFragment property declared type, return the type that should be used for the corresponding
-     * test data DSL builder property.
+     * Builds the "invoke" function of the builder.
+     *
+     * Example:
+     * ```
+     * public operator fun invoke(fn: FooBuilder<T>.() -> Unit) {
+     *     apply(fn)
+     * }
+     * ```
      */
-    private fun TypeName.builderType(): TypeName {
-        val namedColumnType = this as ParameterizedTypeName
-        val firstTypeArg = typeArguments.first()
+    context(_: Resolver)
+    private fun DataClassFragmentDescriptor.buildInvokeFunctionSpec(typeVarT: TypeName): FunSpec {
+        return FunSpec.builder("invoke")
+            .addParameter(
+                ParameterSpec.builder(
+                        "fn",
+                        LambdaTypeName.get(
+                            classDeclaration.generatedBuilder.parameterizedBy(typeVarT),
+                            returnType = ClassNames.unit,
+                        ),
+                    )
+                    .build()
+            )
+            .addModifiers(KModifier.OPERATOR)
+            .addCode("apply(fn)")
+            .build()
+    }
+
+    /**
+     * Builds the "from" function that accepts a prototype instance of the data class and
+     * initializers the builder with its values.
+     *
+     * Example:
+     * ```
+     * public override fun from(prototype: T) {
+     *     if (prototype == null) {
+     *         isNull = true
+     *     } else {
+     *         nullableStrings.from(prototype.nullableStrings)
+     *         ...
+     *         egg.from(prototype.eggs)
+     *     }
+     * }
+     * ```
+     */
+    context(_: Resolver)
+    private fun DataClassFragmentDescriptor.buildFromFunction(typeVarT: TypeVariableName) =
+        context(environment) {
+            FunSpec.builder("from")
+                .addModifiers(KModifier.OVERRIDE)
+                .addParameter("prototype", typeVarT)
+                .addCode(
+                    buildCodeBlock {
+                        add("if·(prototype·==·null)·{\n")
+                        add("····isNull·=·true\n")
+                        add("} else {\n")
+                        forEachProperty {
+                            if (isScalarProperty()) {
+                                add("····%L·=·prototype.%L\n", propertyNameAlias(), propertyName)
+                            } else {
+                                add(
+                                    "····%L.from(prototype.%L)\n",
+                                    propertyNameAlias(),
+                                    propertyName,
+                                )
+                            }
+                        }
+                        add("}\n")
+                    }
+                )
+                .returns(ClassNames.unit)
+                .build()
+        }
+
+    /**
+     * Builds the "doBuild" function of the builder, which actually creates the data model class.
+     *
+     * Example:
+     * ```
+     * public fun doBuild(): FooData =
+     *     FooData(
+     *         someString,
+     *         someNested.build(),
+     *         someList.build(),
+     *         ...
+     *     )
+     * ````
+     */
+    context(_: Resolver)
+    private fun DataClassFragmentDescriptor.buildTestModelBuilderBuildFunction() =
+        context(environment) {
+            FunSpec.builder("doBuild")
+                .returns(generatedDataClassName)
+                .addCode(
+                    buildCodeBlock {
+                        add("return %T(", generatedDataClassName)
+
+                        forEachProperty {
+                            add(if (isScalarProperty()) "%L" else "%L.build()", propertyNameAlias())
+                            add(",")
+                        }
+
+                        add(")")
+                    }
+                )
+                .build()
+        }
+
+    private fun DataClassFragmentPropertyDescriptor.propertyNameAlias() =
+        propertyDeclaration
+            .getAnnotationsByType(GenerateDataClassFragmentDataClass.TestDataDslName::class)
+            .firstOrNull()
+            ?.name ?: propertyName
+
+    /**
+     * For a given SchemaFragment property declared type, return the type that should be used for
+     * the corresponding test data DSL builder property.
+     */
+    context(_: Resolver)
+    private fun KSType.builderType(): TypeName {
         return with(ClassNames) {
-            accept(object : NamedColumnTypeVisitor<TypeName> {
-                // Examples:
-                //   ColumnWithNullability<String, NotNull> -> String
-                //   ColumnWithNullability<String, Nullable> -> String?
-                override fun visitColumn(): TypeName {
-                    val columnType = typeArguments.first()
-                    return columnType.copy(nullable = namedColumnType.hasNullableTypeArgument)
-                }
+            accept(
+                object : DataClassPropertyTypeSymbolVisitor<TypeName> {
+                    // Examples:
+                    //   PropertyWithNullability<String, NotNull> -> String
+                    //   PropertyWithNullability<String, Nullable> -> String?
+                    override fun visitProperty(nestedType: KSType, nullable: Boolean): TypeName =
+                        nestedType.toTypeName().copy(nullable = nullable)
 
-                // Examples:
-                //   NestedColumnWithNullability<Egg, NotNull> -> EggDataBuilder<EggData>
-                //   NestedColumnWithNullability<Egg, Nullable> -> EggDataBuilder<EggData?>
-                override fun visitNestedColumn(): ParameterizedTypeName {
-                    val nestedFragment = firstTypeArg as ClassName
-                    val generatedBuilder = nestedFragment.generatedBuilder
-                    val generatedDataClass = nestedFragment.generatedDataClass
-                    return generatedBuilder
-                        .parameterizedBy(generatedDataClass.copy(nullable = namedColumnType.hasNullableTypeArgument))
-                }
-
-                override fun visitArrayColumn(): ParameterizedTypeName {
-                    val iterableType = checkNotNull(namedColumnType.iterableType)
-                    val arrayElementType = firstTypeArg as ParameterizedTypeName
-                    return if (arrayElementType.isScalarColumn) {
-                        val arrayElementBuilderType = arrayElementType.builderType()
-
-                        // Examples:
-                        //   ArrayColumnWithNullability<ColumnWithNullability<String, NotNull>, NotNull, List<*>> ->
-                        //     ScalarIterableBuilder<List<String>, String>
-                        //   ArrayColumnWithNullability<ColumnWithNullability<String, Nullable>, NotNull, List<*>> ->
-                        //     ScalarIterableBuilder<List<String?>, String?>
-                        //   ArrayColumnWithNullability<ColumnWithNullability<String, NotNull>, Nullable, List<*>> ->
-                        //     ScalarIterableBuilder<List<String>?, String>
-                        //   ArrayColumnWithNullability<ColumnWithNullability<String, Nullable>, Nullable, List<*>> ->
-                        //     ScalarIterableBuilder<List<String?>?, String?>
-                        scalarIterableBuilder
+                    // Examples:
+                    //   NestedPropertyWithNullability<Egg, NotNull> -> EggDataBuilder<EggData>
+                    //   NestedPropertyWithNullability<Egg, Nullable> -> EggDataBuilder<EggData?>
+                    override fun visitNestedProperty(
+                        nestedType: KSType,
+                        nullable: Boolean,
+                    ): TypeName =
+                        (nestedType.declaration as KSClassDeclaration)
+                            .toClassName()
+                            .generatedBuilder
                             .parameterizedBy(
-                                iterableType
-                                    .parameterizedBy(arrayElementBuilderType)
-                                    .copy(nullable = namedColumnType.hasNullableTypeArgument),
-                                arrayElementBuilderType,
+                                nestedType.generatedDataClassName.copy(nullable = nullable)
                             )
-                    } else {
-                        val arrayElementBuilderType = arrayElementType.builderType() as ParameterizedTypeName
-                        val whatItBuilds = arrayElementBuilderType.typeArguments.first()
 
-                        // Examples:
-                        //   ArrayColumnWithNullability<NestedColumnWithNullability<Egg, NotNull>, NotNull, List<*>> ->
-                        //     IterableBuilder<List<EggData>, EggData, EggDataBuilder<EggData>>
-                        //   ArrayColumnWithNullability<NestedColumnWithNullability<Egg, Nullable>, NotNull, List<*>> ->
-                        //     IterableBuilder<List<EggData?>, EggData?, EggDataBuilder<EggData?>>
-                        //   ArrayColumnWithNullability<NestedColumnWithNullability<Egg, NotNull>, Nullable, List<*>> ->
-                        //     IterableBuilder<List<EggData>?, EggData, EggDataBuilder<EggData>>
-                        //   ArrayColumnWithNullability<NestedColumnWithNullability<Egg, Nullable>, Nullable, List<*>> ->
-                        //     IterableBuilder<List<EggData?>?, EggData?, EggDataBuilder<EggData?>>
-                        iterableBuilder
-                            .parameterizedBy(
-                                iterableType
-                                    .parameterizedBy(whatItBuilds)
-                                    .copy(nullable = namedColumnType.hasNullableTypeArgument),
+                    override fun visitArrayProperty(
+                        nestedType: KSType,
+                        nullable: Boolean,
+                        iterableType: KSType,
+                    ): TypeName =
+                        if (nestedType.isScalarProperty()) {
+                            // Examples:
+                            //   ArrayPropertyWithNullability<PropertyWithNullability<String,
+                            // NotNull>,
+                            // NotNull, List<*>> -> ScalarIterableBuilder<List<String>, String>
+                            //   ArrayPropertyWithNullability<PropertyWithNullability<String,
+                            // Nullable>,
+                            // NotNull, List<*>> -> ScalarIterableBuilder<List<String?>, String?>
+                            //   ArrayPropertyWithNullability<PropertyWithNullability<String,
+                            // NotNull>,
+                            // Nullable, List<*>> ->
+                            //     ScalarIterableBuilder<List<String>?, String>
+                            //   ArrayPropertyWithNullability<PropertyWithNullability<String,
+                            // Nullable>,
+                            // Nullable, List<*>> ->
+                            //     ScalarIterableBuilder<List<String?>?, String?>
+                            val builderType = nestedType.builderType()
+                            scalarIterableBuilder.parameterizedBy(
+                                (iterableType.declaration as KSClassDeclaration)
+                                    .toClassName()
+                                    .parameterizedBy(nestedType.toDataClassPropertyType())
+                                    .copy(nullable = nullable),
+                                builderType,
+                            )
+                        } else {
+                            // Examples:
+                            //   ArrayPropertyWithNullability<NestedPropertyWithNullability<Egg,
+                            // NotNull>, NotNull, List<*>> -> IterableBuilder<List<EggData>,
+                            // EggData, EggDataBuilder<EggData>>
+                            //   ArrayPropertyWithNullability<NestedPropertyWithNullability<Egg,
+                            // Nullable>, NotNull, List<*>> -> IterableBuilder<List<EggData?>,
+                            // EggData?, EggDataBuilder<EggData?>>
+                            //   ArrayPropertyWithNullability<NestedPropertyWithNullability<Egg,
+                            // NotNull>, Nullable, List<*>> -> IterableBuilder<List<EggData>?,
+                            // EggData, EggDataBuilder<EggData>>
+                            //   ArrayPropertyWithNullability<NestedPropertyWithNullability<Egg,
+                            // Nullable>, Nullable, List<*>> -> IterableBuilder<List<EggData?>?,
+                            // EggData?, EggDataBuilder<EggData?>>
+                            val elementBuilderType =
+                                nestedType.builderType() as ParameterizedTypeName
+                            val whatItBuilds = elementBuilderType.typeArguments.first()
+                            iterableBuilder.parameterizedBy(
+                                (iterableType.declaration as KSClassDeclaration)
+                                    .toClassName()
+                                    .parameterizedBy(nestedType.toDataClassPropertyType())
+                                    .copy(nullable = nullable),
                                 whatItBuilds,
-                                arrayElementBuilderType,
+                                elementBuilderType,
                             )
-                    }
-                }
+                        }
 
-                override fun visitMapColumn(): ParameterizedTypeName {
-                    val mapValueType = firstTypeArg as ParameterizedTypeName
-                    return if (mapValueType.isScalarColumn) {
-                        val mapValueBuilderType = mapValueType.builderType()
-
-                        // Examples:
-                        //   MapColumnWithNullability<ColumnWithNullability<String, NotNull>, NotNull> ->
-                        //     ScalarMapBuilder<Map<String, String>, String>
-                        //   MapColumnWithNullability<ColumnWithNullability<String, Nullable>, NotNull> ->
-                        //     ScalarMapBuilder<Map<String, String?>, String?>
-                        //   MapColumnWithNullability<ColumnWithNullability<String, NotNull>, Nullable> ->
-                        //     ScalarMapBuilder<Map<String, String>?, String>
-                        //   MapColumnWithNullability<ColumnWithNullability<String, Nullable>, Nullable> ->
-                        //     ScalarMapBuilder<Map<String, String?>?, String?>
-                        scalarMapBuilder
-                            .parameterizedBy(
-                                map
-                                    .parameterizedBy(string, mapValueBuilderType)
-                                    .copy(nullable = namedColumnType.hasNullableTypeArgument),
+                    override fun visitMapProperty(nestedType: KSType, nullable: Boolean): TypeName =
+                        if (nestedType.isScalarProperty()) {
+                            // Examples:
+                            //   MapPropertyWithNullability<PropertyWithNullability<String,
+                            // NotNull>,
+                            // NotNull> ->
+                            //     ScalarMapBuilder<Map<String, String>, String>
+                            //   MapPropertyWithNullability<PropertyWithNullability<String,
+                            // Nullable>,
+                            // NotNull> ->
+                            //     ScalarMapBuilder<Map<String, String?>, String?>
+                            //   MapPropertyWithNullability<PropertyWithNullability<String,
+                            // NotNull>,
+                            // Nullable> ->
+                            //     ScalarMapBuilder<Map<String, String>?, String>
+                            //   MapPropertyWithNullability<PropertyWithNullability<String,
+                            // Nullable>,
+                            // Nullable> ->
+                            //     ScalarMapBuilder<Map<String, String?>?, String?>
+                            scalarMapBuilder.parameterizedBy(
+                                map.parameterizedBy(string, nestedType.builderType())
+                                    .copy(nullable = nullable),
+                                nestedType.builderType(),
+                            )
+                        } else {
+                            // Examples:
+                            //   MapPropertyWithNullability<NestedPropertyWithNullability<Egg,
+                            // NotNull>,
+                            // NotNull> ->
+                            //     MapBuilder<Map<String, EggData>, EggData,
+                            // EggDataBuilder<EggData>>
+                            //   MapPropertyWithNullability<NestedPropertyWithNullability<Egg,
+                            // Nullable>, NotNull> ->
+                            //     MapBuilder<Map<String, EggData?>, EggData?,
+                            // EggDataBuilder<EggData?>>
+                            //   MapPropertyWithNullability<NestedPropertyWithNullability<Egg,
+                            // NotNull>,
+                            // Nullable> ->
+                            //     MapBuilder<Map<String, EggData>?, EggData,
+                            // EggDataBuilder<EggData>>
+                            //   MapPropertyWithNullability<NestedPropertyWithNullability<Egg,
+                            // Nullable>, Nullable> ->
+                            //     MapBuilder<Map<String, EggData?>?, EggData?,
+                            // EggDataBuilder<EggData?>>
+                            val mapValueBuilderType =
+                                nestedType.builderType() as ParameterizedTypeName
+                            val whatItBuilds = mapValueBuilderType.typeArguments.first()
+                            mapBuilder.parameterizedBy(
+                                map.parameterizedBy(string, whatItBuilds).copy(nullable = nullable),
+                                whatItBuilds,
                                 mapValueBuilderType,
                             )
-                    } else {
-                        val mapValueBuilderType = mapValueType.builderType() as ParameterizedTypeName
-                        val whatItBuilds = mapValueBuilderType.typeArguments.first()
-
-                        // Examples:
-                        //   MapColumnWithNullability<NestedColumnWithNullability<Egg, NotNull>, NotNull> ->
-                        //     MapBuilder<Map<String, EggData>, EggData, EggDataBuilder<EggData>>
-                        //   MapColumnWithNullability<NestedColumnWithNullability<Egg, Nullable>, NotNull> ->
-                        //     MapBuilder<Map<String, EggData?>, EggData?, EggDataBuilder<EggData?>>
-                        //   MapColumnWithNullability<NestedColumnWithNullability<Egg, NotNull>, Nullable> ->
-                        //     MapBuilder<Map<String, EggData>?, EggData, EggDataBuilder<EggData>>
-                        //   MapColumnWithNullability<NestedColumnWithNullability<Egg, Nullable>, Nullable> ->
-                        //     MapBuilder<Map<String, EggData?>?, EggData?, EggDataBuilder<EggData?>>
-                        mapBuilder
-                            .parameterizedBy(
-                                map
-                                    .parameterizedBy(string, whatItBuilds)
-                                    .copy(nullable = namedColumnType.hasNullableTypeArgument),
-                                whatItBuilds,
-                                mapValueBuilderType,
-                            )
-                    }
+                        }
                 }
-            })
+            )
         }
     }
 
     /**
-     * For a given test data DSL builder property type, return an expression to initialize the property.
+     * For a given test data DSL builder property type, return an expression to initialize the
+     * property.
      *
-     * Note that the receiver type is the *builder* property type, not the original DataClassFragment property type.
+     * Note that the receiver type is the *builder* property type, not the original
+     * DataClassFragment property type.
      */
     private fun TypeName.buildInitializer(): CodeBlock {
         val typeName = this
@@ -346,25 +515,34 @@ class DataClassFragmentTestDataDslGenerator : AbstractProcessor() {
                         } else {
                             when (typeName) {
                                 string -> add("%S", "")
-                                short, int, byte -> add("0")
+                                short,
+                                int,
+                                byte -> add("0")
                                 long -> add("0L")
                                 double -> add("0.0")
                                 float -> add("0.0f")
                                 boolean -> add("false")
-                                bigDecimal, bigInt -> add("%T(%S)", typeName, "0")
+                                bigDecimal,
+                                bigInt -> add("%T(%S)", typeName, "0")
                                 instant -> add("%M", MemberName(instant, Instant::EPOCH.name))
                                 localDate -> add("%M(1970, 1, 1)", MemberName(localDate, "of"))
                                 else -> add("%T()", typeName)
                             }
                         }
                     }
-                    is ParameterizedTypeName -> add(
-                        when (typeName.rawType) {
-                            iterableBuilder, mapBuilder -> typeName.buildCollectionBuilderInitializer()
-                            scalarIterableBuilder, scalarMapBuilder -> typeName.buildScalarCollectionBuilderInitializer()
-                            else -> typeName.buildGeneratedBuilderInitializer()
-                        },
-                    )
+
+                    is ParameterizedTypeName ->
+                        add(
+                            when (typeName.rawType) {
+                                iterableBuilder,
+                                mapBuilder -> typeName.buildCollectionBuilderInitializer()
+                                scalarIterableBuilder,
+                                scalarMapBuilder ->
+                                    typeName.buildScalarCollectionBuilderInitializer()
+                                else -> typeName.buildGeneratedBuilderInitializer()
+                            }
+                        )
+
                     else -> throw IllegalStateException("Unexpected type name $typeName")
                 }
             }
@@ -372,8 +550,8 @@ class DataClassFragmentTestDataDslGenerator : AbstractProcessor() {
     }
 
     /**
-     * Builds an initializer expression for the given receiver parameterized type. Receiver should be one of
-     * [IterableBuilder] or [MapBuilder]
+     * Builds an initializer expression for the given receiver parameterized type. Receiver should
+     * be one of [IterableBuilder] or [MapBuilder]
      *
      * Examples:
      * ```
@@ -398,10 +576,13 @@ class DataClassFragmentTestDataDslGenerator : AbstractProcessor() {
                 collectionBuilderIterableType.accept(
                     object : CollectionTypeVisitor<MemberName> {
                         override fun visitList() = buildList
+
                         override fun visitSet() = buildSet
+
                         override fun visitQueue() = buildQueue
+
                         override fun visitMap() = buildMap
-                    },
+                    }
                 )
             },
         )
@@ -410,8 +591,8 @@ class DataClassFragmentTestDataDslGenerator : AbstractProcessor() {
     }
 
     /**
-     * Builds an initializer expression for the given receiver parameterized type. Receiver should be one of
-     * [ScalarIterableBuilder] or [ScalarMapBuilder]
+     * Builds an initializer expression for the given receiver parameterized type. Receiver should
+     * be one of [ScalarIterableBuilder] or [ScalarMapBuilder]
      *
      * Examples:
      * ```
@@ -431,10 +612,13 @@ class DataClassFragmentTestDataDslGenerator : AbstractProcessor() {
                 collectionBuilderIterableType.accept(
                     object : CollectionTypeVisitor<MemberName> {
                         override fun visitList() = buildScalarList
+
                         override fun visitSet() = buildScalarSet
+
                         override fun visitQueue() = buildScalarQueue
+
                         override fun visitMap() = identity
-                    },
+                    }
                 )
             },
         )
@@ -443,8 +627,8 @@ class DataClassFragmentTestDataDslGenerator : AbstractProcessor() {
     }
 
     /**
-     * Builds an initializer expression for the given receiver parameterized type. Receiver should be a generated
-     * model builder.
+     * Builds an initializer expression for the given receiver parameterized type. Receiver should
+     * be a generated model builder.
      *
      * Example:
      * ```
@@ -463,126 +647,24 @@ class DataClassFragmentTestDataDslGenerator : AbstractProcessor() {
         }
     }
 
-    /**
-     * Builds the "doBuild" function of the builder, which actually creates the data model class.
-     *
-     * Example:
-     * ```
-     * public fun doBuild(): FooData =
-     *     FooData(
-     *         someString,
-     *         someNested.build(),
-     *         someList.build(),
-     *         ...
-     *     )
-     * ````
-     */
-    private fun buildTestModelBuilderBuildFunction(
-        fragment: TypeElement,
-        propertyAndAliases: List<AliasedKmProperty>,
-    ) = FunSpec
-        .builder("doBuild")
-        .returns(processorUtilities.getGeneratedDataClass(fragment))
-        .addCode(
-            buildCodeBlock {
-                add("return %T(", processorUtilities.getGeneratedDataClass(fragment))
-
-                for ((propertyInfo, propertyAlias) in propertyAndAliases) {
-                    add(if (propertyInfo.returnType.isScalarColumn) "%L" else "%L.build()", propertyAlias)
-                    add(",")
-                }
-
-                add(")")
-            },
-        )
-        .build()
-
-    /**
-     * Builds the "from" function that accepts a prototype instance of the data class and initializers the builder
-     * with its values.
-     *
-     * Example:
-     * ```
-     * public override fun from(prototype: T) {
-     *     if (prototype == null) {
-     *         isNull = true
-     *     } else {
-     *         nullableStrings.from(prototype.nullableStrings)
-     *         ...
-     *         egg.from(prototype.eggs)
-     *     }
-     * }
-     * ```
-     */
-    private fun buildFromFunction(
-        typeVarT: TypeVariableName,
-        propertyAndAliases: List<AliasedKmProperty>,
-    ) = FunSpec
-        .builder("from")
-        .addModifiers(KModifier.OVERRIDE)
-        .addParameter("prototype", typeVarT)
-        .addCode(
-            buildCodeBlock {
-                add("if·(prototype·==·null)·{\n")
-                add("····isNull·=·true\n")
-                add("} else {\n")
-                for ((propertyInfo, propertyAlias) in propertyAndAliases) {
-                    val (property, returnType) = propertyInfo
-                    if (returnType.isScalarColumn) {
-                        add("····%L·=·prototype.%L\n", propertyAlias, property.name)
-                    } else {
-                        add("····%L.from(prototype.%L)\n", propertyAlias, property.name)
-                    }
-                }
-                add("}\n")
-            },
-        )
-        .returns(ClassNames.unit)
-        .build()
-
-    /**
-     * Builds the "invoke" function of the builder.
-     *
-     * Example:
-     * ```
-     * public operator fun invoke(fn: FooBuilder<T>.() -> Unit) {
-     *     apply(fn)
-     * }
-     * ```
-     */
-    private fun buildInvokeFunctionSpec(fragment: TypeElement, typeVarT: TypeName): FunSpec {
-        return FunSpec
-            .builder("invoke")
-            .addParameter(
-                ParameterSpec
-                    .builder(
-                        "fn",
-                        LambdaTypeName.get(
-                            fragment.generatedBuilder.parameterizedBy(typeVarT),
-                            returnType = ClassNames.unit,
-                        ),
-                    )
-                    .build(),
-            )
-            .addModifiers(KModifier.OPERATOR)
-            .addCode("apply(fn)")
-            .build()
-    }
-
     private interface CollectionTypeVisitor<T> {
         fun visitList(): T
+
         fun visitSet(): T
+
         fun visitQueue(): T
+
         fun visitMap(): T
     }
 
-    private fun <T> ClassName.accept(visitor: CollectionTypeVisitor<T>): T = when (this) {
-        ClassNames.list -> visitor.visitList()
-        ClassNames.set -> visitor.visitSet()
-        ClassNames.queue -> visitor.visitQueue()
-        ClassNames.map -> visitor.visitMap()
-        else -> throw UnsupportedOperationException("Collection type $this is not supported")
-    }
+    private fun <T> ClassName.accept(visitor: CollectionTypeVisitor<T>): T =
+        when (this) {
+            ClassNames.list -> visitor.visitList()
+            ClassNames.set -> visitor.visitSet()
+            ClassNames.queue -> visitor.visitQueue()
+            ClassNames.map -> visitor.visitMap()
+            else -> throw UnsupportedOperationException("Collection type $this is not supported")
+        }
 
     private val ParameterizedTypeName.builderType: TypeName
         get() = typeArguments[2]
@@ -606,36 +688,11 @@ class DataClassFragmentTestDataDslGenerator : AbstractProcessor() {
         val buildSet = MemberName(ClassNames.builderFunctions, "buildSet")
     }
 
-    private val TypeElement.generatedBuilderDslFunctionName: String
-        get() {
-            val overrideName = getAnnotation(GenerateDataClassFragmentDataClass::class.java).testDataDslFactoryFunctionName
-            return getGeneratedTestBuilderDslFunctionName(
-                if (overrideName.isBlank()) {
-                    processorUtilities.getNameWithoutPackage(this)
-                } else {
-                    val nameParts = processorUtilities
-                        .getNameWithoutPackage(this)
-                        .split(PACKAGE_DELIMITER)
-                        .filterNot(String::isBlank)
-                        .dropLast(1) + overrideName
-                    nameParts.joinToString(PACKAGE_DELIMITER)
-                },
-            )
-        }
-
     private fun getGeneratedTestBuilderName(fragmentNameWithoutPackage: String) =
         "${getGeneratedDataClassName(fragmentNameWithoutPackage)}Builder"
 
     private fun getGeneratedTestBuilderDslFunctionName(fragmentNameWithoutPackage: String) =
         fragmentNameWithoutPackage.replace('.', '_').replaceFirstChar(Char::lowercase)
-
-    private val TypeElement.generatedBuilder: ClassName
-        get() {
-            val generatedBuilderName = getGeneratedTestBuilderName(processorUtilities.getNameWithoutPackage(this))
-            val parts = listOf(addDslPackageSuffix(processorUtilities.getPackageName(this)), generatedBuilderName)
-            val classNameString = parts.filter(String::isNotEmpty).joinToString(PACKAGE_DELIMITER)
-            return ClassName.bestGuess(classNameString)
-        }
 
     private val ClassName.generatedBuilder: ClassName
         get() {
@@ -645,55 +702,16 @@ class DataClassFragmentTestDataDslGenerator : AbstractProcessor() {
             return ClassName.bestGuess(classNameString)
         }
 
-    private fun addDslPackageSuffix(prefix: String): String = listOf(prefix, TEST_DSL_PACKAGE_SUFFIX)
-        .filter(String::isNotEmpty)
-        .joinToString(PACKAGE_DELIMITER)
-
-    private data class AliasedKmProperty(val propertyInfo: KmPropertyInfo, val alias: String)
-
-    private fun TypeElement.findDslNameAnnotation(property: KmProperty): GenerateDataClassFragmentDataClass.TestDataDslName? {
-        val elementName = property.syntheticMethodForAnnotations?.name ?: return null
-        return enclosedElements
-            .find { it.kind == ElementKind.CLASS && it.simpleName.toString() == "DefaultImpls" }
-            ?.enclosedElements
-            ?.first { it.simpleName.toString() == elementName }
-            ?.getAnnotation(GenerateDataClassFragmentDataClass.TestDataDslName::class.java)
-    }
-
-    private fun findAlias(fragment: TypeElement, property: KmProperty): String =
-        fragment.findDslNameAnnotation(property)?.name?.takeUnless(String::isBlank) ?: property.name
+    private fun addDslPackageSuffix(prefix: String): String =
+        listOf(prefix, TEST_DSL_PACKAGE_SUFFIX)
+            .filter(String::isNotEmpty)
+            .joinToString(PACKAGE_DELIMITER)
 
     private fun ParameterizedTypeName.collectParameterizedTypes(): List<ParameterizedTypeName> =
-        listOf(this) + (
-            typeArguments
-                .filterIsInstance<ParameterizedTypeName>()
-                .flatMap { it.collectParameterizedTypes() }
-            )
-
-    private fun checkArrayColumnsHaveOnlySupportedIterableTypes(
-        fragment: TypeElement,
-        namedColumnProperties: List<KmPropertyInfo>,
-    ): Boolean {
-        val propertiesWithUnsupportedTypes = with(ClassNames) {
-            namedColumnProperties
-                .filter { (_, returnType) ->
-                    returnType
-                        .collectParameterizedTypes()
-                        .any { type -> type.rawType == arrayColumn && type.iterableType !in listOf(list, set, queue) }
-                }
-        }
-
-        return if (propertiesWithUnsupportedTypes.isNotEmpty()) {
-            val message = "${this::class.simpleName} cannot generate a test DSL for $fragment " +
-                "which has array columns that map to unsupported iterable types " +
-                "(only List and Set are supported): " +
-                propertiesWithUnsupportedTypes.toString()
-            processingEnv.messager.printMessage(Diagnostic.Kind.ERROR, message, fragment)
-            false
-        } else {
-            true
-        }
-    }
+        listOf(this) +
+            (typeArguments.filterIsInstance<ParameterizedTypeName>().flatMap {
+                it.collectParameterizedTypes()
+            })
 
     companion object {
         private val INDENT = " ".repeat(4)

@@ -1,5 +1,8 @@
 package sims.michael.gitjaspr
 
+import java.util.MissingFormatArgumentException
+import kotlin.test.assertContains
+import kotlin.test.assertEquals
 import org.junit.jupiter.api.*
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.slf4j.Logger
@@ -9,19 +12,17 @@ import sims.michael.gitjaspr.githubtests.GitHubTestHarness
 import sims.michael.gitjaspr.githubtests.GitHubTestHarness.Companion.withTestSetup
 import sims.michael.gitjaspr.githubtests.TestCaseData
 import sims.michael.gitjaspr.githubtests.generatedtestdsl.testCase
-import java.util.MissingFormatArgumentException
-import kotlin.test.assertContains
-import kotlin.test.assertEquals
 
 interface GitJasprTest {
 
     val logger: Logger
-    val useFakeRemote: Boolean get() = true
+    val useFakeRemote: Boolean
+        get() = true
 
     suspend fun GitHubTestHarness.push() = gitJaspr.push()
 
     suspend fun GitHubTestHarness.getAndPrintStatusString(
-        refSpec: RefSpec = RefSpec(DEFAULT_LOCAL_OBJECT, DEFAULT_TARGET_REF),
+        refSpec: RefSpec = RefSpec(DEFAULT_LOCAL_OBJECT, DEFAULT_TARGET_REF)
     ) = gitJaspr.getStatusString(refSpec).also(::print)
 
     suspend fun GitHubTestHarness.merge(refSpec: RefSpec) = gitJaspr.merge(refSpec)
@@ -29,12 +30,14 @@ interface GitJasprTest {
     suspend fun GitHubTestHarness.autoMerge(refSpec: RefSpec, pollingIntervalSeconds: Int = 10) =
         gitJaspr.autoMerge(refSpec)
 
-    suspend fun GitHubTestHarness.getRemoteCommitStatuses(stack: List<Commit>) = gitJaspr.getRemoteCommitStatuses(stack)
+    suspend fun GitHubTestHarness.getRemoteCommitStatuses(stack: List<Commit>) =
+        gitJaspr.getRemoteCommitStatuses(stack)
 
     suspend fun GitHubTestHarness.waitForChecksToConclude(
         vararg commitFilter: String,
         timeout: Long = 30_000,
-        pollingDelay: Long = 5_000, // Lowering this value too much will result in exhausting rate limits
+        pollingDelay: Long =
+            5_000, // Lowering this value too much will result in exhausting rate limits
     )
 
     suspend fun <T> assertEventuallyEquals(expected: T, getActual: suspend () -> T)
@@ -59,11 +62,9 @@ interface GitJasprTest {
                         }
                     }
                     localWillBeDirty = true
-                },
+                }
             )
-            val exception = assertThrows<GitJasprException> {
-                push()
-            }
+            val exception = assertThrows<GitJasprException> { push() }
             logger.info("Exception message is {}", exception.message)
         }
     }
@@ -79,17 +80,21 @@ interface GitJasprTest {
                             localRefs += "development"
                         }
                     }
-                },
+                }
             )
             push()
             localGit.fetch(remoteName)
-            val stack = localGit.getLocalCommitStack(remoteName, DEFAULT_LOCAL_OBJECT, DEFAULT_TARGET_REF)
+            val stack =
+                localGit.getLocalCommitStack(remoteName, DEFAULT_LOCAL_OBJECT, DEFAULT_TARGET_REF)
             val remoteCommitStatuses = getRemoteCommitStatuses(stack)
-            assertEquals(localGit.log("HEAD", maxCount = 1).single(), remoteCommitStatuses.single().remoteCommit)
+            assertEquals(
+                localGit.log("HEAD", maxCount = 1).single(),
+                remoteCommitStatuses.single().remoteCommit,
+            )
         }
     }
 
-    //region status tests
+    // region status tests
     @Test
     fun `status empty stack`() {
         withTestSetup(useFakeRemote) {
@@ -104,7 +109,7 @@ interface GitJasprTest {
                             remoteRefs += "main"
                         }
                     }
-                },
+                }
             )
 
             assertEquals("Stack is empty.\n", getAndPrintStatusString())
@@ -124,16 +129,15 @@ interface GitJasprTest {
                             localRefs += "development"
                         }
                     }
-                },
+                }
             )
 
             val actual = getAndPrintStatusString()
             assertEquals(
                 """
-                    |[ㄧㄧㄧㄧㄧㄧ] %s : three
-                    |[ㄧㄧㄧㄧㄧㄧ] %s : two
-                    |[ㄧㄧㄧㄧㄧㄧ] %s : one
-                """
+                |[ㄧㄧㄧㄧㄧㄧ] %s : three
+                |[ㄧㄧㄧㄧㄧㄧ] %s : two
+                |[ㄧㄧㄧㄧㄧㄧ] %s : one"""
                     .trimMargin()
                     .toStatusString(actual),
                 actual,
@@ -157,16 +161,15 @@ interface GitJasprTest {
                             localRefs += "development"
                         }
                     }
-                },
+                }
             )
 
             val actual = getAndPrintStatusString()
             assertEquals(
                 """
-                    |[ㄧㄧㄧㄧㄧㄧ] %s : three
-                    |[ㄧㄧㄧㄧㄧㄧ] %s : two
-                    |[✅ㄧㄧㄧㄧㄧ] %s : one
-                """
+                |[ㄧㄧㄧㄧㄧㄧ] %s : three
+                |[ㄧㄧㄧㄧㄧㄧ] %s : two
+                |[✅ㄧㄧㄧㄧㄧ] %s : one"""
                     .trimMargin()
                     .toStatusString(actual),
                 actual,
@@ -195,16 +198,15 @@ interface GitJasprTest {
                         baseRef = "main"
                         title = "one"
                     }
-                },
+                }
             )
 
             val actual = getAndPrintStatusString()
             assertEquals(
                 """
-                    |[ㄧㄧㄧㄧㄧㄧ] %s : three
-                    |[ㄧㄧㄧㄧㄧㄧ] %s : two
-                    |[✅✅⌛✅ㄧㄧ] %s : %s : one
-                """
+                |[ㄧㄧㄧㄧㄧㄧ] %s : three
+                |[ㄧㄧㄧㄧㄧㄧ] %s : two
+                |[✅✅⌛✅ㄧㄧ] %s : %s : one"""
                     .trimMargin()
                     .toStatusString(actual),
                 actual,
@@ -234,7 +236,7 @@ interface GitJasprTest {
                         baseRef = "main"
                         title = "one"
                     }
-                },
+                }
             )
 
             waitForChecksToConclude("one")
@@ -242,10 +244,9 @@ interface GitJasprTest {
             val actual = getAndPrintStatusString()
             assertEquals(
                 """
-                    |[ㄧㄧㄧㄧㄧㄧ] %s : three
-                    |[ㄧㄧㄧㄧㄧㄧ] %s : two
-                    |[✅✅✅✅ㄧㄧ] %s : %s : one
-                """
+                |[ㄧㄧㄧㄧㄧㄧ] %s : three
+                |[ㄧㄧㄧㄧㄧㄧ] %s : two
+                |[✅✅✅✅ㄧㄧ] %s : %s : one"""
                     .trimMargin()
                     .toStatusString(actual),
                 actual,
@@ -292,7 +293,7 @@ interface GitJasprTest {
                         baseRef = buildRemoteRef("two")
                         title = "three"
                     }
-                },
+                }
             )
 
             waitForChecksToConclude("one")
@@ -300,10 +301,9 @@ interface GitJasprTest {
             val actual = getAndPrintStatusString()
             assertEquals(
                 """
-                    |[✅✅✅✅ㄧㄧ] %s : %s : three
-                    |[✅✅✅✅ㄧㄧ] %s : %s : two
-                    |[✅✅✅✅✅✅] %s : %s : one
-                """
+                |[✅✅✅✅ㄧㄧ] %s : %s : three
+                |[✅✅✅✅ㄧㄧ] %s : %s : two
+                |[✅✅✅✅✅✅] %s : %s : one"""
                     .trimMargin()
                     .toStatusString(actual),
                 actual,
@@ -361,7 +361,7 @@ interface GitJasprTest {
                         title = "three"
                         willBeApprovedByUserKey = "michael"
                     }
-                },
+                }
             )
 
             waitForChecksToConclude("one", "two", "three")
@@ -392,9 +392,7 @@ interface GitJasprTest {
                         commit {
                             title = "in_both_main_and_development"
                             branch {
-                                commit {
-                                    title = "only_on_main_one"
-                                }
+                                commit { title = "only_on_main_one" }
                                 commit {
                                     title = "only_on_main_two"
                                     remoteRefs += "main"
@@ -436,7 +434,7 @@ interface GitJasprTest {
                         title = "three"
                         willBeApprovedByUserKey = "michael"
                     }
-                },
+                }
             )
 
             waitForChecksToConclude("one", "two", "three")
@@ -499,7 +497,7 @@ interface GitJasprTest {
                         title = "three"
                         willBeApprovedByUserKey = "michael"
                     }
-                },
+                }
             )
 
             waitForChecksToConclude("one", "two", "three")
@@ -507,10 +505,9 @@ interface GitJasprTest {
             val actual = getAndPrintStatusString()
             assertEquals(
                 """
-                    |[✅✅✅✅✅✅] %s : %s : three
-                    |[✅✅✅✅✅✅] %s : %s : two
-                    |[✅✅✅✅✅✅] %s : %s : one
-                """
+                |[✅✅✅✅✅✅] %s : %s : three
+                |[✅✅✅✅✅✅] %s : %s : two
+                |[✅✅✅✅✅✅] %s : %s : one"""
                     .trimMargin()
                     .toStatusString(actual),
                 actual,
@@ -562,7 +559,7 @@ interface GitJasprTest {
                         title = "draft: three"
                         willBeApprovedByUserKey = "michael"
                     }
-                },
+                }
             )
 
             waitForChecksToConclude("one", "two", "three")
@@ -570,10 +567,9 @@ interface GitJasprTest {
             val actual = getAndPrintStatusString()
             assertEquals(
                 """
-                    |[✅✅✅ㄧ✅ㄧ] %s : %s : draft: three
-                    |[✅✅✅✅✅✅] %s : %s : two
-                    |[✅✅✅✅✅✅] %s : %s : one
-                """
+                |[✅✅✅ㄧ✅ㄧ] %s : %s : draft: three
+                |[✅✅✅✅✅✅] %s : %s : two
+                |[✅✅✅✅✅✅] %s : %s : one"""
                     .trimMargin()
                     .toStatusString(actual),
                 actual,
@@ -620,7 +616,7 @@ interface GitJasprTest {
                         baseRef = buildRemoteRef("two")
                         title = "three"
                     }
-                },
+                }
             )
 
             push()
@@ -630,10 +626,9 @@ interface GitJasprTest {
             val actual = getAndPrintStatusString()
             assertEventuallyEquals(
                 """
-                    |[✅✅✅✅ㄧㄧ] %s : %s : three
-                    |[✅✅✅✅✅ㄧ] %s : %s : two
-                    |[✅✅✅✅ㄧㄧ] %s : %s : one
-                """
+                |[✅✅✅✅ㄧㄧ] %s : %s : three
+                |[✅✅✅✅✅ㄧ] %s : %s : two
+                |[✅✅✅✅ㄧㄧ] %s : %s : one"""
                     .trimMargin()
                     .toStatusString(actual),
                 getActual = { actual },
@@ -679,7 +674,7 @@ interface GitJasprTest {
                         baseRef = buildRemoteRef("two")
                         title = "three"
                     }
-                },
+                }
             )
 
             push()
@@ -689,10 +684,9 @@ interface GitJasprTest {
             val actual = getAndPrintStatusString()
             assertEquals(
                 """
-                    |[✅✅✅✅ㄧㄧ] %s : %s : three
-                    |[✅✅❌✅ㄧㄧ] %s : %s : two
-                    |[✅✅✅✅ㄧㄧ] %s : %s : one
-                """
+                |[✅✅✅✅ㄧㄧ] %s : %s : three
+                |[✅✅❌✅ㄧㄧ] %s : %s : two
+                |[✅✅✅✅ㄧㄧ] %s : %s : one"""
                     .trimMargin()
                     .toStatusString(actual),
                 actual,
@@ -728,7 +722,7 @@ interface GitJasprTest {
                         title = "three"
                         willBeApprovedByUserKey = "michael"
                     }
-                },
+                }
             )
 
             waitForChecksToConclude("three")
@@ -736,8 +730,7 @@ interface GitJasprTest {
             val actual = getAndPrintStatusString(RefSpec("development", "development"))
             assertEquals(
                 """
-                    |[✅✅✅✅✅✅] %s : %s : three
-                """
+                |[✅✅✅✅✅✅] %s : %s : three"""
                     .trimMargin()
                     .toStatusString(actual),
                 actual,
@@ -797,7 +790,7 @@ interface GitJasprTest {
                         title = "four"
                         willBeApprovedByUserKey = "michael"
                     }
-                },
+                }
             )
 
             createCommitsFrom(
@@ -817,7 +810,7 @@ interface GitJasprTest {
                             localRefs += "development"
                         }
                     }
-                },
+                }
             )
 
             waitForChecksToConclude("one", "three", "four")
@@ -825,10 +818,9 @@ interface GitJasprTest {
             val actual = getAndPrintStatusString(RefSpec("development", "main"))
             assertEquals(
                 """
-                    |[❗✅✅✅✅ㄧ] %s : %s : four
-                    |[❗✅✅✅✅ㄧ] %s : %s : three
-                    |[✅✅✅✅✅✅] %s : %s : one
-                """
+                |[❗✅✅✅✅ㄧ] %s : %s : four
+                |[❗✅✅✅✅ㄧ] %s : %s : three
+                |[✅✅✅✅✅✅] %s : %s : one"""
                     .trimMargin()
                     .toStatusString(actual),
                 actual,
@@ -856,21 +848,20 @@ interface GitJasprTest {
                             localRefs += "main"
                         }
                     }
-                },
+                }
             )
 
             val actual = getAndPrintStatusString()
             assertEquals(
                 """
-                    |[ㄧㄧㄧㄧㄧㄧ] %s : three
-                    |[❗ㄧㄧㄧㄧㄧ] %s : two
-                    |[❗ㄧㄧㄧㄧㄧ] %s : one
-                    |
-                    |Some commits in your local stack have duplicate IDs:
-                    |- a: (one, two)
-                    |This is likely because you've based new commit messages off of those from other commits.
-                    |Please correct this by amending the commits and deleting the commit-id lines, then retry your operation.
-                """
+                |[ㄧㄧㄧㄧㄧㄧ] %s : three
+                |[❗ㄧㄧㄧㄧㄧ] %s : two
+                |[❗ㄧㄧㄧㄧㄧ] %s : one
+                |
+                |Some commits in your local stack have duplicate IDs:
+                |- a: (one, two)
+                |This is likely because you've based new commit messages off of those from other commits.
+                |Please correct this by amending the commits and deleting the commit-id lines, then retry your operation."""
                     .trimMargin()
                     .toStatusString(actual),
                 actual,
@@ -899,7 +890,7 @@ interface GitJasprTest {
                             localRefs += "main"
                         }
                     }
-                },
+                }
             )
 
             logger.info(gitJaspr.getStatusString())
@@ -980,7 +971,7 @@ interface GitJasprTest {
                         title = "six"
                         willBeApprovedByUserKey = "michael"
                     }
-                },
+                }
             )
 
             waitForChecksToConclude("one", "two", "three", "four", "five", "six")
@@ -988,13 +979,12 @@ interface GitJasprTest {
             val actual = getAndPrintStatusString()
             assertEquals(
                 """
-                    |[✅✅✅✅✅✅] %s : %s : six
-                    |[✅✅✅✅✅✅] %s : %s : five
-                    |[✅✅✅✅✅✅] %s : %s : four
-                    |[✅✅✅✅✅✅] %s : %s : three
-                    |[✅✅✅✅✅✅] %s : %s : two
-                    |[✅✅✅✅✅✅] %s : %s : one
-                """
+                |[✅✅✅✅✅✅] %s : %s : six
+                |[✅✅✅✅✅✅] %s : %s : five
+                |[✅✅✅✅✅✅] %s : %s : four
+                |[✅✅✅✅✅✅] %s : %s : three
+                |[✅✅✅✅✅✅] %s : %s : two
+                |[✅✅✅✅✅✅] %s : %s : one"""
                     .trimMargin()
                     .toStatusString(actual),
                 actual,
@@ -1033,7 +1023,7 @@ interface GitJasprTest {
                         willBeApprovedByUserKey = "michael"
                     }
                     checkout = "development"
-                },
+                }
             )
 
             val stackName = "my-stack-name"
@@ -1045,9 +1035,8 @@ interface GitJasprTest {
 
             assertEquals(
                 """
-                    |[✅✅✅✅✅✅] %s : %s : two
-                    |[✅✅✅✅✅✅] %s : %s : one
-                """
+                |[✅✅✅✅✅✅] %s : %s : two
+                |[✅✅✅✅✅✅] %s : %s : one"""
                     .trimMargin()
                     .toStatusString(actual, NamedStackInfo(stackName, 0, 0, remoteName)),
                 actual,
@@ -1087,7 +1076,7 @@ interface GitJasprTest {
                         willBeApprovedByUserKey = "michael"
                     }
                     checkout = "development"
-                },
+                }
             )
 
             val stackName = "my-stack-name"
@@ -1096,17 +1085,24 @@ interface GitJasprTest {
             waitForChecksToConclude("one", "two")
 
             localGit.checkout("behind")
-            localGit.setUpstreamBranch(remoteName, "$DEFAULT_REMOTE_NAMED_STACK_BRANCH_PREFIX/$stackName")
+            localGit.setUpstreamBranch(
+                remoteName,
+                "$DEFAULT_REMOTE_NAMED_STACK_BRANCH_PREFIX/$stackName",
+            )
             val actual = getAndPrintStatusString()
 
             assertEquals(
                 """
-                    |[✅✅✅✅✅✅] %s : %s : one
-                """
+                |[✅✅✅✅✅✅] %s : %s : one"""
                     .trimMargin()
                     .toStatusString(
                         actual,
-                        NamedStackInfo(stackName, numCommitsAhead = 0, numCommitsBehind = 1, remoteName),
+                        NamedStackInfo(
+                            stackName,
+                            numCommitsAhead = 0,
+                            numCommitsBehind = 1,
+                            remoteName,
+                        ),
                     ),
                 actual,
             )
@@ -1133,7 +1129,7 @@ interface GitJasprTest {
                         willBeApprovedByUserKey = "michael"
                     }
                     checkout = "development"
-                },
+                }
             )
 
             val stackName = "my-stack-name"
@@ -1163,20 +1159,24 @@ interface GitJasprTest {
                         willBeApprovedByUserKey = "michael"
                     }
                     checkout = "development"
-                },
+                }
             )
 
             val actual = getAndPrintStatusString()
 
             assertEquals(
                 """
-                    |[✅ㄧㄧㄧㄧㄧ] %s : two
-                    |[✅✅✅✅✅✅] %s : %s : one
-                """
+                |[✅ㄧㄧㄧㄧㄧ] %s : two
+                |[✅✅✅✅✅✅] %s : %s : one"""
                     .trimMargin()
                     .toStatusString(
                         actual,
-                        NamedStackInfo(stackName, numCommitsAhead = 1, numCommitsBehind = 0, remoteName),
+                        NamedStackInfo(
+                            stackName,
+                            numCommitsAhead = 1,
+                            numCommitsBehind = 0,
+                            remoteName,
+                        ),
                     ),
                 actual,
             )
@@ -1214,7 +1214,7 @@ interface GitJasprTest {
                         willBeApprovedByUserKey = "michael"
                     }
                     checkout = "development"
-                },
+                }
             )
 
             val stackName = "my-stack-name"
@@ -1244,28 +1244,33 @@ interface GitJasprTest {
                         willBeApprovedByUserKey = "michael"
                     }
                     checkout = "development"
-                },
+                }
             )
 
             val actual = getAndPrintStatusString()
 
             assertEquals(
                 """
-                    |[✅ㄧㄧㄧㄧㄧ] %s : three
-                    |[✅✅✅✅✅✅] %s : %s : one
-                """
+                |[✅ㄧㄧㄧㄧㄧ] %s : three
+                |[✅✅✅✅✅✅] %s : %s : one"""
                     .trimMargin()
                     .toStatusString(
                         actual,
-                        NamedStackInfo(stackName, numCommitsAhead = 1, numCommitsBehind = 1, remoteName),
+                        NamedStackInfo(
+                            stackName,
+                            numCommitsAhead = 1,
+                            numCommitsBehind = 1,
+                            remoteName,
+                        ),
                     ),
                 actual,
             )
         }
     }
-    //endregion
 
-    //region push tests
+    // endregion
+
+    // region push tests
     @Test
     fun `push fetches from remote`() {
         withTestSetup(useFakeRemote) {
@@ -1282,7 +1287,7 @@ interface GitJasprTest {
                             remoteRefs += "main"
                         }
                     }
-                },
+                }
             )
 
             push()
@@ -1296,16 +1301,20 @@ interface GitJasprTest {
 
     @Test
     fun `adding commit ID does not indent subject line`() {
-        // assert the absence of a bug that used to occur with commits that had message bodies... the subject and footer
-        // lines would be indented, which was invalid and would cause the commit(s) to effectively have no ID
+        // assert the absence of a bug that used to occur with commits that had message bodies...
+        // the subject and footer
+        // lines would be indented, which was invalid and would cause the commit(s) to effectively
+        // have no ID
         // if this test doesn't throw, then we're good
         withTestSetup(useFakeRemote) {
             createCommitsFrom(
                 testCase {
                     repository {
                         commit {
-                            title = "Bump EnricoMi/publish-unit-test-result-action from 2.1.0 to 2.11.0"
-                            body = """
+                            title =
+                                "Bump EnricoMi/publish-unit-test-result-action from 2.1.0 to 2.11.0"
+                            body =
+                                """
                                 |Bumps [EnricoMi/publish-unit-test-result-action](https://github.com/enricomi/publish-unit-test-result-action) from 2.1.0 to 2.11.0.
                                 |- [Release notes](https://github.com/enricomi/publish-unit-test-result-action/releases)
                                 |- [Commits](https://github.com/enricomi/publish-unit-test-result-action/compare/713caf1dd6f1c273144546ed2d79ca24a01f4623...ca89ad036b5fcd524c1017287fb01b5139908408)
@@ -1317,13 +1326,13 @@ interface GitJasprTest {
                                 |  update-type: version-update:semver-minor
                                 |...
                                 |
-                                |Signed-off-by: dependabot[bot] <support@github.com>
-                            """.trimMargin()
+                                |Signed-off-by: dependabot[bot] <support@github.com>"""
+                                    .trimMargin()
                             id = ""
                             localRefs += "main"
                         }
                     }
-                },
+                }
             )
 
             push()
@@ -1339,30 +1348,32 @@ interface GitJasprTest {
                     repository {
                         commit {
                             title = "Fix end of year data issue [providerDir]"
-                            body = """
-See this Slack thread:
-https://trillianthealth.slack.com/archives/C04J6Q655GR/p1702918943374039?thread_ts=1702918322.439999&cid=C04J6Q655GR
-
-                            """.trimMargin()
+                            body =
+                                """
+                                |See this Slack thread:
+                                |https://trillianthealth.slack.com/archives/C04J6Q655GR/p1702918943374039?thread_ts=1702918322.439999&cid=C04J6Q655GR
+                                |"""
+                                    .trimMargin()
                             id = ""
                             localRefs += "main"
                         }
                     }
-                },
+                }
             )
 
             push()
 
             assertEquals(
                 """
-Fix end of year data issue [providerDir]
+                Fix end of year data issue [providerDir]
 
-See this Slack thread:
-https://trillianthealth.slack.com/archives/C04J6Q655GR/p1702918943374039?thread_ts=1702918322.439999&cid=C04J6Q655GR
+                See this Slack thread:
+                https://trillianthealth.slack.com/archives/C04J6Q655GR/p1702918943374039?thread_ts=1702918322.439999&cid=C04J6Q655GR
 
-commit-id: 0
+                commit-id: 0
 
-                """.trimIndent(),
+                                """
+                    .trimIndent(),
                 localGit.log("HEAD", maxCount = 1).single().fullMessage.withCommitIdZero(),
             )
         }
@@ -1380,18 +1391,19 @@ commit-id: 0
                             localRefs += "main"
                         }
                     }
-                },
+                }
             )
 
             push()
 
             assertEquals(
                 """
-Market Explorer: Remove unused code
+                Market Explorer: Remove unused code
 
-commit-id: 0
+                commit-id: 0
 
-                """.trimIndent(),
+                                """
+                    .trimIndent(),
                 localGit.log("HEAD", maxCount = 1).single().fullMessage.withCommitIdZero(),
             )
         }
@@ -1401,99 +1413,91 @@ commit-id: 0
     fun `push adds commit IDs`(): List<DynamicTest> {
         data class Test(val name: String, val testCaseData: TestCaseData)
         return listOf(
-            Test(
-                "all commits missing IDs",
-                testCase {
-                    repository {
-                        commit {
-                            title = "0"
-                            id = ""
+                Test(
+                    "all commits missing IDs",
+                    testCase {
+                        repository {
+                            commit {
+                                title = "0"
+                                id = ""
+                            }
+                            commit {
+                                title = "1"
+                                id = ""
+                            }
+                            commit {
+                                title = "2"
+                                id = ""
+                                localRefs += "main"
+                            }
                         }
-                        commit {
-                            title = "1"
-                            id = ""
+                    },
+                ),
+                Test(
+                    "only recent commits missing IDs",
+                    testCase {
+                        repository {
+                            commit { title = "A" }
+                            commit { title = "B" }
+                            commit {
+                                title = "0"
+                                id = ""
+                            }
+                            commit {
+                                title = "1"
+                                id = ""
+                            }
+                            commit {
+                                title = "2"
+                                id = ""
+                                localRefs += "main"
+                            }
                         }
-                        commit {
-                            title = "2"
-                            id = ""
-                            localRefs += "main"
+                    },
+                ),
+                Test(
+                    "only commits in the middle missing IDs",
+                    testCase {
+                        repository {
+                            commit { title = "A" }
+                            commit { title = "B" }
+                            commit {
+                                title = "0"
+                                id = ""
+                            }
+                            commit {
+                                title = "1"
+                                id = ""
+                            }
+                            commit {
+                                title = "2"
+                                id = ""
+                            }
+                            commit { title = "C" }
+                            commit {
+                                title = "D"
+                                localRefs += "main"
+                            }
                         }
+                    },
+                ),
+            )
+            .map { (name, collectCommits) ->
+                DynamicTest.dynamicTest(name) {
+                    withTestSetup(useFakeRemote) {
+                        createCommitsFrom(collectCommits)
+                        push()
+                        val numCommits = collectCommits.repository.commits.size
+                        assertTrue(
+                            localGit
+                                .logRange("${GitClient.HEAD}~$numCommits", GitClient.HEAD)
+                                .mapNotNull(Commit::id)
+                                .filter(String::isNotBlank)
+                                .size == numCommits
+                        )
                     }
-                },
-            ),
-            Test(
-                "only recent commits missing IDs",
-                testCase {
-                    repository {
-                        commit { title = "A" }
-                        commit { title = "B" }
-                        commit {
-                            title = "0"
-                            id = ""
-                        }
-                        commit {
-                            title = "1"
-                            id = ""
-                        }
-                        commit {
-                            title = "2"
-                            id = ""
-                            localRefs += "main"
-                        }
-                    }
-                },
-            ),
-            Test(
-                "only commits in the middle missing IDs",
-                testCase {
-                    repository {
-                        commit {
-                            title = "A"
-                        }
-                        commit {
-                            title = "B"
-                        }
-                        commit {
-                            title = "0"
-                            id = ""
-                        }
-                        commit {
-                            title = "1"
-                            id = ""
-                        }
-                        commit {
-                            title = "2"
-                            id = ""
-                        }
-                        commit {
-                            title = "C"
-                        }
-                        commit {
-                            title = "D"
-                            localRefs += "main"
-                        }
-                    }
-                },
-            ),
-        ).map { (name, collectCommits) ->
-            DynamicTest.dynamicTest(name) {
-                withTestSetup(useFakeRemote) {
-                    createCommitsFrom(collectCommits)
-                    push()
-                    val numCommits = collectCommits.repository.commits.size
-                    assertTrue(
-                        localGit
-                            .logRange(
-                                "${GitClient.HEAD}~$numCommits",
-                                GitClient.HEAD,
-                            )
-                            .mapNotNull(Commit::id)
-                            .filter(String::isNotBlank)
-                            .size == numCommits,
-                    )
                 }
             }
-        }
     }
 
     @Test
@@ -1509,7 +1513,7 @@ commit-id: 0
                             localRefs += "main"
                         }
                     }
-                },
+                }
             )
             push()
 
@@ -1533,7 +1537,7 @@ commit-id: 0
                             localRefs += "main"
                         }
                     }
-                },
+                }
             )
             push()
             createCommitsFrom(
@@ -1547,7 +1551,7 @@ commit-id: 0
                             localRefs += "main"
                         }
                     }
-                },
+                }
             )
             push()
             createCommitsFrom(
@@ -1561,18 +1565,21 @@ commit-id: 0
                             localRefs += "main"
                         }
                     }
-                },
+                }
             )
             push()
             gitLogLocalAndRemote()
 
             assertEquals(
-                listOf("a", "a_01", "b", "b_01", "c", "c_01", "d", "e", "z")
-                    .map { name -> buildRemoteRef(name) },
+                listOf("a", "a_01", "b", "b_01", "c", "c_01", "d", "e", "z").map { name ->
+                    buildRemoteRef(name)
+                },
                 localGit
                     .getRemoteBranches(remoteName)
                     .map(RemoteBranch::name)
-                    .filter { name -> name.startsWith(RemoteRefEncoding.DEFAULT_REMOTE_BRANCH_PREFIX) }
+                    .filter { name ->
+                        name.startsWith(RemoteRefEncoding.DEFAULT_REMOTE_BRANCH_PREFIX)
+                    }
                     .sorted(),
             )
         }
@@ -1593,7 +1600,7 @@ commit-id: 0
                             remoteRefs += "development"
                         }
                     }
-                },
+                }
             )
 
             push()
@@ -1619,7 +1626,7 @@ commit-id: 0
                             localRefs += "development"
                         }
                     }
-                },
+                }
             )
 
             push()
@@ -1664,11 +1671,10 @@ commit-id: 0
                         baseRef = "main"
                         title = "Two PR"
                     }
-                },
+                }
             )
-            val exception = assertThrows<GitJaspr.SinglePullRequestPerCommitConstraintViolation> {
-                push()
-            }
+            val exception =
+                assertThrows<GitJaspr.SinglePullRequestPerCommitConstraintViolation> { push() }
             logger.info("Exception message: {}", exception.message)
         }
     }
@@ -1688,7 +1694,7 @@ commit-id: 0
                             localRefs += "main"
                         }
                     }
-                },
+                }
             )
 
             push()
@@ -1706,28 +1712,32 @@ commit-id: 0
                             localRefs += "main"
                         }
                     }
-                },
+                }
             )
 
             push()
 
             val remotePrs = gitHub.getPullRequestsById(listOf("E", "C", "one", "B", "A", "two"))
 
-            val prs = remotePrs.map { pullRequest -> pullRequest.baseRefName to pullRequest.headRefName }.toSet()
-            val commits = localGit
-                .log(GitClient.HEAD, 6)
-                .reversed()
-                .windowedPairs()
-                .map { (prevCommit, currentCommit) ->
-                    val baseRefName = prevCommit
-                        ?.let {
-                            buildRemoteRef(checkNotNull(it.id), DEFAULT_TARGET_REF)
-                        }
-                        ?: DEFAULT_TARGET_REF
-                    val headRefName = buildRemoteRef(checkNotNull(currentCommit.id), DEFAULT_TARGET_REF)
-                    baseRefName to headRefName
-                }
-                .toSet()
+            val prs =
+                remotePrs
+                    .map { pullRequest -> pullRequest.baseRefName to pullRequest.headRefName }
+                    .toSet()
+            val commits =
+                localGit
+                    .log(GitClient.HEAD, 6)
+                    .reversed()
+                    .windowedPairs()
+                    .map { (prevCommit, currentCommit) ->
+                        val baseRefName =
+                            prevCommit?.let {
+                                buildRemoteRef(checkNotNull(it.id), DEFAULT_TARGET_REF)
+                            } ?: DEFAULT_TARGET_REF
+                        val headRefName =
+                            buildRemoteRef(checkNotNull(currentCommit.id), DEFAULT_TARGET_REF)
+                        baseRefName to headRefName
+                    }
+                    .toSet()
             assertEquals(commits, prs)
         }
     }
@@ -1751,7 +1761,7 @@ commit-id: 0
                             localRefs += "development"
                         }
                     }
-                },
+                }
             )
             push()
 
@@ -1775,7 +1785,7 @@ commit-id: 0
                             localRefs += "development"
                         }
                     }
-                },
+                }
             )
 
             gitJaspr.push()
@@ -1790,7 +1800,7 @@ commit-id: 0
                             localRefs += "development"
                         }
                     }
-                },
+                }
             )
 
             gitJaspr.push()
@@ -1827,11 +1837,12 @@ commit-id: 0
                             localRefs += "main"
                         }
                     }
-                },
+                }
             )
 
             push()
-            // No assert here... I'm basically just testing that this doesn't throw an unhandled error, like it would
+            // No assert here... I'm basically just testing that this doesn't throw an unhandled
+            // error, like it would
             // if we tried to push multiple source refs to the same destination ref
         }
     }
@@ -1852,7 +1863,7 @@ commit-id: 0
                         }
                     }
                     checkout = "main"
-                },
+                }
             )
 
             val stackName = "my-stack-name"
@@ -1879,13 +1890,13 @@ commit-id: 0
                             localRefs += "main"
                         }
                     }
-                },
+                }
             )
 
             localGit.checkout(localGit.log().first().hash)
-            val message = assertThrows<GitJasprException> {
-                gitJaspr.push(stackName = "my-stack-name")
-            }.message
+            val message =
+                assertThrows<GitJasprException> { gitJaspr.push(stackName = "my-stack-name") }
+                    .message
             assertContains(message, "detached HEAD")
         }
     }
@@ -1906,7 +1917,7 @@ commit-id: 0
                         }
                     }
                     checkout = "main"
-                },
+                }
             )
 
             val stackName = "my-stack-name"
@@ -1926,7 +1937,7 @@ commit-id: 0
                         }
                     }
                     checkout = "main"
-                },
+                }
             )
 
             gitJaspr.push()
@@ -1936,7 +1947,8 @@ commit-id: 0
             )
         }
     }
-    //endregion
+
+    // endregion
 
     // region pr body tests
     @Test
@@ -1950,11 +1962,12 @@ commit-id: 0
                         commit {
                             title = "3"
                             body = "This is a body"
-                            footerLines["footer-line-test"] = "hi" // Will be stripped out in the description
+                            footerLines["footer-line-test"] =
+                                "hi" // Will be stripped out in the description
                             localRefs += "main"
                         }
                     }
-                },
+                }
             )
             push()
 
@@ -1963,37 +1976,43 @@ commit-id: 0
             assertEquals(
                 listOf(
                     """
-<!-- jaspr start -->
-### 1
+                    <!-- jaspr start -->
+                    ### 1
 
-**Stack**:
-- %s
-- %s
-- %s ⬅
+                    **Stack**:
+                    - %s
+                    - %s
+                    - %s ⬅
 
-                    """.trimIndent().toPrBodyString(actualIterator.next()),
+                                        """
+                        .trimIndent()
+                        .toPrBodyString(actualIterator.next()),
                     """
-<!-- jaspr start -->
-### 2
+                    <!-- jaspr start -->
+                    ### 2
 
-**Stack**:
-- %s
-- %s ⬅
-- %s
+                    **Stack**:
+                    - %s
+                    - %s ⬅
+                    - %s
 
-                    """.trimIndent().toPrBodyString(actualIterator.next()),
+                                        """
+                        .trimIndent()
+                        .toPrBodyString(actualIterator.next()),
                     """
-<!-- jaspr start -->
-### 3
+                    <!-- jaspr start -->
+                    ### 3
 
-This is a body
+                    This is a body
 
-**Stack**:
-- %s ⬅
-- %s
-- %s
+                    **Stack**:
+                    - %s ⬅
+                    - %s
+                    - %s
 
-                    """.trimIndent().toPrBodyString(actualIterator.next()),
+                                        """
+                        .trimIndent()
+                        .toPrBodyString(actualIterator.next()),
                 ),
                 actual,
             )
@@ -2015,7 +2034,7 @@ This is a body
                             localRefs += "main"
                         }
                     }
-                },
+                }
             )
 
             push()
@@ -2033,7 +2052,7 @@ This is a body
                             localRefs += "main"
                         }
                     }
-                },
+                }
             )
 
             push()
@@ -2043,119 +2062,133 @@ This is a body
             assertEquals(
                 listOf(
                     """
-<!-- jaspr start -->
-### A
+                    <!-- jaspr start -->
+                    ### A
 
-**Stack**:
-- %s
-- %s ⬅
-  - [01..Current](https://%s/%s/%s/compare/jaspr/main/A_01..jaspr/main/A)
-- %s
-  - [01..Current](https://%s/%s/%s/compare/jaspr/main/B_01..jaspr/main/B)
-- %s
-- %s
-  - [01..Current](https://%s/%s/%s/compare/jaspr/main/C_01..jaspr/main/C)
-- %s
-  - [01..Current](https://%s/%s/%s/compare/jaspr/main/E_01..jaspr/main/E)
+                    **Stack**:
+                    - %s
+                    - %s ⬅
+                      - [01..Current](https://%s/%s/%s/compare/jaspr/main/A_01..jaspr/main/A)
+                    - %s
+                      - [01..Current](https://%s/%s/%s/compare/jaspr/main/B_01..jaspr/main/B)
+                    - %s
+                    - %s
+                      - [01..Current](https://%s/%s/%s/compare/jaspr/main/C_01..jaspr/main/C)
+                    - %s
+                      - [01..Current](https://%s/%s/%s/compare/jaspr/main/E_01..jaspr/main/E)
 
-                    """.trimIndent().toPrBodyString(actualIterator.next()),
+                                        """
+                        .trimIndent()
+                        .toPrBodyString(actualIterator.next()),
                     """
-<!-- jaspr start -->
-### B
+                    <!-- jaspr start -->
+                    ### B
 
-**Stack**:
-- %s
-- %s
-  - [01..Current](https://%s/%s/%s/compare/jaspr/main/A_01..jaspr/main/A)
-- %s ⬅
-  - [01..Current](https://%s/%s/%s/compare/jaspr/main/B_01..jaspr/main/B)
-- %s
-- %s
-  - [01..Current](https://%s/%s/%s/compare/jaspr/main/C_01..jaspr/main/C)
-- %s
-  - [01..Current](https://%s/%s/%s/compare/jaspr/main/E_01..jaspr/main/E)
+                    **Stack**:
+                    - %s
+                    - %s
+                      - [01..Current](https://%s/%s/%s/compare/jaspr/main/A_01..jaspr/main/A)
+                    - %s ⬅
+                      - [01..Current](https://%s/%s/%s/compare/jaspr/main/B_01..jaspr/main/B)
+                    - %s
+                    - %s
+                      - [01..Current](https://%s/%s/%s/compare/jaspr/main/C_01..jaspr/main/C)
+                    - %s
+                      - [01..Current](https://%s/%s/%s/compare/jaspr/main/E_01..jaspr/main/E)
 
-                    """.trimIndent().toPrBodyString(actualIterator.next()),
+                                        """
+                        .trimIndent()
+                        .toPrBodyString(actualIterator.next()),
                     """
-<!-- jaspr start -->
-### C
+                    <!-- jaspr start -->
+                    ### C
 
-**Stack**:
-- %s
-- %s
-  - [01..Current](https://%s/%s/%s/compare/jaspr/main/A_01..jaspr/main/A)
-- %s
-  - [01..Current](https://%s/%s/%s/compare/jaspr/main/B_01..jaspr/main/B)
-- %s
-- %s ⬅
-  - [01..Current](https://%s/%s/%s/compare/jaspr/main/C_01..jaspr/main/C)
-- %s
-  - [01..Current](https://%s/%s/%s/compare/jaspr/main/E_01..jaspr/main/E)
+                    **Stack**:
+                    - %s
+                    - %s
+                      - [01..Current](https://%s/%s/%s/compare/jaspr/main/A_01..jaspr/main/A)
+                    - %s
+                      - [01..Current](https://%s/%s/%s/compare/jaspr/main/B_01..jaspr/main/B)
+                    - %s
+                    - %s ⬅
+                      - [01..Current](https://%s/%s/%s/compare/jaspr/main/C_01..jaspr/main/C)
+                    - %s
+                      - [01..Current](https://%s/%s/%s/compare/jaspr/main/E_01..jaspr/main/E)
 
-                    """.trimIndent().toPrBodyString(actualIterator.next()),
+                                        """
+                        .trimIndent()
+                        .toPrBodyString(actualIterator.next()),
                     """
-<!-- jaspr start -->
-### D
+                    <!-- jaspr start -->
+                    ### D
 
-**Stack**:
-- %s
-- %s ⬅
-- %s
-- %s
-- %s
+                    **Stack**:
+                    - %s
+                    - %s ⬅
+                    - %s
+                    - %s
+                    - %s
 
-                    """.trimIndent().toPrBodyString(actualIterator.next()),
+                                        """
+                        .trimIndent()
+                        .toPrBodyString(actualIterator.next()),
                     """
-<!-- jaspr start -->
-### E
+                    <!-- jaspr start -->
+                    ### E
 
-**Stack**:
-- %s
-- %s
-  - [01..Current](https://%s/%s/%s/compare/jaspr/main/A_01..jaspr/main/A)
-- %s
-  - [01..Current](https://%s/%s/%s/compare/jaspr/main/B_01..jaspr/main/B)
-- %s
-- %s
-  - [01..Current](https://%s/%s/%s/compare/jaspr/main/C_01..jaspr/main/C)
-- %s ⬅
-  - [01..Current](https://%s/%s/%s/compare/jaspr/main/E_01..jaspr/main/E)
+                    **Stack**:
+                    - %s
+                    - %s
+                      - [01..Current](https://%s/%s/%s/compare/jaspr/main/A_01..jaspr/main/A)
+                    - %s
+                      - [01..Current](https://%s/%s/%s/compare/jaspr/main/B_01..jaspr/main/B)
+                    - %s
+                    - %s
+                      - [01..Current](https://%s/%s/%s/compare/jaspr/main/C_01..jaspr/main/C)
+                    - %s ⬅
+                      - [01..Current](https://%s/%s/%s/compare/jaspr/main/E_01..jaspr/main/E)
 
-                    """.trimIndent().toPrBodyString(actualIterator.next()),
+                                        """
+                        .trimIndent()
+                        .toPrBodyString(actualIterator.next()),
                     """
-<!-- jaspr start -->
-### one
+                    <!-- jaspr start -->
+                    ### one
 
-**Stack**:
-- %s
-- %s
-  - [01..Current](https://%s/%s/%s/compare/jaspr/main/A_01..jaspr/main/A)
-- %s
-  - [01..Current](https://%s/%s/%s/compare/jaspr/main/B_01..jaspr/main/B)
-- %s ⬅
-- %s
-  - [01..Current](https://%s/%s/%s/compare/jaspr/main/C_01..jaspr/main/C)
-- %s
-  - [01..Current](https://%s/%s/%s/compare/jaspr/main/E_01..jaspr/main/E)
+                    **Stack**:
+                    - %s
+                    - %s
+                      - [01..Current](https://%s/%s/%s/compare/jaspr/main/A_01..jaspr/main/A)
+                    - %s
+                      - [01..Current](https://%s/%s/%s/compare/jaspr/main/B_01..jaspr/main/B)
+                    - %s ⬅
+                    - %s
+                      - [01..Current](https://%s/%s/%s/compare/jaspr/main/C_01..jaspr/main/C)
+                    - %s
+                      - [01..Current](https://%s/%s/%s/compare/jaspr/main/E_01..jaspr/main/E)
 
-                    """.trimIndent().toPrBodyString(actualIterator.next()),
+                                        """
+                        .trimIndent()
+                        .toPrBodyString(actualIterator.next()),
                     """
-<!-- jaspr start -->
-### two
+                    <!-- jaspr start -->
+                    ### two
 
-**Stack**:
-- %s ⬅
-- %s
-  - [01..Current](https://%s/%s/%s/compare/jaspr/main/A_01..jaspr/main/A)
-- %s
-  - [01..Current](https://%s/%s/%s/compare/jaspr/main/B_01..jaspr/main/B)
-- %s
-- %s
-  - [01..Current](https://%s/%s/%s/compare/jaspr/main/C_01..jaspr/main/C)
-- %s
-  - [01..Current](https://%s/%s/%s/compare/jaspr/main/E_01..jaspr/main/E)
+                    **Stack**:
+                    - %s ⬅
+                    - %s
+                      - [01..Current](https://%s/%s/%s/compare/jaspr/main/A_01..jaspr/main/A)
+                    - %s
+                      - [01..Current](https://%s/%s/%s/compare/jaspr/main/B_01..jaspr/main/B)
+                    - %s
+                    - %s
+                      - [01..Current](https://%s/%s/%s/compare/jaspr/main/C_01..jaspr/main/C)
+                    - %s
+                      - [01..Current](https://%s/%s/%s/compare/jaspr/main/E_01..jaspr/main/E)
 
-                    """.trimIndent().toPrBodyString(actualIterator.next()),
+                                        """
+                        .trimIndent()
+                        .toPrBodyString(actualIterator.next()),
                 ),
                 actual,
             )
@@ -2175,7 +2208,7 @@ This is a body
                             localRefs += "main"
                         }
                     }
-                },
+                }
             )
 
             push()
@@ -2190,7 +2223,7 @@ This is a body
                             localRefs += "main"
                         }
                     }
-                },
+                }
             )
 
             push()
@@ -2205,7 +2238,7 @@ This is a body
                             localRefs += "main"
                         }
                     }
-                },
+                }
             )
 
             push()
@@ -2215,68 +2248,77 @@ This is a body
             assertEquals(
                 listOf(
                     """
-<!-- jaspr start -->
-### A
+                    <!-- jaspr start -->
+                    ### A
 
-**Stack**:
-- %s
-- %s
-- %s ⬅
+                    **Stack**:
+                    - %s
+                    - %s
+                    - %s ⬅
 
-                    """.trimIndent().toPrBodyString(actualIterator.next()),
+                                        """
+                        .trimIndent()
+                        .toPrBodyString(actualIterator.next()),
                     """
-<!-- jaspr start -->
-### B
+                    <!-- jaspr start -->
+                    ### B
 
-**Stack**:
-- %s
-- %s ⬅
-- %s
+                    **Stack**:
+                    - %s
+                    - %s ⬅
+                    - %s
 
-                    """.trimIndent().toPrBodyString(actualIterator.next()),
+                                        """
+                        .trimIndent()
+                        .toPrBodyString(actualIterator.next()),
                     """
-<!-- jaspr start -->
-### C
+                    <!-- jaspr start -->
+                    ### C
 
-**Stack**:
-- %s ⬅
-- %s
-- %s
+                    **Stack**:
+                    - %s ⬅
+                    - %s
+                    - %s
 
-                    """.trimIndent().toPrBodyString(actualIterator.next()),
+                                        """
+                        .trimIndent()
+                        .toPrBodyString(actualIterator.next()),
                     """
-<!-- jaspr start -->
-### D
+                    <!-- jaspr start -->
+                    ### D
 
-**Stack**:
-- %s ⬅
-- %s
-- %s
+                    **Stack**:
+                    - %s ⬅
+                    - %s
+                    - %s
 
-                    """.trimIndent().toPrBodyString(actualIterator.next()),
+                                        """
+                        .trimIndent()
+                        .toPrBodyString(actualIterator.next()),
                     """
-<!-- jaspr start -->
-### E
+                    <!-- jaspr start -->
+                    ### E
 
-**Stack**:
-- %s ⬅
-- %s
-- %s
+                    **Stack**:
+                    - %s ⬅
+                    - %s
+                    - %s
 
-                    """.trimIndent().toPrBodyString(actualIterator.next()),
+                                        """
+                        .trimIndent()
+                        .toPrBodyString(actualIterator.next()),
                 ),
                 actual,
             )
         }
     }
-    //endregion
 
-    //region merge tests
+    // endregion
+
+    // region merge tests
     @Test
     fun `merge empty stack`() {
-        withTestSetup(useFakeRemote) {
-            merge(RefSpec("main", "main"))
-        }
+        withTestSetup(useFakeRemote) { merge(RefSpec("main", "main")) }
     }
 
     @Test
@@ -2320,7 +2362,7 @@ This is a body
                         title = "three"
                         willBeApprovedByUserKey = "michael"
                     }
-                },
+                }
             )
 
             waitForChecksToConclude("one", "two", "three")
@@ -2346,15 +2388,17 @@ This is a body
                             localRefs += "main"
                         }
                     }
-                },
+                }
             )
 
             push()
 
             createCommitsFrom(
                 testCase {
-                    // Intentionally repeating the commits here... this is because GitHubTestHarness will not "notice"
-                    // that the commits should pass verification unless they are defined again as part of this pass.
+                    // Intentionally repeating the commits here... this is because GitHubTestHarness
+                    // will not "notice"
+                    // that the commits should pass verification unless they are defined again as
+                    // part of this pass.
                     // I should fix that, but this works for now.
                     repository {
                         commit {
@@ -2389,7 +2433,7 @@ This is a body
                         title = "three"
                         willBeApprovedByUserKey = "michael"
                     }
-                },
+                }
             )
             waitForChecksToConclude("one", "two", "three")
             merge(RefSpec("main", "main"))
@@ -2420,7 +2464,7 @@ This is a body
                         title = "one"
                         willBeApprovedByUserKey = "michael"
                     }
-                },
+                }
             )
 
             waitForChecksToConclude("one")
@@ -2474,7 +2518,7 @@ This is a body
                         title = "three"
                         willBeApprovedByUserKey = "michael"
                     }
-                },
+                }
             )
 
             autoMerge(RefSpec("development", "main"))
@@ -2549,7 +2593,7 @@ This is a body
                         title = "five"
                         willBeApprovedByUserKey = "michael"
                     }
-                },
+                }
             )
 
             autoMerge(RefSpec("development^", "main"))
@@ -2572,9 +2616,7 @@ This is a body
                         commit {
                             title = "in_both_main_and_development"
                             branch {
-                                commit {
-                                    title = "only_on_main_one"
-                                }
+                                commit { title = "only_on_main_one" }
                                 commit {
                                     title = "only_on_main_two"
                                     remoteRefs += "main"
@@ -2616,7 +2658,7 @@ This is a body
                         title = "three"
                         willBeApprovedByUserKey = "michael"
                     }
-                },
+                }
             )
 
             merge(RefSpec("development", "main"))
@@ -2692,7 +2734,7 @@ This is a body
                         title = "e"
                         willBeApprovedByUserKey = "michael"
                     }
-                },
+                }
             )
 
             waitForChecksToConclude("a", "b", "c", "d", "e")
@@ -2769,7 +2811,7 @@ This is a body
                         baseRef = buildRemoteRef("four")
                         title = "five"
                     }
-                },
+                }
             )
 
             waitForChecksToConclude("one", "two", "three", "four", "five")
@@ -2844,7 +2886,7 @@ This is a body
                         baseRef = buildRemoteRef("four")
                         title = "five"
                     }
-                },
+                }
             )
 
             waitForChecksToConclude("one", "two", "three", "four", "five")
@@ -2895,7 +2937,7 @@ This is a body
                         baseRef = buildRemoteRef("two")
                         title = "three"
                     }
-                },
+                }
             )
 
             merge(RefSpec("development", "main"))
@@ -2947,7 +2989,7 @@ This is a body
                         title = "three"
                         willBeApprovedByUserKey = "michael"
                     }
-                },
+                }
             )
 
             waitForChecksToConclude("one", "two")
@@ -2982,7 +3024,7 @@ This is a body
                             remoteRefs += buildRemoteRef("c_01")
                         }
                     }
-                },
+                }
             )
             createCommitsFrom(
                 testCase {
@@ -3033,17 +3075,13 @@ This is a body
                         title = "c"
                         willBeApprovedByUserKey = "michael"
                     }
-                },
+                }
             )
 
             waitForChecksToConclude("z", "a", "b", "c")
             merge(RefSpec("dev2", "main"))
             assertEquals(
-                listOf(
-                    buildRemoteRef("c"),
-                    buildRemoteRef("c_01"),
-                    "main",
-                ),
+                listOf(buildRemoteRef("c"), buildRemoteRef("c_01"), "main"),
                 localGit.getRemoteBranches(remoteName).map(RemoteBranch::name),
             )
         }
@@ -3072,7 +3110,7 @@ This is a body
                             remoteRefs += buildRemoteRef("c_01")
                         }
                     }
-                },
+                }
             )
             createCommitsFrom(
                 testCase {
@@ -3123,7 +3161,7 @@ This is a body
                         title = "c"
                         willBeApprovedByUserKey = "michael"
                     }
-                },
+                }
             )
 
             waitForChecksToConclude("z", "a", "b", "c")
@@ -3187,7 +3225,7 @@ This is a body
                         title = "four"
                         willBeApprovedByUserKey = "michael"
                     }
-                },
+                }
             )
 
             createCommitsFrom(
@@ -3207,7 +3245,7 @@ This is a body
                             localRefs += "development"
                         }
                     }
-                },
+                }
             )
 
             waitForChecksToConclude("one", "two", "three", "four")
@@ -3221,9 +3259,10 @@ This is a body
             )
         }
     }
-    //endregion
 
-    //region clean tests
+    // endregion
+
+    // region clean tests
     @Test
     fun `clean deletes expected branches`() {
         withTestSetup(useFakeRemote) {
@@ -3247,7 +3286,7 @@ This is a body
                             remoteRefs += buildRemoteRef("c_01")
                         }
                     }
-                },
+                }
             )
             createCommitsFrom(
                 testCase {
@@ -3286,17 +3325,12 @@ This is a body
                         title = "a"
                         willBeApprovedByUserKey = "michael"
                     }
-                },
+                }
             )
 
             gitJaspr.clean(false)
             assertEquals(
-                listOf(
-                    buildRemoteRef("a"),
-                    buildRemoteRef("a_01"),
-                    buildRemoteRef("z"),
-                    "main",
-                ),
+                listOf(buildRemoteRef("a"), buildRemoteRef("a_01"), buildRemoteRef("z"), "main"),
                 localGit.getRemoteBranches(remoteName).map(RemoteBranch::name),
             )
         }
@@ -3325,7 +3359,7 @@ This is a body
                             remoteRefs += buildRemoteRef("c_01")
                         }
                     }
-                },
+                }
             )
             createCommitsFrom(
                 testCase {
@@ -3364,27 +3398,22 @@ This is a body
                         title = "a"
                         willBeApprovedByUserKey = "michael"
                     }
-                },
+                }
             )
 
             remoteGit.deleteBranches(
-                listOf(
-                    buildRemoteRef("c"),
-                    buildRemoteRef("c_01"),
-                ),
+                listOf(buildRemoteRef("c"), buildRemoteRef("c_01")),
                 force = true,
             )
 
             assertEquals(
-                listOf(
-                    buildRemoteRef("b"),
-                    buildRemoteRef("b_01"),
-                ),
+                listOf(buildRemoteRef("b"), buildRemoteRef("b_01")),
                 gitJaspr.getOrphanedBranches().sorted(),
             )
         }
     }
-    //endregion
+
+    // endregion
 
     private data class NamedStackInfo(
         val name: String,
@@ -3393,30 +3422,40 @@ This is a body
         val remoteName: String,
     )
 
-    // It may seem silly to repeat what is already defined in GitJaspr.HEADER, but if a dev changes the header I want
-    // these tests to break so that any such changes are very deliberate. This is a compromise between referencing the
-    // same value from both tests and prod and the other extreme of repeating this header text manually in every test.
+    // It may seem silly to repeat what is already defined in GitJaspr.HEADER, but if a dev changes
+    // the header I want
+    // these tests to break so that any such changes are very deliberate. This is a compromise
+    // between referencing the
+    // same value from both tests and prod and the other extreme of repeating this header text
+    // manually in every test.
     private fun String.toStatusString(
         actual: String,
         namedStackInfo: NamedStackInfo? = null,
     ): String {
-        // Extract commit hashes and URLs from the actual string and put them into the expected. I can't predict what
+        // Extract commit hashes and URLs from the actual string and put them into the expected. I
+        // can't predict what
         // they will be, so I only want to validate that they are present.
-        val extracts = "] (.*?) : (?:(http.*?) : )?.*?\n"
-            .toRegex()
-            .findAll(actual)
-            .flatMap { result -> result.groupValues.drop(1) }
-            .filter { it.isNotEmpty() }
-            .toList()
+        val extracts =
+            "] (.*?) : (?:(http.*?) : )?.*?\n"
+                .toRegex()
+                .findAll(actual)
+                .flatMap { result -> result.groupValues.drop(1) }
+                .filter { it.isNotEmpty() }
+                .toList()
 
-        val formattedString = try {
-            format(*extracts.toTypedArray())
-        } catch (e: MissingFormatArgumentException) {
-            logger.error("Format string doesn't have enough arguments, should have {}", extracts.size)
-            this
-        }
+        val formattedString =
+            try {
+                format(*extracts.toTypedArray())
+            } catch (e: MissingFormatArgumentException) {
+                logger.error(
+                    "Format string doesn't have enough arguments, should have {}",
+                    extracts.size,
+                )
+                this
+            }
         val namedStackInfoString = buildString {
-            // As above, this duplicates the string building logic defined in GitJaspr, but this is so any changes
+            // As above, this duplicates the string building logic defined in GitJaspr, but this is
+            // so any changes
             // to the rendering is done very deliberately.
             if (namedStackInfo != null) {
                 appendLine()
@@ -3435,7 +3474,7 @@ This is a body
                             "Your stack and the remote stack in '$remoteName' have diverged, and have " +
                                 "$numCommitsAhead and $numCommitsBehind different commits each, " +
                                 "respectively."
-                        },
+                        }
                     )
                 }
             }
@@ -3450,16 +3489,18 @@ This is a body
             | │ │ │ │ │ │ 
             |$formattedString
 
-        """.trimMargin() + namedStackInfoString
+        """
+            .trimMargin() + namedStackInfoString
     }
 
-    // Much like toStatusString above, this repeats the PR body footer. See notes there for the rationale.
+    // Much like toStatusString above, this repeats the PR body footer. See notes there for the
+    // rationale.
     fun String.toPrBodyString(actual: String = ""): String {
         val numRegex = "^- (#\\d+)(?: ⬅)?$".toRegex()
-        val historyLineRegex = "^ {2}- (?:\\[.*]\\(https?://(.*?)/(.*?)/(.*?)/compare/jaspr.*?\\)(?:, )?)+".toRegex()
-        val list = actual
-            .lines()
-            .fold(emptyList<String>()) { list, line ->
+        val historyLineRegex =
+            "^ {2}- (?:\\[.*]\\(https?://(.*?)/(.*?)/(.*?)/compare/jaspr.*?\\)(?:, )?)+".toRegex()
+        val list =
+            actual.lines().fold(emptyList<String>()) { list, line ->
                 val numRegexResult = numRegex.matchEntire(line)
                 val historyLineRegexResult = historyLineRegex.matchEntire(line)
                 when {
@@ -3474,12 +3515,16 @@ This is a body
                     else -> list
                 }
             }
-        val formattedString = try {
-            format(*list.toTypedArray())
-        } catch (e: MissingFormatArgumentException) {
-            logger.error("Format string doesn't have enough arguments, should have {}", list.size)
-            this
-        }
+        val formattedString =
+            try {
+                format(*list.toTypedArray())
+            } catch (e: MissingFormatArgumentException) {
+                logger.error(
+                    "Format string doesn't have enough arguments, should have {}",
+                    list.size,
+                )
+                this
+            }
         return "$formattedString\n" +
             "⚠️ *Part of a stack created by [jaspr](https://github.com/MichaelSims/git-jaspr). " +
             "Do not merge manually using the UI - doing so may have unexpected results.*\n"
@@ -3488,8 +3533,8 @@ This is a body
     private fun commitOrCommits(count: Int) = if (count == 1) "commit" else "commits"
 
     /**
-     * Returns a copy of the string with the commit ID replaced with 0. Useful for comparing full commit messages in
-     * tests where you don't care about the commit ID.
+     * Returns a copy of the string with the commit ID replaced with 0. Useful for comparing full
+     * commit messages in tests where you don't care about the commit ID.
      */
     fun String.withCommitIdZero(): String =
         // Using zero-width assertions in the regex to keep the replacement simple

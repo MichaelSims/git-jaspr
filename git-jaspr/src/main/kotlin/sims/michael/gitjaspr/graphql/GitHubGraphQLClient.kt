@@ -5,12 +5,13 @@ import com.expediagroup.graphql.client.types.GraphQLClientError
 import com.expediagroup.graphql.client.types.GraphQLClientRequest
 import com.expediagroup.graphql.client.types.GraphQLClientResponse
 import io.ktor.client.request.*
-import kotlinx.coroutines.delay
-import org.slf4j.LoggerFactory
 import kotlin.time.DurationUnit
 import kotlin.time.toDuration
+import kotlinx.coroutines.delay
+import org.slf4j.LoggerFactory
 
-class GitHubGraphQLClient(private val delegate: GraphQLClient<HttpRequestBuilder>) : GraphQLClient<HttpRequestBuilder> {
+class GitHubGraphQLClient(private val delegate: GraphQLClient<HttpRequestBuilder>) :
+    GraphQLClient<HttpRequestBuilder> {
 
     private val logger = LoggerFactory.getLogger(GitHubGraphQLClient::class.java)
 
@@ -23,7 +24,10 @@ class GitHubGraphQLClient(private val delegate: GraphQLClient<HttpRequestBuilder
         do {
             val delay = DELAYS[attemptsMade]
             if (delay > 0) {
-                logger.info("Delaying {} due to GitHub API throttling...", delay.toDuration(DurationUnit.MILLISECONDS))
+                logger.info(
+                    "Delaying {} due to GitHub API throttling...",
+                    delay.toDuration(DurationUnit.MILLISECONDS),
+                )
                 delay(delay)
             }
             response = delegate.execute(request, requestCustomizer)
@@ -38,7 +42,8 @@ class GitHubGraphQLClient(private val delegate: GraphQLClient<HttpRequestBuilder
     override suspend fun execute(
         requests: List<GraphQLClientRequest<*>>,
         requestCustomizer: HttpRequestBuilder.() -> Unit,
-    ): List<GraphQLClientResponse<*>> = throw NotImplementedError() // The GitHub API doesn't support batched requests
+    ): List<GraphQLClientResponse<*>> =
+        throw NotImplementedError() // The GitHub API doesn't support batched requests
 
     companion object {
         private const val MAX_ATTEMPTS = 4

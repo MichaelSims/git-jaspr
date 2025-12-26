@@ -1,5 +1,7 @@
 package sims.michael.gitjaspr
 
+import java.io.File
+import java.nio.file.Files
 import org.eclipse.jgit.lib.Constants
 import org.junit.jupiter.api.Assertions.*
 import org.junit.jupiter.api.Test
@@ -11,8 +13,6 @@ import sims.michael.gitjaspr.githubtests.GitHubTestHarness.Companion.withTestSet
 import sims.michael.gitjaspr.githubtests.generatedtestdsl.testCase
 import sims.michael.gitjaspr.testing.DEFAULT_COMMITTER
 import sims.michael.gitjaspr.testing.toStringWithClickableURI
-import java.io.File
-import java.nio.file.Files
 
 class CliGitClientTest {
 
@@ -43,12 +43,15 @@ class CliGitClientTest {
                             localRefs += "main"
                         }
                     }
-                },
+                }
             )
 
             val cliGit = CliGitClient(localGit.workingDirectory)
             val git = JGitClient(localGit.workingDirectory)
-            assertEquals(cliGit.logAll().sortedBy(Commit::hash), git.logAll().sortedBy(Commit::hash))
+            assertEquals(
+                cliGit.logAll().sortedBy(Commit::hash),
+                git.logAll().sortedBy(Commit::hash),
+            )
         }
     }
 
@@ -77,7 +80,7 @@ class CliGitClientTest {
                             localRefs += "main"
                         }
                     }
-                },
+                }
             )
 
             val cliGit = CliGitClient(localGit.workingDirectory)
@@ -111,7 +114,7 @@ class CliGitClientTest {
                             localRefs += "main"
                         }
                     }
-                },
+                }
             )
 
             val cliGit = CliGitClient(localGit.workingDirectory)
@@ -145,7 +148,7 @@ class CliGitClientTest {
                             localRefs += "main"
                         }
                     }
-                },
+                }
             )
 
             val cliGit = CliGitClient(localGit.workingDirectory)
@@ -179,12 +182,15 @@ class CliGitClientTest {
                             localRefs += "main"
                         }
                     }
-                },
+                }
             )
 
             val cliGit = CliGitClient(localGit.workingDirectory)
             val git = JGitClient(localGit.workingDirectory)
-            assertEquals(cliGit.logRange("main", "some-other-branch"), git.logRange("main", "some-other-branch"))
+            assertEquals(
+                cliGit.logRange("main", "some-other-branch"),
+                git.logRange("main", "some-other-branch"),
+            )
         }
     }
 
@@ -213,13 +219,11 @@ class CliGitClientTest {
                             localRefs += "main"
                         }
                     }
-                },
+                }
             )
 
             val git = CliGitClient(localGit.workingDirectory)
-            assertThrows<IllegalArgumentException> {
-                git.logRange("sam", "max")
-            }
+            assertThrows<IllegalArgumentException> { git.logRange("sam", "max") }
         }
     }
 
@@ -248,7 +252,7 @@ class CliGitClientTest {
                             localRefs += "main"
                         }
                     }
-                },
+                }
             )
 
             val readme = localRepo.resolve("README.txt")
@@ -284,7 +288,7 @@ class CliGitClientTest {
                             remoteRefs += "main"
                         }
                     }
-                },
+                }
             )
             val cliGit = CliGitClient(localGit.workingDirectory)
             val git = JGitClient(localGit.workingDirectory)
@@ -320,15 +324,12 @@ class CliGitClientTest {
                             remoteRefs += "main"
                         }
                     }
-                },
+                }
             )
             val cliGit = CliGitClient(localGit.workingDirectory)
             val main = cliGit.log(DEFAULT_TARGET_REF, 1).single()
             val git = JGitClient(localGit.workingDirectory)
-            assertEquals(
-                cliGit.getParents(main),
-                git.getParents(main),
-            )
+            assertEquals(cliGit.getParents(main), git.getParents(main))
         }
     }
 
@@ -357,20 +358,18 @@ class CliGitClientTest {
                             remoteRefs += "main"
                         }
                     }
-                },
+                }
             )
             val cliGit = CliGitClient(localGit.workingDirectory)
             val git = JGitClient(localGit.workingDirectory)
-            assertEquals(
-                cliGit.getBranchNames(),
-                git.getBranchNames(),
-            )
+            assertEquals(cliGit.getBranchNames(), git.getBranchNames())
         }
     }
 
     @Test
     fun `getRemoteBranches should not include HEAD`() {
-        // If we've pushed to HEAD, ensure that getRemoteBranches does not return it. At some point git changed its
+        // If we've pushed to HEAD, ensure that getRemoteBranches does not return it. At some point
+        // git changed its
         // behavior to include HEAD in the list of remote branches, which we don't want.
         withTestSetup {
             createCommitsFrom(
@@ -392,24 +391,20 @@ class CliGitClientTest {
                         commit {
                             title = "three"
                             body = "This is a body"
-                            remoteRefs += listOf(
-                                "main",
-                                Constants.HEAD,
-                            )
+                            remoteRefs += listOf("main", Constants.HEAD)
                         }
                     }
-                },
+                }
             )
             val cliGit = CliGitClient(localGit.workingDirectory)
             val git = JGitClient(localGit.workingDirectory)
             assertFalse(
-                cliGit.getRemoteBranches(remoteName).any { branch -> branch.name.endsWith("/${Constants.HEAD}") },
+                cliGit.getRemoteBranches(remoteName).any { branch ->
+                    branch.name.endsWith("/${Constants.HEAD}")
+                },
                 "List of remote branches should not be empty",
             )
-            assertEquals(
-                cliGit.getRemoteBranches(remoteName),
-                git.getRemoteBranches(remoteName),
-            )
+            assertEquals(cliGit.getRemoteBranches(remoteName), git.getRemoteBranches(remoteName))
         }
     }
 
@@ -435,13 +430,10 @@ class CliGitClientTest {
                         commit {
                             title = "three"
                             body = "This is a body"
-                            remoteRefs += listOf(
-                                "main",
-                                Constants.HEAD,
-                            )
+                            remoteRefs += listOf("main", Constants.HEAD)
                         }
                     }
-                },
+                }
             )
             val cliGit = CliGitClient(localGit.workingDirectory)
             val git = JGitClient(localGit.workingDirectory)
@@ -449,10 +441,7 @@ class CliGitClientTest {
                 cliGit.getRemoteBranches(remoteName).isEmpty(),
                 "List of remote branches should not be empty",
             )
-            assertEquals(
-                cliGit.getRemoteBranches(remoteName),
-                git.getRemoteBranches(remoteName),
-            )
+            assertEquals(cliGit.getRemoteBranches(remoteName), git.getRemoteBranches(remoteName))
         }
     }
 
@@ -493,7 +482,7 @@ class CliGitClientTest {
                             remoteRefs += buildRemoteRef("three")
                         }
                     }
-                },
+                }
             )
             val cliGit = CliGitClient(localGit.workingDirectory)
             val git = JGitClient(localGit.workingDirectory)
@@ -513,10 +502,7 @@ class CliGitClientTest {
         withTestSetup {
             val cliGit = CliGitClient(localGit.workingDirectory)
             val git = JGitClient(localGit.workingDirectory)
-            assertEquals(
-                cliGit.getRemoteUriOrNull(remoteName),
-                git.getRemoteUriOrNull(remoteName),
-            )
+            assertEquals(cliGit.getRemoteUriOrNull(remoteName), git.getRemoteUriOrNull(remoteName))
         }
     }
 
@@ -525,10 +511,7 @@ class CliGitClientTest {
         withTestSetup {
             val cliGit = CliGitClient(localGit.workingDirectory)
             val git = JGitClient(localGit.workingDirectory)
-            assertEquals(
-                cliGit.getUpstreamBranch(remoteName),
-                git.getUpstreamBranch(remoteName),
-            )
+            assertEquals(cliGit.getUpstreamBranch(remoteName), git.getUpstreamBranch(remoteName))
         }
     }
 
@@ -545,9 +528,10 @@ class CliGitClientTest {
             }
             val git = harness.localGit
             val remoteName = harness.remoteName
-            val remoteBranch = checkNotNull(git.getUpstreamBranch(remoteName)) {
-                "No upstream branch found for remote $remoteName"
-            }
+            val remoteBranch =
+                checkNotNull(git.getUpstreamBranch(remoteName)) {
+                    "No upstream branch found for remote $remoteName"
+                }
             return remoteBranch.name
         }
         assertEquals(setAndGetUpstream(::CliGitClient), setAndGetUpstream(::JGitClient))
@@ -567,7 +551,7 @@ class CliGitClientTest {
                                 localRefs += "development"
                             }
                         }
-                    },
+                    }
                 )
             }
             val cliGit = CliGitClient(localGit.workingDirectory)
@@ -581,10 +565,7 @@ class CliGitClientTest {
         withTestSetup {
             val cliGit = CliGitClient(localGit.workingDirectory)
             val git = JGitClient(localGit.workingDirectory)
-            assertEquals(
-                cliGit.getCurrentBranchName(),
-                git.getCurrentBranchName(),
-            )
+            assertEquals(cliGit.getCurrentBranchName(), git.getCurrentBranchName())
         }
     }
 
@@ -593,15 +574,9 @@ class CliGitClientTest {
         withTestSetup {
             val cliGit = CliGitClient(localGit.workingDirectory)
             val git = JGitClient(localGit.workingDirectory)
-            assertEquals(
-                cliGit.isHeadDetached(),
-                git.isHeadDetached(),
-            )
+            assertEquals(cliGit.isHeadDetached(), git.isHeadDetached())
             cliGit.checkout(cliGit.log().first().hash)
-            assertEquals(
-                cliGit.isHeadDetached(),
-                git.isHeadDetached(),
-            )
+            assertEquals(cliGit.isHeadDetached(), git.isHeadDetached())
         }
     }
 
@@ -625,7 +600,7 @@ class CliGitClientTest {
                             localRefs += "development"
                         }
                     }
-                },
+                }
             )
             val git = CliGitClient(localGit.workingDirectory)
             git.checkout("development")
@@ -656,8 +631,11 @@ class CliGitClientTest {
 
     @Test
     fun testFetch() {
-        val tempDir = checkNotNull(Files.createTempDirectory(CliGitClientTest::class.java.simpleName).toFile())
-            .also { logger.info("Temp dir created in {}", it.toStringWithClickableURI()) }
+        val tempDir =
+            checkNotNull(
+                    Files.createTempDirectory(CliGitClientTest::class.java.simpleName).toFile()
+                )
+                .also { logger.info("Temp dir created in {}", it.toStringWithClickableURI()) }
         val remoteDir = tempDir.resolve("remote")
         val remoteGit = CliGitClient(remoteDir).init()
         remoteDir.resolve("README.txt").writeText("This is a README")
@@ -677,18 +655,14 @@ class CliGitClientTest {
             createCommitsFrom(
                 testCase {
                     repository {
-                        commit {
-                            title = "one"
-                        }
-                        commit {
-                            title = "two"
-                        }
+                        commit { title = "one" }
+                        commit { title = "two" }
                         commit {
                             title = "three"
                             localRefs += "development"
                         }
                     }
-                },
+                }
             )
             val git = CliGitClient(localGit.workingDirectory)
             git.reset("development~1")
@@ -702,18 +676,14 @@ class CliGitClientTest {
             createCommitsFrom(
                 testCase {
                     repository {
-                        commit {
-                            title = "one"
-                        }
-                        commit {
-                            title = "two"
-                        }
+                        commit { title = "one" }
+                        commit { title = "two" }
                         commit {
                             title = "three"
                             localRefs += "development"
                         }
                     }
-                },
+                }
             )
             val git = CliGitClient(localGit.workingDirectory)
             git.branch("new-branch", "development^")
@@ -727,18 +697,14 @@ class CliGitClientTest {
             createCommitsFrom(
                 testCase {
                     repository {
-                        commit {
-                            title = "one"
-                        }
-                        commit {
-                            title = "two"
-                        }
+                        commit { title = "one" }
+                        commit { title = "two" }
                         commit {
                             title = "three"
                             localRefs += "development"
                         }
                     }
-                },
+                }
             )
             val git = CliGitClient(localGit.workingDirectory)
             git.deleteBranches(listOf("development"))
@@ -763,11 +729,12 @@ class CliGitClientTest {
             git.add("NEW.txt")
             git.commit(
                 """
-Add new file
+                Add new file
 
-This is a commit body
+                This is a commit body
 
-                """.trimIndent(),
+                                """
+                    .trimIndent(),
                 mapOf("Co-authored-by" to "Michael Sims"),
                 DEFAULT_COMMITTER,
             )
@@ -786,7 +753,7 @@ This is a commit body
                             localRefs += "development"
                         }
                     }
-                },
+                }
             )
             val git = CliGitClient(localGit.workingDirectory)
             git.push(listOf(RefSpec("development", "main")), remoteName)
@@ -800,18 +767,14 @@ This is a commit body
             createCommitsFrom(
                 testCase {
                     repository {
-                        commit {
-                            title = "one"
-                        }
-                        commit {
-                            title = "two"
-                        }
+                        commit { title = "one" }
+                        commit { title = "two" }
                         commit {
                             title = "three"
                             localRefs += "development"
                         }
                     }
-                },
+                }
             )
             val git = CliGitClient(localGit.workingDirectory)
             git.checkout("main")
@@ -832,7 +795,7 @@ This is a commit body
                             localRefs += "development"
                         }
                     }
-                },
+                }
             )
             val git = CliGitClient(localGit.workingDirectory)
             git.setCommitId("newCommitId", DEFAULT_COMMITTER)
@@ -891,20 +854,24 @@ This is a commit body
                                 localRefs += "development"
                             }
                         }
-                    },
+                    }
                 )
             }
             val git = CliGitClient(localGit.workingDirectory)
             val reflog = git.reflog()
-            // Build a list of short messages in the order that HEAD moved, then reverse it to match the reflog order
-            // This bakes some assumptions about how our test harness works, so if that changes this will break
-            val expectedShortMessages = buildList {
-                add(INITIAL_COMMIT_SHORT_MESSAGE) // The result of "git init"
-                for (title in titles) {
-                    add(INITIAL_COMMIT_SHORT_MESSAGE)
-                    add(title)
-                }
-            }.reversed()
+            // Build a list of short messages in the order that HEAD moved, then reverse it to match
+            // the reflog order
+            // This bakes some assumptions about how our test harness works, so if that changes this
+            // will break
+            val expectedShortMessages =
+                buildList {
+                        add(INITIAL_COMMIT_SHORT_MESSAGE) // The result of "git init"
+                        for (title in titles) {
+                            add(INITIAL_COMMIT_SHORT_MESSAGE)
+                            add(title)
+                        }
+                    }
+                    .reversed()
             assertEquals(expectedShortMessages, reflog.map(Commit::shortMessage))
         }
     }

@@ -1,124 +1,97 @@
 package sims.michael.gitjaspr.dataclassfragment.codegen
 
 import com.google.auto.service.AutoService
-import com.squareup.kotlinpoet.*
-import com.squareup.kotlinpoet.ParameterizedTypeName.Companion.parameterizedBy
+import com.google.devtools.ksp.KspExperimental
+import com.google.devtools.ksp.isAnnotationPresent
+import com.google.devtools.ksp.processing.Resolver
+import com.google.devtools.ksp.processing.SymbolProcessor
+import com.google.devtools.ksp.processing.SymbolProcessorEnvironment
+import com.google.devtools.ksp.processing.SymbolProcessorProvider
+import com.google.devtools.ksp.symbol.KSAnnotated
+import com.squareup.kotlinpoet.FileSpec
+import com.squareup.kotlinpoet.FunSpec
+import com.squareup.kotlinpoet.KModifier
+import com.squareup.kotlinpoet.PropertySpec
+import com.squareup.kotlinpoet.TypeSpec
+import com.squareup.kotlinpoet.ksp.toClassName
+import com.squareup.kotlinpoet.ksp.writeTo
 import org.slf4j.LoggerFactory
 import sims.michael.gitjaspr.dataclassfragment.GenerateDataClassFragmentDataClass
-import java.io.File
-import javax.annotation.processing.AbstractProcessor
-import javax.annotation.processing.Processor
-import javax.annotation.processing.RoundEnvironment
-import javax.annotation.processing.SupportedSourceVersion
-import javax.lang.model.SourceVersion
-import javax.lang.model.element.TypeElement
-import javax.tools.Diagnostic
 
 @Suppress("unused")
-@AutoService(Processor::class)
-@SupportedSourceVersion(SourceVersion.RELEASE_11)
-class DataClassFragmentDataClassGenerator : AbstractProcessor() {
+@AutoService(SymbolProcessorProvider::class)
+class DataClassFragmentDataClassGeneratorProvider : SymbolProcessorProvider {
+    override fun create(environment: SymbolProcessorEnvironment): SymbolProcessor =
+        DataClassFragmentDataClassGenerator(environment)
+}
 
-    private val processorUtilities by lazy { DataClassFragmentProcessorUtilities(processingEnv) }
+class DataClassFragmentDataClassGenerator(private val environment: SymbolProcessorEnvironment) :
+    SymbolProcessor {
 
     @Suppress("unused")
     private val logger = LoggerFactory.getLogger(DataClassFragmentDataClassGenerator::class.java)
 
-    override fun getSupportedAnnotationTypes(): Set<String> = setOf(GenerateDataClassFragmentDataClass::class.java.name)
-
-    override fun process(annotations: MutableSet<out TypeElement>, roundEnv: RoundEnvironment): Boolean {
-        val fragments = processorUtilities
-            .collectFragments(
-                roundEnv.getElementsAnnotatedWith(GenerateDataClassFragmentDataClass::class.java),
-            )
-
-        for (fragment: TypeElement in fragments) {
-            try {
-                generateCodeForDataClassFragment(fragment, processorUtilities.generatedSourcesDir)
-            } catch (e: IllegalStateException) {
-                processingEnv.messager.printMessage(Diagnostic.Kind.ERROR, e.message, fragment)
-            }
+    @OptIn(KspExperimental::class)
+    override fun process(resolver: Resolver): List<KSAnnotated> {
+        context(environment, resolver) {
+            resolver
+                .collectFragments()
+                .filter {
+                    it.classDeclaration.isAnnotationPresent(
+                        GenerateDataClassFragmentDataClass::class
+                    )
+                }
+                .forEach {
+                    it.process {
+                        generateDataClassSpec()
+                            .writeTo(
+                                environment.codeGenerator,
+                                false,
+                                listOfNotNull(classDeclaration.containingFile),
+                            )
+                    }
+                }
         }
-
-        // Don't "claim" these elements since the test DSL generator may also need to process them
-        return false
+        return emptyList()
     }
 
-    private fun generateCodeForDataClassFragment(fragment: TypeElement, generatedSourcesDir: File) {
-        FileSpec
-            .builder(
-                processorUtilities.getPackageName(fragment),
-                processorUtilities.getGeneratedDataClass(fragment).nameWithoutPackage,
-            )
+    context(_: Resolver)
+    private fun DataClassFragmentDescriptor.generateDataClassSpec(): FileSpec =
+        FileSpec.builder(generatedDataClassName)
             .indent(INDENT)
-            .addType(buildDataClassSpec(fragment))
+            .addType(buildDataClassSpec())
             .build()
-            .writeTo(generatedSourcesDir)
-    }
 
-    private fun buildDataClassSpec(fragment: TypeElement): TypeSpec {
+    context(_: Resolver)
+    private fun DataClassFragmentDescriptor.buildDataClassSpec(): TypeSpec {
         val ctorSpecBuilder = FunSpec.constructorBuilder()
-        val dataClassSpecBuilder = TypeSpec
-            .classBuilder(processorUtilities.getGeneratedDataClass(fragment))
-            .addModifiers(KModifier.DATA)
-            .addKdoc("Generated from [%T]", fragment.toClassName())
+        val dataClassSpecBuilder =
+            TypeSpec.classBuilder(generatedDataClassName)
+                .addModifiers(KModifier.DATA)
+                .addKdoc("Generated from [%T]", classDeclaration.toClassName())
 
-        for ((property, returnType) in processorUtilities.getNamedColumnProperties(fragment)) {
-            val propertyTypeName = returnType.toDataClassPropertyType()
+        context(environment) {
+            forEachProperty {
+                val propertyTypeName = propertyType.toDataClassPropertyType()
 
-            // We have to add the property to the data class AND the constructor. Kotlin Poet will merge the
-            // properties into the ctor
-            val propertySpec = PropertySpec
-                .builder(property.name, propertyTypeName)
-                .addKdoc(
-                    "Generated from DataClassFragment [%T.%L]",
-                    fragment.toClassName(),
-                    property.name,
-                )
-                .initializer(property.name)
-                .build()
+                // We have to add the property to the data class AND the constructor. Kotlin Poet
+                // will merge the properties into the ctor
+                val propertySpec =
+                    PropertySpec.builder(propertyName, propertyTypeName)
+                        .addKdoc(
+                            "Generated from DataClassFragment [%T.%L]",
+                            this@buildDataClassSpec.classDeclaration.toClassName(),
+                            propertyName,
+                        )
+                        .initializer(propertyName)
+                        .build()
 
-            ctorSpecBuilder.addParameter(property.name, propertyTypeName)
-            dataClassSpecBuilder.addProperty(propertySpec)
+                ctorSpecBuilder.addParameter(propertyName, propertyTypeName)
+                dataClassSpecBuilder.addProperty(propertySpec)
+            }
         }
 
-        return dataClassSpecBuilder
-            .primaryConstructor(ctorSpecBuilder.build())
-            .build()
-    }
-
-    private fun ParameterizedTypeName.toDataClassPropertyType(): TypeName {
-        val thisType = this
-        val typeArgument = typeArguments.first()
-        return accept(object : NamedColumnTypeVisitor<TypeName> {
-            override fun visitColumn(): TypeName {
-                return typeArgument.copy(nullable = thisType.hasNullableTypeArgument)
-            }
-
-            override fun visitNestedColumn(): TypeName =
-                (typeArgument as ClassName)
-                    .generatedDataClass
-                    .copy(nullable = thisType.hasNullableTypeArgument)
-
-            override fun visitArrayColumn(): TypeName =
-                checkNotNull(thisType.iterableType)
-                    .parameterizedBy(
-                        (typeArgument as ParameterizedTypeName)
-                            .toDataClassPropertyType()
-                            .copy(nullable = typeArgument.hasNullableTypeArgument),
-                    )
-                    .copy(nullable = thisType.hasNullableTypeArgument)
-
-            override fun visitMapColumn(): TypeName =
-                ClassNames.map
-                    .parameterizedBy(
-                        ClassNames.string,
-                        (typeArgument as ParameterizedTypeName)
-                            .toDataClassPropertyType()
-                            .copy(nullable = typeArgument.hasNullableTypeArgument),
-                    )
-                    .copy(nullable = thisType.hasNullableTypeArgument)
-        })
+        return dataClassSpecBuilder.primaryConstructor(ctorSpecBuilder.build()).build()
     }
 
     companion object {

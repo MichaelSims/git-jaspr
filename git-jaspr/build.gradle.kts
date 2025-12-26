@@ -14,15 +14,13 @@ plugins {
 
 graalvmNative {
     binaries {
-        all {
-            resources.autodetect()
-        }
+        all { resources.autodetect() }
         named("main") {
             javaLauncher.set(
                 javaToolchains.launcherFor {
                     languageVersion.set(JavaLanguageVersion.of(21))
                     vendor.set(JvmVendorSpec.matching("GraalVM"))
-                },
+                }
             )
         }
     }
@@ -64,22 +62,12 @@ configurations.all {
     }
 }
 
-// Apply a specific Java toolchain to ease working on different environments.
-java {
-    toolchain {
-        languageVersion.set(JavaLanguageVersion.of(21))
-        vendor.set(JvmVendorSpec.GRAAL_VM)
-    }
-}
-
 application {
     // Define the main class for the application.
     mainClass.set("sims.michael.gitjaspr.Cli")
 }
 
-val nonDefaultTestTags = mapOf(
-    "functional" to "Functional tests",
-)
+val nonDefaultTestTags = mapOf("functional" to "Functional tests")
 
 testing {
     suites {
@@ -88,9 +76,7 @@ testing {
             targets {
                 all {
                     testTask.configure {
-                        useJUnitPlatform {
-                            excludeTags(*nonDefaultTestTags.keys.toTypedArray())
-                        }
+                        useJUnitPlatform { excludeTags(*nonDefaultTestTags.keys.toTypedArray()) }
                     }
                 }
             }
@@ -103,9 +89,7 @@ val defaultTestSuite = testing.suites.named<JvmTestSuite>("test")
 nonDefaultTestTags.forEach { (testTag, testDescription) ->
     task<Test>(testTag) {
         description = testDescription
-        useJUnitPlatform {
-            includeTags(testTag)
-        }
+        useJUnitPlatform { includeTags(testTag) }
 
         testClassesDirs = files(defaultTestSuite.map { it.sources.output.classesDirs })
         classpath = files(defaultTestSuite.map { it.sources.runtimeClasspath })
@@ -115,11 +99,11 @@ nonDefaultTestTags.forEach { (testTag, testDescription) ->
 spotless {
     kotlin {
         toggleOffOn()
-        ktlint().setEditorConfigPath("$rootDir/.editorconfig")
-        targetExclude("build/generated/")
+        targetExclude("build/**/*")
+        ktfmt(libs.versions.ktfmt.get()).kotlinlangStyle()
     }
     kotlinGradle {
         toggleOffOn()
-        ktlint()
+        ktfmt(libs.versions.ktfmt.get()).kotlinlangStyle()
     }
 }

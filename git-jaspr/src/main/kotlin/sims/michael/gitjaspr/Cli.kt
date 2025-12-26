@@ -22,6 +22,7 @@ import com.github.ajalt.clikt.sources.ChainedValueSource
 import com.github.ajalt.clikt.sources.PropertiesValueSource
 import com.github.ajalt.clikt.sources.ValueSource.Companion.getKey
 import com.github.ajalt.mordant.rendering.TextColors
+import java.io.File
 import kotlinx.coroutines.runBlocking
 import kotlinx.serialization.encodeToString
 import org.intellij.lang.annotations.Language
@@ -29,39 +30,42 @@ import org.slf4j.Logger
 import org.slf4j.LoggerFactory
 import sims.michael.gitjaspr.RemoteRefEncoding.DEFAULT_REMOTE_BRANCH_PREFIX
 import sims.michael.gitjaspr.RemoteRefEncoding.DEFAULT_REMOTE_NAMED_STACK_BRANCH_PREFIX
-import java.io.File
 
-//region Commands
-class Status : GitJasprCommand(
-    help =
-    // language=Markdown
-    """
-Show status of current stack
- 
-| Heading       | Description                                                                                                                                                                                                                           |
-|---------------|---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
-| commit pushed | The commit has been pushed to the remote.                                                                                                                                                                                             |
-| exists        | A pull request has been created for the given commit.                                                                                                                                                                                 |
-| checks pass   | Github checks pass.                                                                                                                                                                                                                   |
-| ready         | The PR is ready for review, which means it is not a draft. Commits with subjects that begin with `DRAFT` or `WIP` will automatically be created in draft mode. Use the GitHub UI to mark the PR as ready for review when appropriate. |
-| approved      | The PR is approved.                                                                                                                                                                                                                   |
-| stack check   | This commit is mergeable, as well as all of its parent commits in the stack.                                                                                                                                                          |
-
-    """.trimIndent(),
-) {
-    private val refSpec by argument()
-        .convert(conversion = ArgumentTransformContext::convertRefSpecString)
-        .help {
+// region Commands
+class Status :
+    GitJasprCommand(
+        help =
+            // language=Markdown
             """
-            A refspec in the form `[[local-object:]target-ref]`. Patterned after a typical git refspec, it describes a 
-            local commit, followed by a colon, followed by the name of a target branch on the remote. The local commit
-            is compared to the target ref to determine which commits should be included in the status report.
-            The local object name (and the colon) can be omitted, in which case the default is 
-            `$DEFAULT_LOCAL_OBJECT`. If the target-ref is also omitted, it defaults to the value of the 
-            `${defaultTargetRefDelegate.names.single()}` option or `$DEFAULT_TARGET_REF`.
-            """.trimIndent()
-        }
-        .defaultLazy { RefSpec(DEFAULT_LOCAL_OBJECT, defaultTargetRef) }
+            Show status of current stack
+             
+            | Heading       | Description                                                                                                                                                                                                                           |
+            |---------------|---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+            | commit pushed | The commit has been pushed to the remote.                                                                                                                                                                                             |
+            | exists        | A pull request has been created for the given commit.                                                                                                                                                                                 |
+            | checks pass   | Github checks pass.                                                                                                                                                                                                                   |
+            | ready         | The PR is ready for review, which means it is not a draft. Commits with subjects that begin with `DRAFT` or `WIP` will automatically be created in draft mode. Use the GitHub UI to mark the PR as ready for review when appropriate. |
+            | approved      | The PR is approved.                                                                                                                                                                                                                   |
+            | stack check   | This commit is mergeable, as well as all of its parent commits in the stack.                                                                                                                                                          |
+
+            """
+                .trimIndent()
+    ) {
+    private val refSpec by
+        argument()
+            .convert(conversion = ArgumentTransformContext::convertRefSpecString)
+            .help {
+                """
+                A refspec in the form `[[local-object:]target-ref]`. Patterned after a typical git refspec, it describes a 
+                local commit, followed by a colon, followed by the name of a target branch on the remote. The local commit
+                is compared to the target ref to determine which commits should be included in the status report.
+                The local object name (and the colon) can be omitted, in which case the default is 
+                `$DEFAULT_LOCAL_OBJECT`. If the target-ref is also omitted, it defaults to the value of the 
+                `${defaultTargetRefDelegate.names.single()}` option or `$DEFAULT_TARGET_REF`.
+                """
+                    .trimIndent()
+            }
+            .defaultLazy { RefSpec(DEFAULT_LOCAL_OBJECT, defaultTargetRef) }
 
     override suspend fun doRun() {
         print(appWiring.gitJaspr.getStatusString(refSpec))
@@ -69,86 +73,99 @@ Show status of current stack
 }
 
 class Push : GitJasprCommand(help = "Push local commits to the remote and open PRs for each one") {
-    private val name by option()
-        .help {
-            "The \"friendly\" name of the stack. If provided, HEAD will be force-pushed to <prefix>/<name> " +
-                "where <prefix> is determined by ${remoteNamedStackBranchPrefixDelegate.names.single()} and the " +
-                "current branch's upstream will be set to this ref."
-        }
-        .convert { value -> value.trim() }
-        .validate { value -> value.isNotBlank() }
+    private val name by
+        option()
+            .help {
+                "The \"friendly\" name of the stack. If provided, HEAD will be force-pushed to <prefix>/<name> " +
+                    "where <prefix> is determined by ${remoteNamedStackBranchPrefixDelegate.names.single()} and the " +
+                    "current branch's upstream will be set to this ref."
+            }
+            .convert { value -> value.trim() }
+            .validate { value -> value.isNotBlank() }
 
-    private val refSpec by argument()
-        .convert(conversion = ArgumentTransformContext::convertRefSpecString)
-        .help {
-            """
+    private val refSpec by
+        argument()
+            .convert(conversion = ArgumentTransformContext::convertRefSpecString)
+            .help {
+                """
             A refspec in the form `[[local-object:]target-ref]`. Patterned after a typical git refspec, it describes the 
             local commit that should be pushed to the remote, followed by a colon, followed by the name of the target 
             branch on the remote. The local object name (and the colon) can be omitted, in which case the default is 
             `$DEFAULT_LOCAL_OBJECT`. If the target-ref is also omitted, it defaults to the value of the 
             `${defaultTargetRefDelegate.names.single()}` option or `$DEFAULT_TARGET_REF`.
-            """.trimIndent()
-        }
-        .defaultLazy { RefSpec(DEFAULT_LOCAL_OBJECT, defaultTargetRef) }
+            """
+                    .trimIndent()
+            }
+            .defaultLazy { RefSpec(DEFAULT_LOCAL_OBJECT, defaultTargetRef) }
 
     override suspend fun doRun() = appWiring.gitJaspr.push(refSpec, stackName = name)
 }
 
 class Merge : GitJasprCommand(help = "Merge all local commits that are mergeable") {
-    private val refSpec by argument()
-        .convert(conversion = ArgumentTransformContext::convertRefSpecString)
-        .help {
-            """
+    private val refSpec by
+        argument()
+            .convert(conversion = ArgumentTransformContext::convertRefSpecString)
+            .help {
+                """
             A refspec in the form `[[local-object:]target-ref]`. Patterned after a typical git refspec, it describes a 
             local commit, followed by a colon, followed by the name of a target branch on the remote. The local commit
             is compared to the target ref to determine which commits should be included in the merge.
             The local object name (and the colon) can be omitted, in which case the default is 
             `$DEFAULT_LOCAL_OBJECT`. If the target-ref is also omitted, it defaults to the value of the 
             `${defaultTargetRefDelegate.names.single()}` option or `$DEFAULT_TARGET_REF`.
-            """.trimIndent()
-        }
-        .defaultLazy { RefSpec(DEFAULT_LOCAL_OBJECT, defaultTargetRef) }
+            """
+                    .trimIndent()
+            }
+            .defaultLazy { RefSpec(DEFAULT_LOCAL_OBJECT, defaultTargetRef) }
 
     override suspend fun doRun() = appWiring.gitJaspr.merge(refSpec)
 }
 
-class AutoMerge : GitJasprCommand(help = "Poll GitHub until all local commits are mergeable, then merge them") {
-    private val refSpec by argument()
-        .convert(conversion = ArgumentTransformContext::convertRefSpecString)
-        .help {
-            """
+class AutoMerge :
+    GitJasprCommand(help = "Poll GitHub until all local commits are mergeable, then merge them") {
+    private val refSpec by
+        argument()
+            .convert(conversion = ArgumentTransformContext::convertRefSpecString)
+            .help {
+                """
             A refspec in the form `[[local-object:]target-ref]`. Patterned after a typical git refspec, it describes a 
             local commit, followed by a colon, followed by the name of a target branch on the remote. The local commit
             is compared to the target ref to determine which commits should be included in the merge.
             The local object name (and the colon) can be omitted, in which case the default is 
             `$DEFAULT_LOCAL_OBJECT`. If the target-ref is also omitted, it defaults to the value of the 
             `${defaultTargetRefDelegate.names.single()}` option or `$DEFAULT_TARGET_REF`.
-            """.trimIndent()
-        }
-        .defaultLazy { RefSpec(DEFAULT_LOCAL_OBJECT, defaultTargetRef) }
+            """
+                    .trimIndent()
+            }
+            .defaultLazy { RefSpec(DEFAULT_LOCAL_OBJECT, defaultTargetRef) }
 
-    private val interval by option("--interval", "-i")
-        .int()
-        .default(10)
-        .help { "Polling interval in seconds. Setting this too low may exhaust GitHub rate limiting" }
+    private val interval by
+        option("--interval", "-i").int().default(10).help {
+            "Polling interval in seconds. Setting this too low may exhaust GitHub rate limiting"
+        }
 
     override suspend fun doRun() = appWiring.gitJaspr.autoMerge(refSpec, interval)
 }
 
 class Clean : GitJasprCommand(help = "Clean up orphaned jaspr branches") {
-    private val forceDelegate = option("-f").flag("--no-force", default = false).help {
-        "Supply this flag to remove orphaned branches"
-    }
+    private val forceDelegate =
+        option("-f").flag("--no-force", default = false).help {
+            "Supply this flag to remove orphaned branches"
+        }
     private val force by forceDelegate
+
     override suspend fun doRun() {
         if (!force) {
-            Cli.logger.info("Refusing to delete branches without the ${forceDelegate.names.first()} option.")
+            Cli.logger.info(
+                "Refusing to delete branches without the ${forceDelegate.names.first()} option."
+            )
         }
         appWiring.gitJaspr.clean(dryRun = !force)
     }
 }
 
-class InstallCommitIdHook : GitJasprCommand(help = "Install commit-msg hook that adds commit-id's to local commits") {
+class InstallCommitIdHook :
+    GitJasprCommand(help = "Install commit-msg hook that adds commit-id's to local commits") {
     override suspend fun doRun() {
         appWiring.gitJaspr.installCommitIdHook()
     }
@@ -158,22 +175,28 @@ class InstallCommitIdHook : GitJasprCommand(help = "Install commit-msg hook that
 class NoOp : GitJasprCommand(help = "Do nothing", hidden = true) {
     private val logger = LoggerFactory.getLogger(NoOp::class.java)
 
-    @Suppress("unused")
-    val extraArgs by argument().multiple() // Ignore extra args
+    @Suppress("unused") val extraArgs by argument().multiple() // Ignore extra args
 
     override suspend fun doRun() {
         logger.info(commandName)
     }
 }
-//endregion
+
+// endregion
 
 private class GitHubOptions : OptionGroup(name = "GitHub Options") {
-    val githubHost by option()
-        .help { "The GitHub host. This will be inferred by the remote URI if not specified." }
-    val repoOwner by option()
-        .help { "The GitHub owner name. This will be inferred by the remote URI if not specified." }
-    val repoName by option()
-        .help { "The GitHub repo name. This will be inferred by the remote URI if not specified." }
+    val githubHost by
+        option().help {
+            "The GitHub host. This will be inferred by the remote URI if not specified."
+        }
+    val repoOwner by
+        option().help {
+            "The GitHub owner name. This will be inferred by the remote URI if not specified."
+        }
+    val repoName by
+        option().help {
+            "The GitHub repo name. This will be inferred by the remote URI if not specified."
+        }
 }
 
 private fun ArgumentTransformContext.convertRefSpecString(refSpecString: String): RefSpec {
@@ -189,32 +212,37 @@ private fun ArgumentTransformContext.convertRefSpecString(refSpecString: String)
 
 abstract class GitJasprCommand(help: String = "", hidden: Boolean = false) :
     CliktCommand(hidden = hidden, help = help, epilog = helpEpilog) {
-    private val workingDirectory = File(System.getProperty(WORKING_DIR_PROPERTY_NAME) ?: ".").findNearestGitDir()
-        .canonicalFile
-        .also { dir ->
-            require(dir.exists()) { "${dir.absolutePath} does not exist" }
-            require(dir.isDirectory) { "${dir.absolutePath} is not a directory" }
-        }
+    private val workingDirectory =
+        File(System.getProperty(WORKING_DIR_PROPERTY_NAME) ?: ".")
+            .findNearestGitDir()
+            .canonicalFile
+            .also { dir ->
+                require(dir.exists()) { "${dir.absolutePath} does not exist" }
+                require(dir.isDirectory) { "${dir.absolutePath} is not a directory" }
+            }
 
     init {
         context {
-            // Read all option values first from CONFIG_FILE_NAME in the user's home directory, overridden by
-            // CONFIG_FILE_NAME in the working directory, overridden by any options provided on the command line.
-            valueSource = ChainedValueSource(
-                listOf(workingDirectory, File(System.getenv("HOME")))
-                    .map { dir ->
+            // Read all option values first from CONFIG_FILE_NAME in the user's home directory,
+            // overridden by CONFIG_FILE_NAME in the working directory, overridden by any options
+            // provided on the command line.
+            valueSource =
+                ChainedValueSource(
+                    listOf(workingDirectory, File(System.getenv("HOME"))).map { dir ->
                         PropertiesValueSource.from(
                             dir.resolve(CONFIG_FILE_NAME),
-                            // don't add subcommand names to keys, see block comment in main entry point below
+                            // don't add subcommand names to keys, see block comment in the main
+                            // entry point below
                             getKey = getKey(joinSubcommands = null),
                         )
-                    },
-            )
+                    }
+                )
             helpFormatter = { MordantHelpFormatter(context = it, showDefaultValues = true) }
         }
     }
 
-    private val missingTokenMessage = """
+    private val missingTokenMessage =
+        """
 Hello! First time running Jaspr?
 
 We couldn't find your GitHub PAT (personal access token).
@@ -235,100 +263,125 @@ the following methods:
 if applicable. If in the future you change the scope of an
 existing token, it will disable the SSO authorization so
 you'll need to re-enable it again.
-    """.trimIndent()
+    """
+            .trimIndent()
 
-    private val githubToken by option(envvar = GITHUB_TOKEN_ENV_VAR)
-        .transformAll(showAsRequired = true) { stringList ->
-            stringList.lastOrNull()
-                ?: throw PrintMessage(message = missingTokenMessage, statusCode = 1, printError = true)
-        }
-        .help {
-            """
+    private val githubToken by
+        option(envvar = GITHUB_TOKEN_ENV_VAR)
+            .transformAll(showAsRequired = true) { stringList ->
+                stringList.lastOrNull()
+                    ?: throw PrintMessage(
+                        message = missingTokenMessage,
+                        statusCode = 1,
+                        printError = true,
+                    )
+            }
+            .help {
+                """
         A GitHub PAT (personal access token) with read:org, read:user, repo, and user:email permissions. Can be provided 
         via the per-user config file, a per-working copy config file, or the environment variable 
         $GITHUB_TOKEN_ENV_VAR.
-            """.trimIndent()
-        }
+            """
+                    .trimIndent()
+            }
 
     private val gitHubOptions by GitHubOptions()
 
-    private val logLevel: Level by option("-l", "--log-level")
-        .choice(
-            *listOf(OFF, ERROR, WARN, INFO, DEBUG, TRACE, ALL).map { level -> level.levelStr to level }.toTypedArray(),
-            ignoreCase = true,
-        )
-        .default(INFO)
-        .help { "The log level for the application." }
+    private val logLevel: Level by
+        option("-l", "--log-level")
+            .choice(
+                *listOf(OFF, ERROR, WARN, INFO, DEBUG, TRACE, ALL)
+                    .map { level -> level.levelStr to level }
+                    .toTypedArray(),
+                ignoreCase = true,
+            )
+            .default(INFO)
+            .help { "The log level for the application." }
 
-    private val logToFilesDelegate: OptionWithValues<Boolean, Boolean, Boolean> = option()
-        .flag("--no-log-to-files", default = true)
-        .help { "Write trace logs to directory specified by the ${logsDirectoryDelegate.names.first()} option" }
+    private val logToFilesDelegate: OptionWithValues<Boolean, Boolean, Boolean> =
+        option().flag("--no-log-to-files", default = true).help {
+            "Write trace logs to directory specified by the ${logsDirectoryDelegate.names.first()} option"
+        }
 
-    private val logsDirectoryDelegate: OptionWithValues<File, File, File> = option()
-        .file()
-        .default(File("${System.getProperty("java.io.tmpdir")}/jaspr"))
-        .help { "Trace logs will be written into this directory if ${logToFilesDelegate.names.first()} is enabled" }
+    private val logsDirectoryDelegate: OptionWithValues<File, File, File> =
+        option().file().default(File("${System.getProperty("java.io.tmpdir")}/jaspr")).help {
+            "Trace logs will be written into this directory if ${logToFilesDelegate.names.first()} is enabled"
+        }
 
     private val logToFiles: Boolean by logToFilesDelegate
     private val logsDirectory: File by logsDirectoryDelegate
 
-    val defaultTargetRefDelegate = option()
-        .default(DEFAULT_TARGET_REF)
-        .help { "The name of the implicit target remote branch if not provided in the refspec." }
+    val defaultTargetRefDelegate =
+        option().default(DEFAULT_TARGET_REF).help {
+            "The name of the implicit target remote branch if not provided in the refspec."
+        }
     val defaultTargetRef by defaultTargetRefDelegate
 
-    private val remoteBranchPrefix by option()
-        .default(DEFAULT_REMOTE_BRANCH_PREFIX)
-        .help {
-            "The prefix to use when encoding unique commit IDs into remote ref names " +
-                "(example: $DEFAULT_REMOTE_BRANCH_PREFIX)"
-        }
-        .validate { value ->
-            if (value.contains("/")) {
-                fail("The remote branch prefix should not contain a forward slash; one will be appended automatically")
+    private val remoteBranchPrefix by
+        option()
+            .default(DEFAULT_REMOTE_BRANCH_PREFIX)
+            .help {
+                "The prefix to use when encoding unique commit IDs into remote ref names " +
+                    "(example: $DEFAULT_REMOTE_BRANCH_PREFIX)"
             }
-        }
+            .validate { value ->
+                if (value.contains("/")) {
+                    fail(
+                        "The remote branch prefix should not contain a forward slash; one will be appended automatically"
+                    )
+                }
+            }
 
-    val remoteNamedStackBranchPrefixDelegate = option()
-        .default(DEFAULT_REMOTE_NAMED_STACK_BRANCH_PREFIX)
-        .help { "The prefix to use when pushing named stacks (example: $DEFAULT_REMOTE_NAMED_STACK_BRANCH_PREFIX)" }
-        .validate { value ->
-            if (value.contains("/")) {
-                fail(
-                    "The remote named stack branch prefix should not contain a forward slash; one will be appended " +
-                        "automatically",
-                )
+    val remoteNamedStackBranchPrefixDelegate =
+        option()
+            .default(DEFAULT_REMOTE_NAMED_STACK_BRANCH_PREFIX)
+            .help {
+                "The prefix to use when pushing named stacks (example: $DEFAULT_REMOTE_NAMED_STACK_BRANCH_PREFIX)"
             }
-            if (value == remoteBranchPrefix) {
-                fail("The remote named stack branch prefix should not be the same as the remote branch prefix")
+            .validate { value ->
+                if (value.contains("/")) {
+                    fail(
+                        "The remote named stack branch prefix should not contain a forward slash; one will be appended " +
+                            "automatically"
+                    )
+                }
+                if (value == remoteBranchPrefix) {
+                    fail(
+                        "The remote named stack branch prefix should not be the same as the remote branch prefix"
+                    )
+                }
             }
-        }
     private val remoteNamedStackBranchPrefix by remoteNamedStackBranchPrefixDelegate
 
-    private val showConfig by option(hidden = true).flag("--no-show-config", default = false)
-        .help { "Print the effective configuration to standard output (for debugging)" }
-
-    private val remoteName by argument()
-        .help {
-            """
-            The name of the git remote. This is used for git operations and for inferring github information if not 
-            explicitly configured.
-            """.trimIndent()
+    private val showConfig by
+        option(hidden = true).flag("--no-show-config", default = false).help {
+            "Print the effective configuration to standard output (for debugging)"
         }
-        .default(DEFAULT_REMOTE_NAME)
+
+    private val remoteName by
+        argument()
+            .help {
+                """
+                The name of the git remote. This is used for git operations and for inferring github information if not 
+                explicitly configured.
+                """
+                    .trimIndent()
+            }
+            .default(DEFAULT_REMOTE_NAME)
 
     val appWiring by lazy {
         val gitClient = OptimizedCliGitClient(workingDirectory, remoteBranchPrefix)
         val githubInfo = determineGithubInfo(gitClient)
-        val config = Config(
-            workingDirectory,
-            remoteName,
-            githubInfo,
-            remoteBranchPrefix,
-            remoteNamedStackBranchPrefix,
-            logLevel,
-            logsDirectory.takeIf { logToFiles },
-        )
+        val config =
+            Config(
+                workingDirectory,
+                remoteName,
+                githubInfo,
+                remoteBranchPrefix,
+                remoteNamedStackBranchPrefix,
+                logLevel,
+                logsDirectory.takeIf { logToFiles },
+            )
 
         DefaultAppWiring(githubToken, config, gitClient)
     }
@@ -340,12 +393,14 @@ you'll need to re-enable it again.
         return if (host != null && owner != null && name != null) {
             GitHubInfo(host, owner, name)
         } else {
-            val remoteUri = requireNotNull(gitClient.getRemoteUriOrNull(remoteName)) {
-                "Couldn't determine URI for remote named $remoteName"
-            }
-            val fromUri = requireNotNull(extractGitHubInfoFromUri(remoteUri)) {
-                "Couldn't infer github info from $remoteName URI: $remoteUri"
-            }
+            val remoteUri =
+                requireNotNull(gitClient.getRemoteUriOrNull(remoteName)) {
+                    "Couldn't determine URI for remote named $remoteName"
+                }
+            val fromUri =
+                requireNotNull(extractGitHubInfoFromUri(remoteUri)) {
+                    "Couldn't infer github info from $remoteName URI: $remoteUri"
+                }
             GitHubInfo(host ?: fromUri.host, owner ?: fromUri.owner, name ?: fromUri.name)
         }
     }
@@ -374,12 +429,17 @@ you'll need to re-enable it again.
         }
     }
 
-    private fun initLogging(logLevel: Level, logFileDirectory: File?): Pair<LoggerContext, String?> {
-        // NOTE: There is an initial "bootstrap" logging config set via logback.xml. This code makes assumptions based
-        // on configuration in that file.
+    private fun initLogging(
+        logLevel: Level,
+        logFileDirectory: File?,
+    ): Pair<LoggerContext, String?> {
+        // NOTE: There is an initial "bootstrap" logging config set via logback.xml. This code makes
+        // assumptions based on configuration in that file.
         val loggerContext = LoggerFactory.getILoggerFactory() as LoggerContext
         val rootLogger = loggerContext.getLogger(Logger.ROOT_LOGGER_NAME)
-        val fileAppender = if (logFileDirectory != null) createFileAppender(loggerContext, logFileDirectory) else null
+        val fileAppender =
+            if (logFileDirectory != null) createFileAppender(loggerContext, logFileDirectory)
+            else null
 
         rootLogger.getAppender("STDOUT").apply {
             clearAllFilters()
@@ -387,7 +447,7 @@ you'll need to re-enable it again.
                 ThresholdFilter().apply {
                     setLevel(logLevel.levelStr)
                     start()
-                },
+                }
             )
         }
 
@@ -399,18 +459,22 @@ you'll need to re-enable it again.
         return loggerContext to fileAppender?.file
     }
 
-    private fun createFileAppender(loggerContext: LoggerContext, directory: File): FileAppender<ILoggingEvent> =
-        RollingFileAppender<ILoggingEvent>()
-            .apply {
-                val fileAppender = this
-                context = loggerContext
-                name = "FILE"
-                encoder = PatternLayoutEncoder().apply {
+    private fun createFileAppender(
+        loggerContext: LoggerContext,
+        directory: File,
+    ): FileAppender<ILoggingEvent> =
+        RollingFileAppender<ILoggingEvent>().apply {
+            val fileAppender = this
+            context = loggerContext
+            name = "FILE"
+            encoder =
+                PatternLayoutEncoder().apply {
                     context = loggerContext
                     pattern = "%d{YYYY-MM-dd HH:mm:ss.SSS} [%thread] %-5level %logger{5} - %msg%n"
                     start()
                 }
-                rollingPolicy = TimeBasedRollingPolicy<ILoggingEvent>().apply {
+            rollingPolicy =
+                TimeBasedRollingPolicy<ILoggingEvent>().apply {
                     context = loggerContext
                     setParent(fileAppender)
                     fileNamePattern = "${directory.absolutePath}/jaspr.%d.log.txt"
@@ -418,16 +482,17 @@ you'll need to re-enable it again.
                     isCleanHistoryOnStart = true
                     start()
                 }
-                addFilter(
-                    ThresholdFilter().apply {
-                        setLevel(TRACE.levelStr)
-                        start()
-                    },
-                )
-                start()
-            }
+            addFilter(
+                ThresholdFilter().apply {
+                    setLevel(TRACE.levelStr)
+                    start()
+                }
+            )
+            start()
+        }
 
-    private fun printError(e: Exception): Nothing = throw PrintMessage(e.message.orEmpty(), 255, true)
+    private fun printError(e: Exception): Nothing =
+        throw PrintMessage(e.message.orEmpty(), 255, true)
 
     private fun Logger.logUnhandledException(exception: Exception, logFile: String?) {
         error(exception.message, exception)
@@ -439,7 +504,7 @@ you'll need to re-enable it again.
                     "Please consider enabling file logging (see the ${logToFilesDelegate.names.first()} " +
                         "and ${logsDirectoryDelegate.names.first()} options) and opening a bug report " +
                         "with the log file attached."
-                },
+                }
         )
     }
 
@@ -463,10 +528,10 @@ object Cli {
         The CLI follows the conventional pattern of `git jaspr <command>`. Each subcommand (ex. `status`, `push`, etc.)
         shares common bootstrap code that depends on command options/arguments. Clikt supports nesting commands and
         offers a mechanism for passing information between parent (`git-jaspr`) and child (ex. `push`), but this
-        mechanism is not ideal for our desired UI, due to the way Clikt parses command specific options positionally.
+        mechanism is not ideal for our desired UI, due to the way Clikt parses command-specific options positionally.
         We want to support `git jaspr status origin` and `git jaspr push origin` where `origin` is a remote name, rather
-        than `git jaspr --remote-name origin status` and `git jaspr --remote-name origin push`. In order to do this,
-        we're using NoOpCliktCommand for `git-jaspr`, and the common options/arguments/bootstrap code for the subcommands
+        than `git jaspr --remote-name origin status` and `git jaspr --remote-name origin push`. To do this, we're
+        using NoOpCliktCommand for `git-jaspr`, and the common options/arguments/bootstrap code for the subcommands
         is handled via an abstract base class.
          */
         NoOpCliktCommand(name = "git jaspr")
@@ -480,7 +545,7 @@ object Cli {
                     Clean(),
                     InstallCommitIdHook(),
                     NoOp(),
-                ),
+                )
             )
             .main(args)
     }
@@ -497,7 +562,8 @@ private const val GITHUB_TOKEN_ENV_VAR = "GIT_JASPR_TOKEN"
 
 // Note the embedded color below matches what Clikt uses for section headings
 @Language("Markdown")
-private val helpEpilog = """
+private val helpEpilog =
+    """
 **${TextColors.rgb("#E5C07B").invoke("Note on supplying config options via configuration files")}**
 
 Any option above can be supplied via the per-user config file ($CONFIG_FILE_NAME in your home directory) or the per-working copy config file ($CONFIG_FILE_NAME in your working directory). For example, you can supply the --log-level option in the config file like so:
@@ -505,4 +571,5 @@ Any option above can be supplied via the per-user config file ($CONFIG_FILE_NAME
 ```
 log-level=WARN
 ```
-""".trimIndent()
+"""
+        .trimIndent()

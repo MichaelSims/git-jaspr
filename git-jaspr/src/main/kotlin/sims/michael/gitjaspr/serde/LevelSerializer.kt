@@ -9,10 +9,8 @@ import kotlinx.serialization.encoding.Decoder
 import kotlinx.serialization.encoding.Encoder
 
 class LevelSerializer : KSerializer<Level> {
-    override val descriptor: SerialDescriptor = PrimitiveSerialDescriptor(
-        checkNotNull(Level::class.simpleName),
-        PrimitiveKind.STRING,
-    )
+    override val descriptor: SerialDescriptor =
+        PrimitiveSerialDescriptor(checkNotNull(Level::class.simpleName), PrimitiveKind.STRING)
 
     override fun serialize(encoder: Encoder, value: Level) {
         encoder.encodeString(value.levelStr)

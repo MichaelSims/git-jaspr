@@ -1,11 +1,11 @@
 package sims.michael.gitjaspr
 
+import java.io.File
 import org.eclipse.jgit.lib.Constants
 import org.slf4j.LoggerFactory
 import org.zeroturnaround.exec.ProcessExecutor
 import org.zeroturnaround.exec.ProcessResult
 import sims.michael.gitjaspr.RemoteRefEncoding.getRemoteRefParts
-import java.io.File
 
 class CliGitClient(
     override val workingDirectory: File,
@@ -62,7 +62,7 @@ class CliGitClient(
                     add("--prune")
                 }
                 add(remoteName)
-            },
+            }
         )
     }
 
@@ -93,20 +93,19 @@ class CliGitClient(
             .string
             .split(" ")
             .flatMap { parent -> log(parent.trim(), 1) }
-            .also {
-                logger.trace("getParents {} {}", commit, it)
-            }
+            .also { logger.trace("getParents {} {}", commit, it) }
     }
 
     override fun isWorkingDirectoryClean(): Boolean {
         logger.trace("isWorkingDirectoryClean")
-        return executeCommand(listOf("git", "status", "-s"))
-            .output
-            .lines
-            .isEmpty()
+        return executeCommand(listOf("git", "status", "-s")).output.lines.isEmpty()
     }
 
-    override fun getLocalCommitStack(remoteName: String, localObjectName: String, targetRefName: String): List<Commit> {
+    override fun getLocalCommitStack(
+        remoteName: String,
+        localObjectName: String,
+        targetRefName: String,
+    ): List<Commit> {
         logger.trace("getLocalCommitStack {} {} {}", remoteName, localObjectName, targetRefName)
         return logRange("$remoteName/$targetRefName", localObjectName)
     }
@@ -121,25 +120,23 @@ class CliGitClient(
 
     override fun getRemoteBranches(remoteName: String): List<RemoteBranch> {
         logger.trace("getRemoteBranches {}", remoteName)
-        val command = listOf(
-            "git",
-            "branch",
-            "-r",
-            "-l",
-            "--format=%(refname:lstrip=2)${GIT_FORMAT_SEPARATOR}%(objectname:short)",
-        )
-        return executeCommand(command)
-            .output
-            .lines
-            .mapNotNull { line ->
-                val (nameWithRemote, hash) = line.split(GIT_FORMAT_SEPARATOR)
-                val (thisRemoteName, name) = nameWithRemote.split("/", limit = 2)
-                if (thisRemoteName == remoteName && name != Constants.HEAD) {
-                    RemoteBranch(name, log(hash, 1).single())
-                } else {
-                    null
-                }
+        val command =
+            listOf(
+                "git",
+                "branch",
+                "-r",
+                "-l",
+                "--format=%(refname:lstrip=2)${GIT_FORMAT_SEPARATOR}%(objectname:short)",
+            )
+        return executeCommand(command).output.lines.mapNotNull { line ->
+            val (nameWithRemote, hash) = line.split(GIT_FORMAT_SEPARATOR)
+            val (thisRemoteName, name) = nameWithRemote.split("/", limit = 2)
+            if (thisRemoteName == remoteName && name != Constants.HEAD) {
+                RemoteBranch(name, log(hash, 1).single())
+            } else {
+                null
             }
+        }
     }
 
     override fun getRemoteBranchesById(remoteName: String): Map<String, RemoteBranch> {
@@ -160,11 +157,12 @@ class CliGitClient(
 
     override fun branch(name: String, startPoint: String, force: Boolean): Commit? {
         logger.trace("branch {} start {} force {}", name, startPoint, force)
-        val old = if (refExists(name)) {
-            log(name, 1).single()
-        } else {
-            null
-        }
+        val old =
+            if (refExists(name)) {
+                log(name, 1).single()
+            } else {
+                null
+            }
         val forceOption = if (force) listOf("-f") else emptyList()
         executeCommand(listOf("git", "branch") + forceOption + listOf(name, startPoint))
         return old
@@ -174,11 +172,12 @@ class CliGitClient(
         logger.trace("refExists {}", ref)
         // Using --verify requires fully qualified ref names
         // TODO eventually don't check the prefix
-        val prefixedRef = if (ref.startsWith(GitClient.R_HEADS) || ref.startsWith(GitClient.R_REMOTES)) {
-            ref
-        } else {
-            refsHeads(ref)
-        }
+        val prefixedRef =
+            if (ref.startsWith(GitClient.R_HEADS) || ref.startsWith(GitClient.R_REMOTES)) {
+                ref
+            } else {
+                refsHeads(ref)
+            }
         return ProcessExecutor()
             .directory(workingDirectory)
             .command(listOf("git", "show-ref", "--verify", "--quiet", prefixedRef))
@@ -231,15 +230,14 @@ class CliGitClient(
         )
     }
 
-    override fun commit(message: String, footerLines: Map<String, String>, commitIdent: Ident?): Commit {
+    override fun commit(
+        message: String,
+        footerLines: Map<String, String>,
+        commitIdent: Ident?,
+    ): Commit {
         logger.trace("commit {} {}", message, footerLines)
         executeCommand(
-            listOf(
-                "git",
-                "commit",
-                "-m",
-                CommitParsers.addFooters(message, footerLines),
-            ),
+            listOf("git", "commit", "-m", CommitParsers.addFooters(message, footerLines)),
             if (commitIdent != null) {
                 mapOf(
                     "GIT_COMMITTER_NAME" to commitIdent.name,
@@ -272,16 +270,19 @@ class CliGitClient(
 
     override fun push(refSpecs: List<RefSpec>, remoteName: String) {
         logger.trace("push {}", refSpecs)
-        val filteredRefSpecs = refSpecs
-            .filterNot { refSpec ->
-                // Cli push doesn't like it when you try to force push a branch that doesn't exist
-                // Since we want it deleted anyway, don't complain, just filter it out
-                refSpec.localRef == FORCE_PUSH_PREFIX && !refExists(refsRemotes(refSpec.remoteRef, remoteName))
-            }
-            .map { refSpec ->
-                // In this context we want to use the full ref name, so we can push HEAD to new branches
-                refSpec.copy(remoteRef = refsHeads(refSpec.remoteRef))
-            }
+        val filteredRefSpecs =
+            refSpecs
+                .filterNot { refSpec ->
+                    // Cli push doesn't like it when you try to force push a branch that doesn't
+                    // exist. Since we want it deleted anyway, don't complain, just filter it out
+                    refSpec.localRef == FORCE_PUSH_PREFIX &&
+                        !refExists(refsRemotes(refSpec.remoteRef, remoteName))
+                }
+                .map { refSpec ->
+                    // In this context we want to use the full ref name, so we can push HEAD to new
+                    // branches
+                    refSpec.copy(remoteRef = refsHeads(refSpec.remoteRef))
+                }
         if (filteredRefSpecs != refSpecs) {
             logger.trace("Filtered refSpecs to {}", filteredRefSpecs)
         }
@@ -289,22 +290,18 @@ class CliGitClient(
             logger.info("No refSpecs to push")
         } else {
             executeCommand(
-                listOf(
-                    "git",
-                    "push",
-                    remoteName,
-                    "--atomic",
-                ) + filteredRefSpecs.map(RefSpec::toString),
+                listOf("git", "push", remoteName, "--atomic") +
+                    filteredRefSpecs.map(RefSpec::toString)
             )
         }
     }
 
     override fun getRemoteUriOrNull(remoteName: String): String? {
-        // Intentionally avoiding trace logging since this is called during initialization and shows up in the output
-        // of --show-config, which I want to avoid.
-        // It might be better in the future to either log everything to STDERR, or conditionally log to STDERR depending
-        // on the command + options (i.e. git jaspr status --show-config should log to STDERR to separate logging from
-        // that command's output.
+        // Intentionally avoiding trace logging since this is called during initialization and shows
+        // up in the output of --show-config, which I want to avoid. It might be better in the
+        // future to either log everything to STDERR, or conditionally log to STDERR depending on
+        // the command + options (i.e. git jaspr status --show-config should log to STDERR to
+        // separate logging from that command's output.
         return executeCommand(listOf("git", "remote", "get-url", remoteName))
             .output
             .string
@@ -315,7 +312,9 @@ class CliGitClient(
     override fun getUpstreamBranch(remoteName: String): RemoteBranch? {
         logger.trace("getUpstreamBranch {}", remoteName)
         val prefix = "$remoteName/"
-        return executeCommand(listOf("git", "rev-parse", "--abbrev-ref", "--symbolic-full-name", "@{u}"))
+        return executeCommand(
+                listOf("git", "rev-parse", "--abbrev-ref", "--symbolic-full-name", "@{u}")
+            )
             .output
             .string
             .trim()
@@ -323,7 +322,9 @@ class CliGitClient(
             ?.takeIf { name -> name.startsWith(prefix) }
             ?.let { trackingBranchName ->
                 val trackingBranchSimpleName = trackingBranchName.removePrefix(prefix)
-                getRemoteBranches(remoteName).firstOrNull { branch -> branch.name == trackingBranchSimpleName }
+                getRemoteBranches(remoteName).firstOrNull { branch ->
+                    branch.name == trackingBranchSimpleName
+                }
             }
     }
 
@@ -339,10 +340,7 @@ class CliGitClient(
 
     override fun getCurrentBranchName(): String {
         logger.trace("getCurrentBranchName")
-        return executeCommand(listOf("git", "branch", "--show-current"))
-            .output
-            .string
-            .trim()
+        return executeCommand(listOf("git", "branch", "--show-current")).output.string.trim()
     }
 
     override fun isHeadDetached(): Boolean {
@@ -352,17 +350,18 @@ class CliGitClient(
 
     private fun gitLog(vararg logArg: String): List<Commit> {
         // Thanks to https://www.nushell.sh/cookbook/parsing_git_log.html for inspiration here
-        val prettyFormat = listOf(
-            "--pretty=format:%h", // hash
-            "%s", // subject
-            "%cN", // commit name
-            "%cE", // commit email
-            "%(trailers:key=commit-id,separator=$GIT_LOG_TRAILER_SEPARATOR,valueonly=true)", // trailers
-            "%ct", // commit timestamp
-            "%at", // author timestamp
-            "%B", // raw body (subject + body)
-        )
-            .joinToString(GIT_FORMAT_SEPARATOR)
+        val prettyFormat =
+            listOf(
+                    "--pretty=format:%h", // hash
+                    "%s", // subject
+                    "%cN", // commit name
+                    "%cE", // commit email
+                    "%(trailers:key=commit-id,separator=$GIT_LOG_TRAILER_SEPARATOR,valueonly=true)", // trailers
+                    "%ct", // commit timestamp
+                    "%at", // author timestamp
+                    "%B", // raw body (subject + body)
+                )
+                .joinToString(GIT_FORMAT_SEPARATOR)
 
         return executeCommand(listOf("git", "log") + logArg.toList() + listOf("-z", prettyFormat))
             .output
@@ -372,7 +371,10 @@ class CliGitClient(
             .map(CommitParsers::parseCommitLogEntry)
     }
 
-    private fun executeCommand(command: List<String>, environment: Map<String, String> = emptyMap()): ProcessResult {
+    private fun executeCommand(
+        command: List<String>,
+        environment: Map<String, String> = emptyMap(),
+    ): ProcessResult {
         return ProcessExecutor()
             .directory(workingDirectory)
             .environment(environment)

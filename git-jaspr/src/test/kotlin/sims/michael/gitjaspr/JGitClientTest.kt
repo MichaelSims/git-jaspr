@@ -1,9 +1,9 @@
 package sims.michael.gitjaspr
 
+import kotlin.test.assertEquals
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.assertThrows
 import sims.michael.gitjaspr.githubtests.GitHubTestHarness.Companion.withTestSetup
-import kotlin.test.assertEquals
 
 class JGitClientTest {
     @Test

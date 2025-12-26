@@ -1,5 +1,6 @@
 package sims.michael.gitjaspr.githubtests
 
+import kotlin.test.assertEquals
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.TestInfo
 import sims.michael.gitjaspr.DEFAULT_TARGET_REF
@@ -8,7 +9,6 @@ import sims.michael.gitjaspr.githubtests.GitHubTestHarness.Companion.withTestSet
 import sims.michael.gitjaspr.githubtests.generatedtestdsl.ident
 import sims.michael.gitjaspr.githubtests.generatedtestdsl.testCase
 import sims.michael.gitjaspr.testing.FunctionalTest
-import kotlin.test.assertEquals
 
 @FunctionalTest
 class GitHubTestHarnessFunctionalTest {
@@ -29,19 +29,18 @@ class GitHubTestHarnessFunctionalTest {
             createCommitsFrom(
                 testCase {
                     repository {
-                        commit {
-                            title = "commit_one"
-                        }
+                        commit { title = "commit_one" }
                         commit {
                             title = "commit_two"
                             remoteRefs += "main"
                             localRefs += "main"
                         }
                     }
-                },
+                }
             )
 
-            JGitClient(localRepo).logRange("${DEFAULT_TARGET_REF}~2", DEFAULT_TARGET_REF).let { log ->
+            JGitClient(localRepo).logRange("${DEFAULT_TARGET_REF}~2", DEFAULT_TARGET_REF).let { log
+                ->
                 val (commitOne, commitThree) = log
                 assertEquals(commitOne.copy(shortMessage = "commit_one"), commitOne)
                 assertEquals(commitThree.copy(shortMessage = "commit_two"), commitThree)
@@ -58,9 +57,7 @@ class GitHubTestHarnessFunctionalTest {
                         commit {
                             title = "commit_one"
                             branch {
-                                commit {
-                                    title = "commit_one_one"
-                                }
+                                commit { title = "commit_one_one" }
                                 commit {
                                     title = "commit_one_two"
                                     localRefs += "one"
@@ -74,7 +71,7 @@ class GitHubTestHarnessFunctionalTest {
                             remoteRefs += "main"
                         }
                     }
-                },
+                }
             )
             val jGitClient = JGitClient(localRepo)
             val log = jGitClient.logRange("HEAD~2", "HEAD")
@@ -142,7 +139,7 @@ class GitHubTestHarnessFunctionalTest {
                         title = "yet anothern"
                         userKey = "michael"
                     }
-                },
+                }
             )
         }
     }
@@ -182,7 +179,7 @@ class GitHubTestHarnessFunctionalTest {
                         headRef = "one"
                         userKey = "michael"
                     }
-                },
+                }
             )
             createCommitsFrom(
                 testCase {
@@ -208,7 +205,7 @@ class GitHubTestHarnessFunctionalTest {
                         headRef = "one"
                         userKey = "derelictMan"
                     }
-                },
+                }
             )
         }
     }

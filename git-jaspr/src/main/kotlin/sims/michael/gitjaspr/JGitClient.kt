@@ -4,6 +4,10 @@ import com.jcraft.jsch.AgentIdentityRepository
 import com.jcraft.jsch.IdentityRepository
 import com.jcraft.jsch.JSch
 import com.jcraft.jsch.SSHAgentConnector
+import java.io.File
+import java.time.Instant
+import java.time.ZoneId
+import java.time.ZonedDateTime.ofInstant
 import org.eclipse.jgit.api.CheckoutResult
 import org.eclipse.jgit.api.Git
 import org.eclipse.jgit.api.ListBranchCommand
@@ -22,10 +26,6 @@ import org.eclipse.jgit.transport.SshSessionFactory
 import org.eclipse.jgit.transport.ssh.jsch.JschConfigSessionFactory
 import org.slf4j.LoggerFactory
 import sims.michael.gitjaspr.RemoteRefEncoding.getRemoteRefParts
-import java.io.File
-import java.time.Instant
-import java.time.ZoneId
-import java.time.ZonedDateTime.ofInstant
 
 class JGitClient(
     override val workingDirectory: File,
@@ -47,7 +47,9 @@ class JGitClient(
             require(refExists) { "$refName does not exist" }
             git.checkout().setName(refName).run {
                 call()
-                check(result.status == CheckoutResult.Status.OK) { "Checkout result was ${result.status}" }
+                check(result.status == CheckoutResult.Status.OK) {
+                    "Checkout result was ${result.status}"
+                }
             }
         }
     }
@@ -70,7 +72,10 @@ class JGitClient(
         try {
             useGit { git -> git.fetch().setRemote(remoteName).setRemoveDeletedRefs(prune).call() }
         } catch (e: TransportException) {
-            throw GitJasprException("Failed to fetch from $remoteName; consider enabling the CLI git client", e)
+            throw GitJasprException(
+                "Failed to fetch from $remoteName; consider enabling the CLI git client",
+                e,
+            )
         }
     }
 
@@ -81,13 +86,10 @@ class JGitClient(
 
     override fun log(revision: String, maxCount: Int): List<Commit> = useGit { git ->
         logger.trace("log {} {}", revision, maxCount)
-        git
-            .log()
-            .add(git.repository.resolve(revision))
-            .setMaxCount(maxCount)
-            .call()
-            .toList()
-            .map { revCommit -> revCommit.toCommit(git) }
+        git.log().add(git.repository.resolve(revision)).setMaxCount(maxCount).call().toList().map {
+            revCommit ->
+            revCommit.toCommit(git)
+        }
     }
 
     override fun logAll(): List<Commit> {
@@ -97,8 +99,7 @@ class JGitClient(
 
     override fun getParents(commit: Commit): List<Commit> = useGit { git ->
         logger.trace("getParents {}", commit)
-        git
-            .log()
+        git.log()
             .add(git.repository.resolve(commit.hash))
             .setMaxCount(1)
             .call()
@@ -121,18 +122,20 @@ class JGitClient(
         return useGit { git -> git.status().call().isClean }
     }
 
-    override fun getLocalCommitStack(remoteName: String, localObjectName: String, targetRefName: String): List<Commit> {
+    override fun getLocalCommitStack(
+        remoteName: String,
+        localObjectName: String,
+        targetRefName: String,
+    ): List<Commit> {
         logger.trace("getLocalCommitStack {} {} {}", remoteName, localObjectName, targetRefName)
         return useGit { git ->
             val r = git.repository
-            val trackingBranch = requireNotNull(r.resolve("$remoteName/$targetRefName")) {
-                "$targetRefName does not exist in the remote"
-            }
-            val revCommits = git
-                .log()
-                .addRange(trackingBranch, r.resolve(localObjectName))
-                .call()
-                .toList()
+            val trackingBranch =
+                requireNotNull(r.resolve("$remoteName/$targetRefName")) {
+                    "$targetRefName does not exist in the remote"
+                }
+            val revCommits =
+                git.log().addRange(trackingBranch, r.resolve(localObjectName)).call().toList()
             val mergeCommits = revCommits.filter { it.parentCount > 1 }
             val objectReader = r.newObjectReader()
             require(mergeCommits.isEmpty()) {
@@ -150,21 +153,16 @@ class JGitClient(
     override fun getBranchNames(): List<String> {
         logger.trace("getBranchNames")
         return useGit { git ->
-            git
-                .branchList()
-                .setListMode(ListBranchCommand.ListMode.ALL)
-                .call()
-                .map {
-                    it.name.removePrefix(Constants.R_HEADS).removePrefix(Constants.R_REMOTES)
-                }
+            git.branchList().setListMode(ListBranchCommand.ListMode.ALL).call().map {
+                it.name.removePrefix(Constants.R_HEADS).removePrefix(Constants.R_REMOTES)
+            }
         }
     }
 
     override fun getRemoteBranches(remoteName: String): List<RemoteBranch> {
         logger.trace("getRemoteBranches")
         return useGit { git ->
-            git
-                .branchList()
+            git.branchList()
                 .setListMode(ListBranchCommand.ListMode.REMOTE)
                 .call()
                 .filter { it.name.startsWith(Constants.R_REMOTES) }
@@ -196,14 +194,19 @@ class JGitClient(
     override fun reset(refName: String) = apply {
         logger.trace("reset {}", refName)
         useGit { git ->
-            git.reset().setRef(git.repository.resolve(refName).name).setMode(ResetCommand.ResetType.HARD).call()
+            git.reset()
+                .setRef(git.repository.resolve(refName).name)
+                .setMode(ResetCommand.ResetType.HARD)
+                .call()
         }
     }
 
     override fun branch(name: String, startPoint: String, force: Boolean): Commit? {
         logger.trace("branch {} start {} force {}", name, startPoint, force)
         val old = if (refExists(name)) log(name, maxCount = 1).single() else null
-        useGit { git -> git.branchCreate().setName(name).setForce(force).setStartPoint(startPoint).call() }
+        useGit { git ->
+            git.branchCreate().setName(name).setForce(force).setStartPoint(startPoint).call()
+        }
         return old
     }
 
@@ -216,43 +219,54 @@ class JGitClient(
 
     override fun add(filePattern: String): GitClient {
         logger.trace("add {}", filePattern)
-        return apply {
-            useGit { git ->
-                git.add().addFilepattern(filePattern).call()
-            }
-        }
+        return apply { useGit { git -> git.add().addFilepattern(filePattern).call() } }
     }
 
     override fun setCommitId(commitId: String, commitIdent: Ident?) {
         logger.trace("setCommitId {}", commitId)
-        // JGitClient doesn't support per-commit idents, so we are ignoring the commitIdent argument intentionally
+        // JGitClient doesn't support per-commit idents, so we are ignoring the commitIdent argument
+        // intentionally
         useGit { git ->
             val r = git.repository
             val head = r.parseCommit(r.findRef(GitClient.HEAD).objectId)
             require(!CommitParsers.getFooters(head.fullMessage).containsKey(COMMIT_ID_LABEL))
-            git
-                .commit()
+            git.commit()
                 .setAmend(true)
-                .setMessage(CommitParsers.addFooters(head.fullMessage, mapOf(COMMIT_ID_LABEL to commitId)))
+                .setMessage(
+                    CommitParsers.addFooters(head.fullMessage, mapOf(COMMIT_ID_LABEL to commitId))
+                )
                 .call()
         }
     }
 
-    override fun commit(message: String, footerLines: Map<String, String>, commitIdent: Ident?): Commit {
+    override fun commit(
+        message: String,
+        footerLines: Map<String, String>,
+        commitIdent: Ident?,
+    ): Commit {
         logger.trace("commit {} {}", message, footerLines)
-        // JGitClient doesn't support per-commit idents, so we are ignoring the commitIdent argument intentionally
+        // JGitClient doesn't support per-commit idents, so we are ignoring the commitIdent argument
+        // intentionally
         return useGit { git ->
             val committer = PersonIdent(PersonIdent(git.repository), Instant.now())
-            git.commit().setMessage(CommitParsers.addFooters(message, footerLines)).setCommitter(committer).call()
+            git.commit()
+                .setMessage(CommitParsers.addFooters(message, footerLines))
+                .setCommitter(committer)
+                .call()
                 .toCommit(git)
         }
     }
 
     override fun cherryPick(commit: Commit, commitIdent: Ident?): Commit {
         logger.trace("cherryPick {}", commit)
-        // JGitClient doesn't support per-commit idents, so we are ignoring the commitIdent argument intentionally
+        // JGitClient doesn't support per-commit idents, so we are ignoring the commitIdent argument
+        // intentionally
         return useGit { git ->
-            git.cherryPick().include(git.repository.resolve(commit.hash)).call().newHead.toCommit(git)
+            git.cherryPick()
+                .include(git.repository.resolve(commit.hash))
+                .call()
+                .newHead
+                .toCommit(git)
         }
     }
 
@@ -260,27 +274,32 @@ class JGitClient(
         logger.trace("push {}", refSpecs)
         if (refSpecs.isNotEmpty()) {
             useGit { git ->
-                val specs = refSpecs.map { (localRef, remoteRef) ->
-                    org.eclipse.jgit.transport.RefSpec("$localRef:${GitClient.R_HEADS}$remoteRef")
-                }
+                val specs =
+                    refSpecs.map { (localRef, remoteRef) ->
+                        org.eclipse.jgit.transport.RefSpec(
+                            "$localRef:${GitClient.R_HEADS}$remoteRef"
+                        )
+                    }
                 checkNoPushErrors(
-                    git
-                        .push()
-                        .setRemote(remoteName)
-                        .setAtomic(true)
-                        .setRefSpecs(specs)
-                        .call(),
+                    git.push().setRemote(remoteName).setAtomic(true).setRefSpecs(specs).call()
                 )
             }
         }
     }
 
     private fun checkNoPushErrors(pushResults: Iterable<PushResult>) {
-        val pushErrors = pushResults
-            .flatMap { result -> result.remoteUpdates }
-            .filterNot { it.status in SUCCESSFUL_PUSH_STATUSES }
+        val pushErrors =
+            pushResults
+                .flatMap { result -> result.remoteUpdates }
+                .filterNot { it.status in SUCCESSFUL_PUSH_STATUSES }
         for (e in pushErrors) {
-            logger.error("Push failed: {} -> {} ({}: {})", e.srcRef, e.remoteName, e.message, e.status)
+            logger.error(
+                "Push failed: {} -> {} ({}: {})",
+                e.srcRef,
+                e.remoteName,
+                e.message,
+                e.status,
+            )
         }
         check(pushErrors.isEmpty()) { "A git push operation failed, please check the logs" }
     }
@@ -288,7 +307,12 @@ class JGitClient(
     override fun getRemoteUriOrNull(remoteName: String): String? {
         // Intentionally avoiding trace logging here. See comment in CliGitClient.getRemoteUriOrNull
         return useGit { git ->
-            git.remoteList().call().singleOrNull { it.name == remoteName }?.urIs?.firstOrNull()?.toASCIIString()
+            git.remoteList()
+                .call()
+                .singleOrNull { it.name == remoteName }
+                ?.urIs
+                ?.firstOrNull()
+                ?.toASCIIString()
         }
     }
 
@@ -300,7 +324,9 @@ class JGitClient(
             ?.takeIf { name -> name.startsWith(prefix) }
             ?.let { trackingBranchName ->
                 val trackingBranchSimpleName = trackingBranchName.removePrefix(prefix)
-                getRemoteBranches(remoteName).firstOrNull { branch -> branch.name == trackingBranchSimpleName }
+                getRemoteBranches(remoteName).firstOrNull { branch ->
+                    branch.name == trackingBranchSimpleName
+                }
             }
     }
 
@@ -315,7 +341,12 @@ class JGitClient(
             val currentBranch = r.branch
             with(config) {
                 setString(CONFIG_BRANCH_SECTION, currentBranch, CONFIG_KEY_REMOTE, remoteName)
-                setString(CONFIG_BRANCH_SECTION, currentBranch, CONFIG_KEY_MERGE, "${Constants.R_HEADS}$branchName")
+                setString(
+                    CONFIG_BRANCH_SECTION,
+                    currentBranch,
+                    CONFIG_KEY_MERGE,
+                    "${Constants.R_HEADS}$branchName",
+                )
                 save()
             }
         }
@@ -325,10 +356,7 @@ class JGitClient(
         logger.trace("reflog")
         return useGit { git ->
             val reader = git.repository.newObjectReader()
-            git
-                .reflog()
-                .call()
-                .flatMap { entry -> log(reader.abbreviate(entry.newId).name(), 1) }
+            git.reflog().call().flatMap { entry -> log(reader.abbreviate(entry.newId).name(), 1) }
         }
     }
 
@@ -339,19 +367,18 @@ class JGitClient(
 
     override fun isHeadDetached(): Boolean {
         logger.trace("isHeadDetached")
-        return useGit { git ->
-            !git.repository.exactRef(Constants.HEAD).isSymbolic
-        }
+        return useGit { git -> !git.repository.exactRef(Constants.HEAD).isSymbolic }
     }
 
     private inline fun <T> useGit(block: (Git) -> T): T = Git.open(workingDirectory).use(block)
 
     companion object {
-        private val SUCCESSFUL_PUSH_STATUSES = setOf(
-            RemoteRefUpdate.Status.OK,
-            RemoteRefUpdate.Status.UP_TO_DATE,
-            RemoteRefUpdate.Status.NON_EXISTING,
-        )
+        private val SUCCESSFUL_PUSH_STATUSES =
+            setOf(
+                RemoteRefUpdate.Status.OK,
+                RemoteRefUpdate.Status.UP_TO_DATE,
+                RemoteRefUpdate.Status.NON_EXISTING,
+            )
 
         init {
             // Enable support for an SSH agent for those who use passphrases for their keys
@@ -364,7 +391,7 @@ class JGitClient(
                             jsch.identityRepository = agent
                         }
                     }
-                },
+                }
             )
         }
     }
@@ -373,7 +400,8 @@ class JGitClient(
 private fun RevCommit.toCommit(git: Git): Commit {
     val r = git.repository
     val objectReader = r.newObjectReader()
-    fun PersonIdent.whenAsZonedDateTime() = ofInstant(whenAsInstant, ZoneId.systemDefault()).canonicalize()
+    fun PersonIdent.whenAsZonedDateTime() =
+        ofInstant(whenAsInstant, ZoneId.systemDefault()).canonicalize()
     return Commit(
         objectReader.abbreviate(id).name(),
         shortMessage,

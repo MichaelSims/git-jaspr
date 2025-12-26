@@ -8,25 +8,27 @@ import io.ktor.client.plugins.ClientRequestException
 import io.ktor.http.HttpStatusCode
 
 class ErrorMappingGraphQLClient<RequestCustomizer>(
-    private val delegate: GraphQLClient<RequestCustomizer>,
+    private val delegate: GraphQLClient<RequestCustomizer>
 ) : GraphQLClient<RequestCustomizer> {
     override suspend fun <T : Any> execute(
         request: GraphQLClientRequest<T>,
         requestCustomizer: RequestCustomizer.() -> Unit,
-    ): GraphQLClientResponse<T> = try {
-        delegate.execute(request, requestCustomizer).also(::failIfAnyErrors)
-    } catch (e: ClientRequestException) {
-        mapClientRequestException(e)
-    }
+    ): GraphQLClientResponse<T> =
+        try {
+            delegate.execute(request, requestCustomizer).also(::failIfAnyErrors)
+        } catch (e: ClientRequestException) {
+            mapClientRequestException(e)
+        }
 
     override suspend fun execute(
         requests: List<GraphQLClientRequest<*>>,
         requestCustomizer: RequestCustomizer.() -> Unit,
-    ): List<GraphQLClientResponse<*>> = try {
-        delegate.execute(requests, requestCustomizer).onEach(::failIfAnyErrors)
-    } catch (e: ClientRequestException) {
-        mapClientRequestException(e)
-    }
+    ): List<GraphQLClientResponse<*>> =
+        try {
+            delegate.execute(requests, requestCustomizer).onEach(::failIfAnyErrors)
+        } catch (e: ClientRequestException) {
+            mapClientRequestException(e)
+        }
 
     private fun mapClientRequestException(e: ClientRequestException): Nothing {
         if (e.response.status == HttpStatusCode.Unauthorized) {
@@ -40,7 +42,7 @@ class ErrorMappingGraphQLClient<RequestCustomizer>(
         val errors = response.errors.orEmpty()
         if (errors.isNotEmpty()) {
             throw GitJasprException(
-                "GraphQL request failed with errors: ${errors.map(GraphQLClientError::message)}",
+                "GraphQL request failed with errors: ${errors.map(GraphQLClientError::message)}"
             )
         }
     }

@@ -1,5 +1,11 @@
 package sims.michael.gitjaspr.githubtests
 
+import java.io.File
+import java.io.IOException
+import java.nio.file.Files
+import java.util.Properties
+import java.util.concurrent.atomic.AtomicBoolean
+import kotlin.text.RegexOption.IGNORE_CASE
 import kotlinx.coroutines.runBlocking
 import org.eclipse.jgit.junit.MockSystemReader
 import org.eclipse.jgit.lib.Constants.GIT_COMMITTER_EMAIL_KEY
@@ -14,14 +20,9 @@ import sims.michael.gitjaspr.PullRequest
 import sims.michael.gitjaspr.RemoteRefEncoding.DEFAULT_REMOTE_BRANCH_PREFIX
 import sims.michael.gitjaspr.RemoteRefEncoding.getRemoteRefParts
 import sims.michael.gitjaspr.testing.DEFAULT_COMMITTER
-import java.io.File
-import java.io.IOException
-import java.nio.file.Files
-import java.util.Properties
-import java.util.concurrent.atomic.AtomicBoolean
-import kotlin.text.RegexOption.IGNORE_CASE
 
-class GitHubTestHarness private constructor(
+class GitHubTestHarness
+private constructor(
     val scratchDir: File,
     val localRepo: File,
     val remoteRepo: File,
@@ -41,12 +42,13 @@ class GitHubTestHarness private constructor(
         if (!useFakeRemote) {
             configByUserKey
                 .map { (k, v) ->
-                    val wiring = GitHubClientWiring(
-                        v.githubToken,
-                        gitHubInfo,
-                        remoteBranchPrefix,
-                        getPullRequestsPageSize,
-                    )
+                    val wiring =
+                        GitHubClientWiring(
+                            v.githubToken,
+                            gitHubInfo,
+                            remoteBranchPrefix,
+                            getPullRequestsPageSize,
+                        )
                     k to wiring.gitHubClient
                 }
                 .toMap()
@@ -58,51 +60,54 @@ class GitHubTestHarness private constructor(
     val gitHub by lazy {
         if (!useFakeRemote) {
             // TODO
-            //   At some point I had intended to use the github client just for verifications. Since all of the GH
-            //   clients here point to the same project, it shouldn't matter which client I actually use, as long as
-            //   I'm not mutating anything. Unfortunately, I *am* mutating with this client (via push and merge).
-            //   To make matters worse, it matters which client I use to push... it can't be the same one that I use
-            //   to approve the PRs in the tests, otherwise I get "Can not approve your own pull request" from GitHub.
-            //   Right now I'm lucky that in my particular config calling `values.first()` grabs the user who isn't
-            //   the one approving all the PRs in the tests.
-            //   I need to think on how to fix this. Either the harness needs to expose a `gitJasprByUserKey` to the
-            //   tests so that the tests can choose which user to push and merge with, or I need to come up with a more
-            //   predictable way to choose the token that will be used for pushes and merges in the tests.
-            //   Note that the mechanism the external process test uses to land on a github token to use is entirely
-            //   different. It basically uses whichever one is in the home directory of the user running the test.
-            //   This may be fixable too, but it's less important because the point of the external process test is
-            //   to provide a mechanism to update native-image metadata, and not so much to verify behavior.
+            // At some point I had intended to use the github client just for verifications. Since
+            // all of the GH clients here point to the same project, it shouldn't matter which
+            // client I actually use, as long as I'm not mutating anything. Unfortunately, I *am*
+            // mutating with this client (via push and merge). To make matters worse, it matters
+            // which client I use to push... it can't be the same one that I use to approve the PRs
+            // in the tests, otherwise I get "Can not approve your own pull request" from GitHub.
+            // Right now I'm lucky that in my particular config calling `values.first()` grabs the
+            // user who isn't the one approving all the PRs in the tests. I need to think on how to
+            // fix this. Either the harness needs to expose a `gitJasprByUserKey` to the tests so
+            // that the tests can choose which user to push and merge with, or I need to
+            // come up with a more predictable way to choose the token that will be used for pushes
+            // and merges in the tests.
+            // Note that the mechanism the external process test uses to land on a github token to
+            // use is entirely different. It basically uses whichever one is in the home directory
+            // of the user running the test.
+            // This may be fixable too, but it's less important because the point of the external
+            // process test is to provide a mechanism to update native-image metadata, and not so
+            // much to verify behavior.
             ghClientsByUserKey.values.first()
         } else {
-            GitHubStubClient(
-                remoteBranchPrefix,
-                remoteName,
-                localGit,
-            )
+            GitHubStubClient(remoteBranchPrefix, remoteName, localGit)
         }
     }
 
     // Assign unique IDs for the lifetime of this test harness
     private fun uuidIterator() = (0..Int.MAX_VALUE).asSequence().map(Int::toString).iterator()
+
     private val ids = uuidIterator()
 
-    val gitJaspr = GitJaspr(
-        ghClient = gitHub,
-        localGit,
-        Config(localRepo, remoteName, gitHubInfo, remoteBranchPrefix = remoteBranchPrefix),
-        ids::next,
-        commitIdentOverride = DEFAULT_COMMITTER,
-    )
+    val gitJaspr =
+        GitJaspr(
+            ghClient = gitHub,
+            localGit,
+            Config(localRepo, remoteName, gitHubInfo, remoteBranchPrefix = remoteBranchPrefix),
+            ids::next,
+            commitIdentOverride = DEFAULT_COMMITTER,
+        )
 
     init {
-        val uriToClone = if (!useFakeRemote) {
-            remoteUri
-        } else {
-            val remoteSource = scratchDir.resolve("remote-source")
-            JGitClient(remoteSource).init().createInitialCommit()
-            remoteGit.clone(remoteSource.toURI().toString(), remoteName, bare = true)
-            remoteRepo.toURI().toString()
-        }
+        val uriToClone =
+            if (!useFakeRemote) {
+                remoteUri
+            } else {
+                val remoteSource = scratchDir.resolve("remote-source")
+                JGitClient(remoteSource).init().createInitialCommit()
+                remoteGit.clone(remoteSource.toURI().toString(), remoteName, bare = true)
+                remoteRepo.toURI().toString()
+            }
         localGit.clone(uriToClone, remoteName)
     }
 
@@ -110,12 +115,13 @@ class GitHubTestHarness private constructor(
         requireNoDuplicatedCommitTitles(testCase)
         requireNoDuplicatedPrTitles(testCase)
 
-        val commitHashesByTitle = localGit.logAll().associate { commit -> commit.shortMessage to commit.hash }
+        val commitHashesByTitle =
+            localGit.logAll().associate { commit -> commit.shortMessage to commit.hash }
 
         val initialCommit = localGit.log(DEFAULT_TARGET_REF).last()
 
-        // This saves the state of `main` so it will be restored even if moved by an "external" process
-        // This is for functional tests so I can roll them back when done.
+        // This saves the state of `main` so it will be restored even if moved by an "external"
+        // process. This is for functional tests, so I can roll them back when done.
         val initialRestoreMarker = "$RESTORE_PREFIX$DEFAULT_TARGET_REF"
         if (!localGit.getBranchNames().contains(initialRestoreMarker)) {
             localGit.branch(initialRestoreMarker, startPoint = initialCommit.hash)
@@ -127,43 +133,50 @@ class GitHubTestHarness private constructor(
         fun BranchData.createCommits() {
             val iterator = commits.iterator() // Using an iterator to peek ahead at the next element
 
-            @Suppress("GrazieInspection") // IJ being a little too aggressive on the grammar assistance...
+            // IJ being a little too aggressive on the grammar assistance...
+            @Suppress("GrazieInspection")
             while (iterator.hasNext()) {
                 val commitData = iterator.next()
 
-                // Called for JGitClient's sake. If we're fully switched to CliGitClient, this can be removed
+                // Called for JGitClient's sake. If we're fully switched to CliGitClient, this can
+                // be removed
                 setGitCommitterInfo(commitData.committer.toIdent())
 
                 val existingHash = commitHashesByTitle[commitData.title]
-                val commit = if (existingHash != null) {
-                    // A commit with this title already exists... if it's a direct child of this commit, simply check
-                    // it out. Otherwise cherry-pick it.
-                    // Note that we don't support amending commits, so it's not really possible to _change_ a commit
-                    // using this test harness.
-                    val headHash = localGit.log("HEAD", 1).single().hash
-                    val parentHashes = localGit.getParents(localGit.log(existingHash, 1).single()).map(Commit::hash)
-                    if (headHash in parentHashes) {
-                        localGit.checkout(existingHash)
-                        localGit.log(existingHash, maxCount = 1).single()
+                val commit =
+                    if (existingHash != null) {
+                        // A commit with this title already exists... if it's a direct child of this
+                        // commit, simply check it out. Otherwise cherry-pick it.
+                        // Note that we don't support amending commits, so it's not really possible
+                        // to _change_ a commit using this test harness.
+                        val headHash = localGit.log("HEAD", 1).single().hash
+                        val parentHashes =
+                            localGit
+                                .getParents(localGit.log(existingHash, 1).single())
+                                .map(Commit::hash)
+                        if (headHash in parentHashes) {
+                            localGit.checkout(existingHash)
+                            localGit.log(existingHash, maxCount = 1).single()
+                        } else {
+                            localGit.cherryPick(
+                                localGit.log(existingHash, maxCount = 1).single(),
+                                commitData.committer.toIdent(),
+                            )
+                        }
                     } else {
-                        localGit.cherryPick(
-                            localGit.log(existingHash, maxCount = 1).single(),
-                            commitData.committer.toIdent(),
-                        )
+                        // Create a new one
+                        commitData.create()
                     }
-                } else {
-                    // Create a new one
-                    commitData.create()
-                }
 
                 if (!iterator.hasNext()) {
-                    // This is a HEAD commit with no more children... bomb out if it doesn't have a named ref assigned
+                    // This is a HEAD commit with no more children... bomb out if it doesn't have a
+                    // named ref assigned
                     requireNamedRef(commitData)
                 }
 
-                // Create temp branches to track which refs need to either be restored or deleted when the test is
-                // finished and we roll back the changes (important in functional tests to leave the remote repo in
-                // the same state we left it)
+                // Create temp branches to track which refs need to either be restored or deleted
+                // when the test is finished and we roll back the changes (important in functional
+                // tests to leave the remote repo in the same state we found it)
                 for (localRef in commitData.localRefs) {
                     val previousCommit = localGit.branch(localRef, force = true)
 
@@ -174,11 +187,12 @@ class GitHubTestHarness private constructor(
                         // This local ref existed already...
                         val branchNames = localGit.getBranchNames()
                         if (branchNames.any { it.startsWith(rollbackDeleteMarker) }) {
-                            // ...and was marked for deletion in a previous test stage. Update the marker.
+                            // ...and was marked for deletion in a previous test stage. Update the
+                            // marker.
                             localGit.branch(rollbackDeleteMarker, force = true)
                         } else if (!branchNames.contains(rollbackRestoreMarker)) {
-                            // ...and was not previously marked for deletion. Set the restore marker unless it already
-                            // exists due to a previous testing stage.
+                            // ...and was not previously marked for deletion. Set the restore marker
+                            // unless it already exists due to a previous testing stage.
                             localGit.branch(rollbackRestoreMarker, startPoint = previousCommit.hash)
                         }
                     } else {
@@ -188,7 +202,10 @@ class GitHubTestHarness private constructor(
                 }
 
                 for (remoteRef in commitData.remoteRefs) {
-                    localGit.push(listOf(RefSpec("${FORCE_PUSH_PREFIX}HEAD", remoteRef)), remoteName)
+                    localGit.push(
+                        listOf(RefSpec("${FORCE_PUSH_PREFIX}HEAD", remoteRef)),
+                        remoteName,
+                    )
                 }
 
                 if (commitData.branches.isNotEmpty()) {
@@ -221,36 +238,42 @@ class GitHubTestHarness private constructor(
         val prs = testCase.pullRequests
         if (prs.isNotEmpty()) {
             val existingPrsByTitle = gitHub.getPullRequestsById().associateBy(PullRequest::title)
-            val commitsByTitle = testCase.repository.collectAllCommits().associateBy(CommitData::title)
+            val commitsByTitle =
+                testCase.repository.collectAllCommits().associateBy(CommitData::title)
             for (pr in prs) {
                 val gitHubClient = (ghClientsByUserKey[pr.userKey] ?: gitHub)
-                val newPullRequest = PullRequest(
-                    id = null,
-                    commitId = getRemoteRefParts(pr.headRef, remoteBranchPrefix)?.commitId,
-                    number = null,
-                    headRefName = pr.headRef,
-                    baseRefName = pr.baseRef,
-                    title = pr.title,
-                    body = pr.body,
-                    // This logic is incomplete. In this context, we could have PRs with multiple commits. If we want
-                    // to support this so we can test how JASPR reacts, this logic needs to be updated to set
-                    // checksPass only if _all_ commits in the PR will pass. It's unlikely that I'll make this change
-                    // but I'll leave this comment here
-                    checksPass = commitsByTitle[pr.title]?.willPassVerification,
-                    approved = pr.willBeApprovedByUserKey?.isNotBlank(),
-                    permalink = "http://example.com",
-                    isDraft = isDraftRegex.matches(pr.title),
-                )
+                val newPullRequest =
+                    PullRequest(
+                        id = null,
+                        commitId = getRemoteRefParts(pr.headRef, remoteBranchPrefix)?.commitId,
+                        number = null,
+                        headRefName = pr.headRef,
+                        baseRefName = pr.baseRef,
+                        title = pr.title,
+                        body = pr.body,
+                        // This logic is incomplete. In this context, we could have PRs with
+                        // multiple commits. If we want to support this so we can test how JASPR
+                        // reacts, this logic needs to be updated to set checksPass only if _all_
+                        // commits in the PR will pass. It's unlikely that I'll make this change,
+                        // but I'll leave this comment here
+                        checksPass = commitsByTitle[pr.title]?.willPassVerification,
+                        approved = pr.willBeApprovedByUserKey?.isNotBlank(),
+                        permalink = "http://example.com",
+                        isDraft = isDraftRegex.matches(pr.title),
+                    )
                 val existingPr = existingPrsByTitle[pr.title]
-                val createdOrUpdatedPr = if (existingPr == null) {
-                    gitHubClient.createPullRequest(newPullRequest)
-                } else {
-                    newPullRequest
-                        .copy(id = existingPr.id)
-                        .also { gitHubClient.updatePullRequest(it) }
-                }
+                val createdOrUpdatedPr =
+                    if (existingPr == null) {
+                        gitHubClient.createPullRequest(newPullRequest)
+                    } else {
+                        newPullRequest.copy(id = existingPr.id).also {
+                            gitHubClient.updatePullRequest(it)
+                        }
+                    }
                 if (!useFakeRemote && pr.willBeApprovedByUserKey?.isNotBlank() == true) {
-                    ghClientsByUserKey[pr.willBeApprovedByUserKey]?.approvePullRequest(createdOrUpdatedPr)
+                    ghClientsByUserKey[pr.willBeApprovedByUserKey]?.approvePullRequest(
+                        createdOrUpdatedPr
+                    )
                 }
             }
         }
@@ -268,37 +291,36 @@ class GitHubTestHarness private constructor(
     fun rollbackRemoteChanges() {
         logger.trace("rollbackRemoteChanges")
         val restoreRegex = "$RESTORE_PREFIX(.*?)".toRegex()
-        val toRestore = localGit
-            .getBranchNames()
-            .also { branchNames -> logger.trace("getBranchNames {}", branchNames) }
-            .mapNotNull { name ->
-                restoreRegex.matchEntire(name)
-            }
-            .map {
-                RefSpec(it.groupValues[0], it.groupValues[1])
-            }
+        val toRestore =
+            localGit
+                .getBranchNames()
+                .also { branchNames -> logger.trace("getBranchNames {}", branchNames) }
+                .mapNotNull { name -> restoreRegex.matchEntire(name) }
+                .map { RefSpec(it.groupValues[0], it.groupValues[1]) }
 
-        // This currently deletes all "jaspr/" branches indiscriminately. Much better would be to capture the ones
-        // we created via our JGitClient and delete only those
+        // This currently deletes all "jaspr/" branches indiscriminately. Much better would be to
+        // capture the ones we created via our JGitClient and delete only those
         val deleteRegex =
-            "($DELETE_PREFIX(.*)|$DEFAULT_REMOTE_NAME/($remoteBranchPrefix.*))"
-                .toRegex()
+            "($DELETE_PREFIX(.*)|$DEFAULT_REMOTE_NAME/($remoteBranchPrefix.*))".toRegex()
 
-        val toDelete = localGit.getBranchNames()
-            .mapNotNull { name -> deleteRegex.matchEntire(name) }
-            .map { result ->
-                RefSpec(
-                    "", // Will force push below
-                    result.groupValues.last(String::isNotBlank),
-                )
-            }
+        val toDelete =
+            localGit
+                .getBranchNames()
+                .mapNotNull { name -> deleteRegex.matchEntire(name) }
+                .map { result ->
+                    RefSpec(
+                        "", // Will force push below
+                        result.groupValues.last(String::isNotBlank),
+                    )
+                }
         val refSpecs = (toRestore + toDelete).distinct().map(RefSpec::forcePush)
         logger.debug("Pushing {}", refSpecs)
         localGit.push(refSpecs, remoteName)
-        fun deleteBranches() = localGit.deleteBranches(
-            names = toRestore.map(RefSpec::localRef) + toDelete.map(RefSpec::remoteRef),
-            force = true,
-        )
+        fun deleteBranches() =
+            localGit.deleteBranches(
+                names = toRestore.map(RefSpec::localRef) + toDelete.map(RefSpec::remoteRef),
+                force = true,
+            )
         if (localGit.getCurrentBranchName() in toDelete.map(RefSpec::remoteRef)) {
             try {
                 localGit.checkout(localGit.log("HEAD", 1).single().hash)
@@ -320,15 +342,22 @@ class GitHubTestHarness private constructor(
             try {
                 ProcessExecutor()
                     .directory(repo)
-                    .command(listOf("git", "log", "--graph", "--all", "--oneline", "--pretty=format:%h -%d %s <%an>"))
+                    .command(
+                        listOf(
+                            "git",
+                            "log",
+                            "--graph",
+                            "--all",
+                            "--oneline",
+                            "--pretty=format:%h -%d %s <%an>",
+                        )
+                    )
                     .destroyOnExit()
                     .readOutput(true)
                     .execute()
                     .output
                     .lines
-                    .forEach {
-                        logger.trace("{}: {}", label, it)
-                    }
+                    .forEach { logger.trace("{}: {}", label, it) }
             } catch (e: IOException) {
                 logger.error("Couldn't run git log, whatsa matta, you don't have git installed!?")
                 canRunGit.set(false)
@@ -353,33 +382,37 @@ class GitHubTestHarness private constructor(
         return localGit
             .add(file.name)
             .commit(
-                message = if (body.isNotEmpty()) {
-                    title.trim() + "\n\n" + body.trim() + "\n"
-                } else {
-                    title
-                },
-                footerLines = buildMap {
-                    putAll(footerLines)
-                    if (safeId == null || safeId.isNotBlank()) {
-                        put(
-                            COMMIT_ID_LABEL,
-                            safeId ?: title.also {
-                                require(!it.contains("\\s+".toRegex())) {
-                                    "ID wasn't provided and title '$it' can\'t be used as it contains whitespace."
-                                }
-                            },
-                        )
-                    }
-                    if (safeWillPassVerification != null) {
-                        put("verify-result", if (safeWillPassVerification) "0" else "13")
-                    }
-                },
+                message =
+                    if (body.isNotEmpty()) {
+                        title.trim() + "\n\n" + body.trim() + "\n"
+                    } else {
+                        title
+                    },
+                footerLines =
+                    buildMap {
+                        putAll(footerLines)
+                        if (safeId == null || safeId.isNotBlank()) {
+                            put(
+                                COMMIT_ID_LABEL,
+                                safeId
+                                    ?: title.also {
+                                        require(!it.contains("\\s+".toRegex())) {
+                                            "ID wasn't provided and title '$it' can\'t be used as it contains whitespace."
+                                        }
+                                    },
+                            )
+                        }
+                        if (safeWillPassVerification != null) {
+                            put("verify-result", if (safeWillPassVerification) "0" else "13")
+                        }
+                    },
                 commitIdent = committer.toIdent(),
             )
     }
 
     private fun IdentData.toIdent(): Ident =
-        Ident(name, email).takeUnless { it.name.isBlank() || it.email.isBlank() } ?: DEFAULT_COMMITTER
+        Ident(name, email).takeUnless { it.name.isBlank() || it.email.isBlank() }
+            ?: DEFAULT_COMMITTER
 
     private fun requireNamedRef(commit: CommitData) {
         require((commit.localRefs + commit.remoteRefs).isNotEmpty()) {
@@ -388,14 +421,15 @@ class GitHubTestHarness private constructor(
     }
 
     private fun setGitCommitterInfo(ident: Ident) {
-        SystemReader
-            .setInstance(
-                MockSystemReader()
-                    .apply {
-                        setProperty(GIT_COMMITTER_NAME_KEY, ident.name.ifBlank { DEFAULT_COMMITTER.name })
-                        setProperty(GIT_COMMITTER_EMAIL_KEY, ident.email.ifBlank { DEFAULT_COMMITTER.email })
-                    },
-            )
+        SystemReader.setInstance(
+            MockSystemReader().apply {
+                setProperty(GIT_COMMITTER_NAME_KEY, ident.name.ifBlank { DEFAULT_COMMITTER.name })
+                setProperty(
+                    GIT_COMMITTER_EMAIL_KEY,
+                    ident.email.ifBlank { DEFAULT_COMMITTER.email },
+                )
+            }
+        )
     }
 
     private fun requireNoDuplicatedCommitTitles(testCase: TestCaseData) {
@@ -405,7 +439,8 @@ class GitHubTestHarness private constructor(
             }
 
         val titles = collectCommitTitles(testCase.repository)
-        val duplicatedTitles = titles.groupingBy { it }.eachCount().filterValues { count -> count > 1 }.keys
+        val duplicatedTitles =
+            titles.groupingBy { it }.eachCount().filterValues { count -> count > 1 }.keys
         require(duplicatedTitles.isEmpty()) {
             "All commit subjects in the repo should be unique as they are used as keys. " +
                 "The following were duplicated: $duplicatedTitles\n" +
@@ -418,12 +453,12 @@ class GitHubTestHarness private constructor(
     }
 
     private fun requireNoDuplicatedPrTitles(testCase: TestCaseData) {
-        val duplicatedTitles = testCase
-            .pullRequests
-            .groupingBy(PullRequestData::title)
-            .eachCount()
-            .filterValues { count -> count > 1 }
-            .keys
+        val duplicatedTitles =
+            testCase.pullRequests
+                .groupingBy(PullRequestData::title)
+                .eachCount()
+                .filterValues { count -> count > 1 }
+                .keys
         require(duplicatedTitles.isEmpty()) {
             "All pull request titles should be unique as they are used as keys. " +
                 "The following were duplicated: $duplicatedTitles"
@@ -431,6 +466,7 @@ class GitHubTestHarness private constructor(
     }
 
     private val filenameSafeRegex = "\\W+".toRegex()
+
     private fun String.sanitize() = replace(filenameSafeRegex, "_").lowercase()
 
     private data class UserConfig(val name: String, val email: String, val githubToken: String)
@@ -448,39 +484,44 @@ class GitHubTestHarness private constructor(
             val scratchDir = createTempDir()
             val (localRepo, remoteRepo) = scratchDir.createRepoDirs()
 
-            val properties = Properties()
-                .apply {
-                    if (configPropertiesFile.exists()) {
-                        configPropertiesFile.inputStream().use(::load)
-                    } else {
-                        logger.info("No {} found.", configPropertiesFile) // Expected in CI/CD
+            val properties =
+                Properties()
+                    .apply {
+                        if (configPropertiesFile.exists()) {
+                            configPropertiesFile.inputStream().use(::load)
+                        } else {
+                            logger.info("No {} found.", configPropertiesFile) // Expected in CI/CD
+                        }
                     }
-                }
-                .map { (k, v) -> k.toString() to v.toString() }
-                .toMap()
+                    .map { (k, v) -> k.toString() to v.toString() }
+                    .toMap()
 
             val configByUserKey = properties.getConfigByUserKeyFromPropertiesFile()
 
             val githubUri = properties["$PROPERTIES_PREFIX.$PROPERTY_GITHUB_URI"]
-            val gitHubInfo = if (githubUri != null && !useFakeRemote) {
-                requireNotNull(extractGitHubInfoFromUri(githubUri)) { "Unable to extract GitHubInfo from $githubUri" }
-            } else {
-                GitHubInfo("example.com", "SomeOwner", "SomeRepo")
-            }
+            val gitHubInfo =
+                if (githubUri != null && !useFakeRemote) {
+                    requireNotNull(extractGitHubInfoFromUri(githubUri)) {
+                        "Unable to extract GitHubInfo from $githubUri"
+                    }
+                } else {
+                    GitHubInfo("example.com", "SomeOwner", "SomeRepo")
+                }
 
             return runBlocking {
-                val testHarness = GitHubTestHarness(
-                    scratchDir,
-                    localRepo,
-                    remoteRepo,
-                    remoteUri = githubUri.orEmpty(),
-                    remoteName,
-                    gitHubInfo,
-                    remoteBranchPrefix,
-                    configByUserKey,
-                    useFakeRemote,
-                    getPullRequestsPageSize,
-                )
+                val testHarness =
+                    GitHubTestHarness(
+                        scratchDir,
+                        localRepo,
+                        remoteRepo,
+                        remoteUri = githubUri.orEmpty(),
+                        remoteName,
+                        gitHubInfo,
+                        remoteBranchPrefix,
+                        configByUserKey,
+                        useFakeRemote,
+                        getPullRequestsPageSize,
+                    )
                 testHarness.apply {
                     try {
                         block()
@@ -506,37 +547,47 @@ class GitHubTestHarness private constructor(
         private const val PROPERTY_NAME = "name"
         private const val PROPERTY_EMAIL = "email"
         private const val PROPERTY_GITHUB_TOKEN = "githubToken"
-        private val RESTORE_PREFIX = "${GitHubTestHarness::class.java.simpleName.lowercase()}-restore/"
-        private val DELETE_PREFIX = "${GitHubTestHarness::class.java.simpleName.lowercase()}-delete/"
+        private val RESTORE_PREFIX =
+            "${GitHubTestHarness::class.java.simpleName.lowercase()}-restore/"
+        private val DELETE_PREFIX =
+            "${GitHubTestHarness::class.java.simpleName.lowercase()}-delete/"
 
-        // Use a default remote name that is something other than "origin". Previously there was lots of code that made
-        // assumptions about the remote name being "origin" or didn't parameterize it at all. I want to make sure I
-        // don't repeat that mistake, so we'll use something other than "origin" by default.
+        // Use a default remote name other than "origin". Previously there was lots of code that
+        // made assumptions about the remote name being "origin" or didn't parameterize it at all. I
+        // want to make sure I don't repeat that mistake, so we'll use something other than "origin"
+        // by default.
         private const val DEFAULT_REMOTE_NAME = "git-hub-test-harness-remote"
 
-        private fun File.toStringWithClickableURI(): String = "$this (${toURI().toString().replaceFirst("/", "///")})"
-        private fun File.createRepoDirs() = resolve(LOCAL_REPO_SUBDIR) to resolve(REMOTE_REPO_SUBDIR)
+        private fun File.toStringWithClickableURI(): String =
+            "$this (${toURI().toString().replaceFirst("/", "///")})"
+
+        private fun File.createRepoDirs() =
+            resolve(LOCAL_REPO_SUBDIR) to resolve(REMOTE_REPO_SUBDIR)
 
         private fun createTempDir() =
-            checkNotNull(Files.createTempDirectory(GitHubTestHarness::class.java.simpleName).toFile())
+            checkNotNull(
+                    Files.createTempDirectory(GitHubTestHarness::class.java.simpleName).toFile()
+                )
                 .also { logger.info("Temp dir created in {}", it.toStringWithClickableURI()) }
 
-        private fun Map<String, String>.getConfigByUserKeyFromPropertiesFile(): Map<String, UserConfig> {
+        private fun Map<String, String>.getConfigByUserKeyFromPropertiesFile():
+            Map<String, UserConfig> {
             val regex = "$PROPERTIES_PREFIX\\.$PROPERTIES_USER_KEY_PREFIX\\.(.*?)\\.(.*?)".toRegex()
 
             data class ConfigFileEntry(val userKey: String, val key: String, val value: String)
 
             return mapNotNull { (key, value) ->
-                val matchResult = regex.matchEntire(key)
-                val matchValues = matchResult?.groupValues
-                matchValues?.let { (_, userKey, key) -> ConfigFileEntry(userKey, key, value) }
-            }
+                    val matchResult = regex.matchEntire(key)
+                    val matchValues = matchResult?.groupValues
+                    matchValues?.let { (_, userKey, key) -> ConfigFileEntry(userKey, key, value) }
+                }
                 .groupBy { (userKey) -> userKey }
                 .map { (userKey, values) ->
                     val entriesByKey = values.groupBy(ConfigFileEntry::key)
                     val name = requireNotNull(entriesByKey[PROPERTY_NAME]).single().value
                     val email = requireNotNull(entriesByKey[PROPERTY_EMAIL]).single().value
-                    val githubToken = requireNotNull(entriesByKey[PROPERTY_GITHUB_TOKEN]).single().value
+                    val githubToken =
+                        requireNotNull(entriesByKey[PROPERTY_GITHUB_TOKEN]).single().value
                     userKey to UserConfig(name, email, githubToken)
                 }
                 .toMap()
@@ -545,5 +596,6 @@ class GitHubTestHarness private constructor(
 }
 
 private fun BranchData.collectAllCommits(): List<CommitData> {
-    return commits + commits.flatMap { commit -> commit.branches.flatMap { it.collectAllCommits() } }
+    return commits +
+        commits.flatMap { commit -> commit.branches.flatMap { it.collectAllCommits() } }
 }

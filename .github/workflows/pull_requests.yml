@@ -56,12 +56,6 @@ jobs:
           # noinspection YAMLIncompatibleTypes
           java-version: "21.0.1-graalce"
 
-      - name: Setup Java (11)
-        uses: renatoathaydes/setup-java-sdkman@2.1.1
-        with:
-          # noinspection YAMLIncompatibleTypes
-          java-version: "11.0.21-zulu"
-
       - name: Setup Gradle
         uses: gradle/gradle-build-action@ac2d340dc04d9e1113182899e983b5400c17cda1 # v3.5.0
 
