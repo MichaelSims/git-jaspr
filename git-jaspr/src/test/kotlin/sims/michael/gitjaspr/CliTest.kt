@@ -145,7 +145,10 @@ class CliTest {
                 }
                 .message
         assertNotNull(thrownMessage)
-        assertContains(thrownMessage, "java.lang.IllegalStateException: Can't find a git dir")
+        assertContains(
+            thrownMessage,
+            "java.lang.IllegalStateException: Can't find a git working dir",
+        )
     }
 
     @Test
