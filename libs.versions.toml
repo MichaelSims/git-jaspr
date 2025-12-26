@@ -3,7 +3,7 @@ arrowkt = "1.2.4"
 kotlin = "2.3.0"
 kotlinpoet = "2.2.0"
 ksp = "2.3.4"
-jgit = "6.7.0.202309050840-r"
+jgit = "7.4.0.202509020913-r"
 ktfmt = "0.58"
 
 [plugins]
