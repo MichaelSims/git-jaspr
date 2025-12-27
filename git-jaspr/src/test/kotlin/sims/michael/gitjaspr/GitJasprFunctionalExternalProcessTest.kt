@@ -7,12 +7,15 @@ import kotlinx.coroutines.async
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withTimeout
+import org.junit.jupiter.api.extension.ExtendWith
 import org.junit.jupiter.api.parallel.Execution
 import org.junit.jupiter.api.parallel.ExecutionMode
 import org.slf4j.Logger
 import org.slf4j.LoggerFactory
 import sims.michael.gitjaspr.ExecuteCli.executeCli
 import sims.michael.gitjaspr.githubtests.GitHubTestHarness
+import sims.michael.gitjaspr.testing.DelayAfterTestMillis
+import sims.michael.gitjaspr.testing.DelayAfterTestsExtension
 import sims.michael.gitjaspr.testing.FunctionalTest
 
 /**
@@ -24,6 +27,8 @@ import sims.michael.gitjaspr.testing.FunctionalTest
  */
 @FunctionalTest
 @Execution(ExecutionMode.SAME_THREAD)
+@ExtendWith(DelayAfterTestsExtension::class)
+@DelayAfterTestMillis(2_000)
 class GitJasprFunctionalExternalProcessTest : GitJasprTest {
     override val logger: Logger = LoggerFactory.getLogger(GitJasprDefaultTest::class.java)
     override val useFakeRemote: Boolean = false

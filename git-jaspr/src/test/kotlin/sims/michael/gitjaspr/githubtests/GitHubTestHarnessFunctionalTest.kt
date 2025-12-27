@@ -3,6 +3,7 @@ package sims.michael.gitjaspr.githubtests
 import kotlin.test.assertEquals
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.TestInfo
+import org.junit.jupiter.api.extension.ExtendWith
 import org.junit.jupiter.api.parallel.Execution
 import org.junit.jupiter.api.parallel.ExecutionMode
 import sims.michael.gitjaspr.DEFAULT_TARGET_REF
@@ -10,10 +11,14 @@ import sims.michael.gitjaspr.JGitClient
 import sims.michael.gitjaspr.githubtests.GitHubTestHarness.Companion.withTestSetup
 import sims.michael.gitjaspr.githubtests.generatedtestdsl.ident
 import sims.michael.gitjaspr.githubtests.generatedtestdsl.testCase
+import sims.michael.gitjaspr.testing.DelayAfterTestMillis
+import sims.michael.gitjaspr.testing.DelayAfterTestsExtension
 import sims.michael.gitjaspr.testing.FunctionalTest
 
 @FunctionalTest
 @Execution(ExecutionMode.SAME_THREAD)
+@ExtendWith(DelayAfterTestsExtension::class)
+@DelayAfterTestMillis(2_000)
 class GitHubTestHarnessFunctionalTest {
 
     @Test
