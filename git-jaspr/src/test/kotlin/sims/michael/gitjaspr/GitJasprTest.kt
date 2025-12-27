@@ -3470,9 +3470,9 @@ interface GitJasprTest {
         val formattedString =
             try {
                 format(*extracts.toTypedArray())
-            } catch (e: MissingFormatArgumentException) {
+            } catch (_: MissingFormatArgumentException) {
                 logger.error(
-                    "Format string doesn't have enough arguments, should have {}",
+                    "toStatusString: format string doesn't have enough arguments, should have {}",
                     extracts.size,
                 )
                 this
@@ -3542,9 +3542,9 @@ interface GitJasprTest {
         val formattedString =
             try {
                 format(*list.toTypedArray())
-            } catch (e: MissingFormatArgumentException) {
+            } catch (_: MissingFormatArgumentException) {
                 logger.error(
-                    "Format string doesn't have enough arguments, should have {}",
+                    "toPrBodyString: format string doesn't have enough arguments, should have {}",
                     list.size,
                 )
                 this
