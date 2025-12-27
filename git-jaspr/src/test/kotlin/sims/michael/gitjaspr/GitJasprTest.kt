@@ -1372,7 +1372,7 @@ interface GitJasprTest {
 
                 commit-id: 0
 
-                                """
+                """
                     .trimIndent(),
                 localGit.log("HEAD", maxCount = 1).single().fullMessage.withCommitIdZero(),
             )
@@ -1402,7 +1402,7 @@ interface GitJasprTest {
 
                 commit-id: 0
 
-                                """
+                """
                     .trimIndent(),
                 localGit.log("HEAD", maxCount = 1).single().fullMessage.withCommitIdZero(),
             )
@@ -1984,7 +1984,7 @@ interface GitJasprTest {
                     - %s
                     - %s ⬅
 
-                                        """
+                    """
                         .trimIndent()
                         .toPrBodyString(actualIterator.next()),
                     """
@@ -1996,7 +1996,7 @@ interface GitJasprTest {
                     - %s ⬅
                     - %s
 
-                                        """
+                    """
                         .trimIndent()
                         .toPrBodyString(actualIterator.next()),
                     """
@@ -2010,7 +2010,7 @@ interface GitJasprTest {
                     - %s
                     - %s
 
-                                        """
+                    """
                         .trimIndent()
                         .toPrBodyString(actualIterator.next()),
                 ),
@@ -2077,7 +2077,7 @@ interface GitJasprTest {
                     - %s
                       - [01..Current](https://%s/%s/%s/compare/jaspr/main/E_01..jaspr/main/E)
 
-                                        """
+                    """
                         .trimIndent()
                         .toPrBodyString(actualIterator.next()),
                     """
@@ -2096,7 +2096,7 @@ interface GitJasprTest {
                     - %s
                       - [01..Current](https://%s/%s/%s/compare/jaspr/main/E_01..jaspr/main/E)
 
-                                        """
+                    """
                         .trimIndent()
                         .toPrBodyString(actualIterator.next()),
                     """
@@ -2115,7 +2115,7 @@ interface GitJasprTest {
                     - %s
                       - [01..Current](https://%s/%s/%s/compare/jaspr/main/E_01..jaspr/main/E)
 
-                                        """
+                    """
                         .trimIndent()
                         .toPrBodyString(actualIterator.next()),
                     """
@@ -2129,7 +2129,7 @@ interface GitJasprTest {
                     - %s
                     - %s
 
-                                        """
+                    """
                         .trimIndent()
                         .toPrBodyString(actualIterator.next()),
                     """
@@ -2148,7 +2148,7 @@ interface GitJasprTest {
                     - %s ⬅
                       - [01..Current](https://%s/%s/%s/compare/jaspr/main/E_01..jaspr/main/E)
 
-                                        """
+                    """
                         .trimIndent()
                         .toPrBodyString(actualIterator.next()),
                     """
@@ -2167,7 +2167,7 @@ interface GitJasprTest {
                     - %s
                       - [01..Current](https://%s/%s/%s/compare/jaspr/main/E_01..jaspr/main/E)
 
-                                        """
+                    """
                         .trimIndent()
                         .toPrBodyString(actualIterator.next()),
                     """
@@ -2186,7 +2186,7 @@ interface GitJasprTest {
                     - %s
                       - [01..Current](https://%s/%s/%s/compare/jaspr/main/E_01..jaspr/main/E)
 
-                                        """
+                    """
                         .trimIndent()
                         .toPrBodyString(actualIterator.next()),
                 ),
@@ -2256,7 +2256,7 @@ interface GitJasprTest {
                     - %s
                     - %s ⬅
 
-                                        """
+                    """
                         .trimIndent()
                         .toPrBodyString(actualIterator.next()),
                     """
@@ -2268,7 +2268,7 @@ interface GitJasprTest {
                     - %s ⬅
                     - %s
 
-                                        """
+                    """
                         .trimIndent()
                         .toPrBodyString(actualIterator.next()),
                     """
@@ -2280,7 +2280,7 @@ interface GitJasprTest {
                     - %s
                     - %s
 
-                                        """
+                    """
                         .trimIndent()
                         .toPrBodyString(actualIterator.next()),
                     """
@@ -2292,7 +2292,7 @@ interface GitJasprTest {
                     - %s
                     - %s
 
-                                        """
+                    """
                         .trimIndent()
                         .toPrBodyString(actualIterator.next()),
                     """
@@ -2304,7 +2304,7 @@ interface GitJasprTest {
                     - %s
                     - %s
 
-                                        """
+                    """
                         .trimIndent()
                         .toPrBodyString(actualIterator.next()),
                 ),
