@@ -27,9 +27,4 @@ subprojects {
     }
 }
 
-spotless {
-    kotlinGradle {
-        ktfmt(libs.versions.ktfmt.get()).kotlinlangStyle()
-        targetExclude("build/generated/")
-    }
-}
+spotless { kotlinGradle { ktfmt(libs.versions.ktfmt.get()).kotlinlangStyle() } }
