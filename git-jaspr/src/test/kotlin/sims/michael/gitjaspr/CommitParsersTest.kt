@@ -30,10 +30,10 @@ class CommitParsersTest {
     fun `getSubjectAndBodyFromFullMessage - subject and body`() {
         val message =
             """
-                This is a subject
-                
-                This is a body
-                
+            This is a subject
+
+            This is a body
+
             """
                 .trimIndent()
 
@@ -47,12 +47,12 @@ class CommitParsersTest {
     fun `getSubjectAndBodyFromFullMessage - multiline subject`() {
         val message =
             """
-                This is a subject
-                with three lines
-                but still a subject
-                
-                This is a body
-                
+            This is a subject
+            with three lines
+            but still a subject
+
+            This is a body
+
             """
                 .trimIndent()
 
@@ -79,9 +79,9 @@ class CommitParsersTest {
     fun `getFooters - subject and body only`() {
         val message =
             """
-                This is a subject
+            This is a subject
 
-                This is a body
+            This is a body
 
             """
                 .trimIndent()
@@ -93,12 +93,12 @@ class CommitParsersTest {
     fun `getFooters - subject, body with footer-like lines`() {
         val message =
             """
-                This is a subject
+            This is a subject
 
-                This is a body.
-                The following are still part of the body:
-                key-one: value-one
-                key-two: value-two
+            This is a body.
+            The following are still part of the body:
+            key-one: value-one
+            key-two: value-two
 
             """
                 .trimIndent()
@@ -110,10 +110,10 @@ class CommitParsersTest {
     fun `getFooters - subject, body url that could look like a footer line if your code was bad`() {
         val message =
             """
-                This is a subject
+            This is a subject
 
-                See this Slack thread:
-                https://trillianthealth.slack.com/archives/C04J6Q655GR/p1702918943374039?thread_ts=1702918322.439999&cid=C04J6Q655GR
+            See this Slack thread:
+            https://trillianthealth.slack.com/archives/C04J6Q655GR/p1702918943374039?thread_ts=1702918322.439999&cid=C04J6Q655GR
 
             """
                 .trimIndent()
@@ -125,15 +125,15 @@ class CommitParsersTest {
     fun `getFooters - subject, body, existing footer lines`() {
         val message =
             """
-                This is a subject
+            This is a subject
 
-                This is a body.
-                The following are still part of the body:
-                key-one: value-one
-                key-two: value-two
-                
-                key-one: value-three
-                key-two: value-four
+            This is a body.
+            The following are still part of the body:
+            key-one: value-one
+            key-two: value-two
+
+            key-one: value-three
+            key-two: value-four
 
             """
                 .trimIndent()
@@ -148,15 +148,15 @@ class CommitParsersTest {
     fun `getFooters - subject, body, existing footer lines with multiples - last one wins`() {
         val message =
             """
-                This is a subject
+            This is a subject
 
-                This is a body.
-                The following are still part of the body:
-                key-one: value-one
-                key-two: value-two
-                
-                key-one: value-three
-                key-one: value-four
+            This is a body.
+            The following are still part of the body:
+            key-one: value-one
+            key-two: value-two
+
+            key-one: value-three
+            key-one: value-four
 
             """
                 .trimIndent()
@@ -172,7 +172,7 @@ class CommitParsersTest {
 
             Co-authored-by: John Carmack <jcarmack@idsoftware.com>
             commit-id: I0e9e0b26
-                    """
+            """
                 .trimIndent()
 
         assertEquals(
@@ -191,7 +191,7 @@ class CommitParsersTest {
             This is a commit subject
 
             keys with spaces are not allowed: value
-                    """
+            """
                 .trimIndent()
 
         assertEquals(emptyMap(), getFooters(message))
@@ -201,9 +201,9 @@ class CommitParsersTest {
     fun `addFooters - subject only`() {
         assertEquals(
             """
-                This is a subject
-                
-                key1: value1
+            This is a subject
+
+            key1: value1
 
             """
                 .trimIndent(),
@@ -215,9 +215,9 @@ class CommitParsersTest {
     fun `addFooters - subject with newline`() {
         assertEquals(
             """
-                This is a subject
-                
-                key1: value1
+            This is a subject
+
+            key1: value1
 
             """
                 .trimIndent(),
@@ -229,9 +229,9 @@ class CommitParsersTest {
     fun `addFooters - subject and body only`() {
         val message =
             """
-                This is a subject
+            This is a subject
 
-                This is a body
+            This is a body
 
             """
                 .trimIndent()
@@ -241,7 +241,7 @@ class CommitParsersTest {
             This is a subject
 
             This is a body
-            
+
             key1: value1
 
             """
@@ -254,12 +254,12 @@ class CommitParsersTest {
     fun `addFooters - subject, body with footer-like lines`() {
         val message =
             """
-                This is a subject
+            This is a subject
 
-                This is a body.
-                The following are still part of the body:
-                key-one: value-one
-                key-two: value-two
+            This is a body.
+            The following are still part of the body:
+            key-one: value-one
+            key-two: value-two
 
             """
                 .trimIndent()
@@ -272,7 +272,7 @@ class CommitParsersTest {
             The following are still part of the body:
             key-one: value-one
             key-two: value-two
-            
+
             key1: value1
 
             """
@@ -285,15 +285,15 @@ class CommitParsersTest {
     fun `addFooters - subject, body, existing footer lines`() {
         val message =
             """
-                This is a subject
+            This is a subject
 
-                This is a body.
-                The following are still part of the body:
-                key-one: value-one
-                key-two: value-two
-                
-                key-one: value-three
-                key-two: value-four
+            This is a body.
+            The following are still part of the body:
+            key-one: value-one
+            key-two: value-two
+
+            key-one: value-three
+            key-two: value-four
 
             """
                 .trimIndent()
@@ -306,7 +306,7 @@ class CommitParsersTest {
             The following are still part of the body:
             key-one: value-one
             key-two: value-two
-            
+
             key-one: value-three
             key-two: value-four
             key1: value1
@@ -321,15 +321,15 @@ class CommitParsersTest {
     fun `addFooters - subject, body, existing footer lines with multiples - last one wins`() {
         val message =
             """
-                This is a subject
+            This is a subject
 
-                This is a body.
-                The following are still part of the body:
-                key-one: value-one
-                key-two: value-two
-                
-                key-one: value-three
-                key-one: value-four
+            This is a body.
+            The following are still part of the body:
+            key-one: value-one
+            key-two: value-two
+
+            key-one: value-three
+            key-one: value-four
 
             """
                 .trimIndent()
@@ -357,7 +357,7 @@ class CommitParsersTest {
     fun `addFooters - subject that looks like a footer line`() {
         val message =
             """
-                Market Explorer: Remove unused code
+            Market Explorer: Remove unused code
 
             """
                 .trimIndent()
@@ -381,7 +381,7 @@ class CommitParsersTest {
             trimFooters(
                 """
                 This is a subject
-                
+
                 key1: value1
 
                 """
@@ -397,7 +397,7 @@ class CommitParsersTest {
             trimFooters(
                 """
                 This is a subject
-                
+
                 key1: value1
 
                 """
@@ -410,9 +410,9 @@ class CommitParsersTest {
     fun `trimFooters - subject and body only`() {
         val message =
             """
-                This is a subject
+            This is a subject
 
-                This is a body
+            This is a body
 
             """
                 .trimIndent()
@@ -433,12 +433,12 @@ class CommitParsersTest {
     fun `trimFooters - subject, body with footer-like lines`() {
         val message =
             """
-                This is a subject
+            This is a subject
 
-                This is a body.
-                The following are still part of the body:
-                key-one: value-one
-                key-two: value-two
+            This is a body.
+            The following are still part of the body:
+            key-one: value-one
+            key-two: value-two
 
             """
                 .trimIndent()
@@ -462,15 +462,15 @@ class CommitParsersTest {
     fun `trimFooters - subject, body, existing footer lines`() {
         val message =
             """
-                This is a subject
+            This is a subject
 
-                This is a body.
-                The following are still part of the body:
-                key-one: value-one
-                key-two: value-two
-                
-                key-one: value-three
-                key-two: value-four
+            This is a body.
+            The following are still part of the body:
+            key-one: value-one
+            key-two: value-two
+
+            key-one: value-three
+            key-two: value-four
 
             """
                 .trimIndent()
@@ -494,15 +494,15 @@ class CommitParsersTest {
     fun `trimFooters - subject, body, existing footer lines with multiples - last one wins`() {
         val message =
             """
-                This is a subject
+            This is a subject
 
-                This is a body.
-                The following are still part of the body:
-                key-one: value-one
-                key-two: value-two
-                
-                key-one: value-three
-                key-one: value-four
+            This is a body.
+            The following are still part of the body:
+            key-one: value-one
+            key-two: value-two
+
+            key-one: value-three
+            key-one: value-four
 
             """
                 .trimIndent()

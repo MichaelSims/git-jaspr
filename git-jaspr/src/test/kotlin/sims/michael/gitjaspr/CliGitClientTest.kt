@@ -733,7 +733,7 @@ class CliGitClientTest {
 
                 This is a commit body
 
-                                """
+                """
                     .trimIndent(),
                 mapOf("Co-authored-by" to "Michael Sims"),
                 DEFAULT_COMMITTER,
