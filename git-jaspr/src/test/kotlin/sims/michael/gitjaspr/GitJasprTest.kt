@@ -3449,11 +3449,9 @@ interface GitJasprTest {
     )
 
     // It may seem silly to repeat what is already defined in GitJaspr.HEADER, but if a dev changes
-    // the header I want
-    // these tests to break so that any such changes are very deliberate. This is a compromise
-    // between referencing the
-    // same value from both tests and prod and the other extreme of repeating this header text
-    // manually in every test.
+    // the header, I want these tests to break so that any such changes are very deliberate. This is
+    // a compromise between referencing the same value from both tests and prod and the other
+    // extreme of repeating this header text manually in every test.
     private fun String.toStatusString(
         actual: String,
         namedStackInfo: NamedStackInfo? = null,
