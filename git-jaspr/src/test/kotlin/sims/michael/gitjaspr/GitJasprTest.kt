@@ -3419,10 +3419,18 @@ interface GitJasprTest {
                 }
             )
 
-            remoteGit.deleteBranches(
-                listOf(buildRemoteRef("c"), buildRemoteRef("c_01")),
-                force = true,
-            )
+            // This could be cleaner. We need the remote branches gone so we can verify that
+            // getOrphanedBranches does a fetch w/prune before returning results. The mechanism to
+            // remove the remote branches depends on whether we're using a fake remote.
+            val remoteBranchesToRemove = listOf(buildRemoteRef("c"), buildRemoteRef("c_01"))
+            if (useFakeRemote) {
+                remoteGit.deleteBranches(remoteBranchesToRemove, force = true)
+            } else {
+                localGit.push(
+                    remoteBranchesToRemove.map { name -> RefSpec(FORCE_PUSH_PREFIX, name) },
+                    remoteName,
+                )
+            }
 
             assertEquals(
                 listOf(buildRemoteRef("b"), buildRemoteRef("b_01")),
