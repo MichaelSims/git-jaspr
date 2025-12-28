@@ -23,6 +23,7 @@ import org.eclipse.jgit.revwalk.RevCommit
 import org.eclipse.jgit.transport.PushResult
 import org.eclipse.jgit.transport.RemoteRefUpdate
 import org.eclipse.jgit.transport.SshSessionFactory
+import org.eclipse.jgit.transport.URIish
 import org.eclipse.jgit.transport.ssh.jsch.JschConfigSessionFactory
 import org.slf4j.LoggerFactory
 import sims.michael.gitjaspr.RemoteRefEncoding.getRemoteRefParts
@@ -314,6 +315,11 @@ class JGitClient(
                 ?.firstOrNull()
                 ?.toASCIIString()
         }
+    }
+
+    override fun addRemote(remoteName: String, remoteUri: String) {
+        logger.trace("addRemote {} {}", remoteName, remoteUri)
+        useGit { git -> git.remoteAdd().setName(remoteName).setUri(URIish(remoteUri)).call() }
     }
 
     override fun getUpstreamBranch(remoteName: String): RemoteBranch? = useGit { git ->

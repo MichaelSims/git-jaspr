@@ -67,6 +67,8 @@ interface GitClient {
 
     fun getRemoteUriOrNull(remoteName: String): String?
 
+    fun addRemote(remoteName: String, remoteUri: String)
+
     fun getUpstreamBranch(remoteName: String): RemoteBranch?
 
     fun setUpstreamBranch(remoteName: String, branchName: String)

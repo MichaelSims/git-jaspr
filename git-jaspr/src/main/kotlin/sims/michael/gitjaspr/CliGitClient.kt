@@ -309,6 +309,11 @@ class CliGitClient(
             .takeIf(String::isNotBlank)
     }
 
+    override fun addRemote(remoteName: String, remoteUri: String) {
+        logger.trace("addRemote {} {}", remoteName, remoteUri)
+        executeCommand(listOf("git", "remote", "add", remoteName, remoteUri))
+    }
+
     override fun getUpstreamBranch(remoteName: String): RemoteBranch? {
         logger.trace("getUpstreamBranch {}", remoteName)
         val prefix = "$remoteName/"
