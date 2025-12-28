@@ -1,8 +1,10 @@
 package sims.michael.gitjaspr
 
+import java.nio.file.Files
 import java.time.ZonedDateTime
 import kotlin.text.RegexOption.IGNORE_CASE
 import kotlin.time.Duration.Companion.seconds
+import kotlin.time.measureTime
 import kotlinx.coroutines.delay
 import org.slf4j.LoggerFactory
 import sims.michael.gitjaspr.CommitParsers.getSubjectAndBodyFromFullMessage
@@ -392,47 +394,118 @@ class GitJaspr(
 
     suspend fun autoMerge(refSpec: RefSpec, pollingIntervalSeconds: Int = 10) {
         logger.trace("autoMerge {} {}", refSpec, pollingIntervalSeconds)
-        while (true) {
-            val remoteName = config.remoteName
-            gitClient.fetch(remoteName)
 
-            val numCommitsBehind =
-                gitClient.logRange(refSpec.localRef, "$remoteName/${refSpec.remoteRef}").size
-            if (numCommitsBehind > 0) {
-                val commits = if (numCommitsBehind > 1) "commits" else "commit"
-                logMergeOutOfDateWarning(numCommitsBehind, commits, refSpec)
-                break
-            }
+        // We'll execute the auto-merge in a temporary clone after grabbing the current HEAD ref.
+        // This way the user can run this in the background or in another terminal and continue to
+        // use their working copy without interfering with the auto-merge process.
+        val currentRef = gitClient.log(refSpec.localRef, 1).first().hash
+        val tempRefSpec = refSpec.copy(localRef = currentRef)
+        logger.trace("autoMerge refSpec: {}", tempRefSpec)
 
-            val stack =
-                gitClient.getLocalCommitStack(remoteName, refSpec.localRef, refSpec.remoteRef)
-            if (stack.isEmpty()) {
-                logStackIsEmptyWarning()
-                break
+        val tempDir = Files.createTempDirectory("git-jaspr-automerge-").toFile()
+        logger.debug("Created temporary directory for auto-merge: {}", tempDir.absolutePath)
+
+        val remoteName = config.remoteName
+        val remoteUri =
+            requireNotNull(gitClient.getRemoteUriOrNull(remoteName)) {
+                "Could not find remote URI for remote: $remoteName"
             }
 
-            val statuses = getRemoteCommitStatuses(stack)
-            if (statuses.all(RemoteCommitStatus::isMergeable)) {
-                merge(refSpec)
-                break
+        val tempGit = OptimizedCliGitClient(tempDir, config.remoteBranchPrefix)
+        try {
+            logger.debug(
+                "Cloning repository from {} to temporary directory for auto-merge...",
+                remoteUri,
+            )
+            val cloneTime = measureTime {
+                tempGit.clone(remoteUri, remoteName)
+                tempGit.checkout(currentRef)
             }
-            print(getStatusString(refSpec))
+            logger.debug("Cloned repository to temporary directory in {}", cloneTime)
+        } catch (e: Exception) {
+            logger.error(
+                "Failed to set up temporary clone for auto-merge in ${tempDir.absolutePath}",
+                e,
+            )
+            tempDir.deleteRecursively()
+            throw e
+        }
 
-            if (statuses.any { status -> status.checksPass == false }) {
-                logger.warn("Checks are failing. Aborting auto-merge.")
-                break
-            }
-            if (statuses.any { status -> status.approved == false }) {
-                logger.warn("PRs are not approved. Aborting auto-merge.")
-                break
-            }
-            if (statuses.any { status -> status.isDraft == true }) {
-                logger.warn("Some PRs in the stack are drafts. Aborting auto-merge.")
-                break
+        // Run the auto-merge loop
+        try {
+            val tempJaspr =
+                GitJaspr(
+                    ghClient,
+                    tempGit,
+                    config.copy(workingDirectory = tempDir),
+                    newUuid,
+                    commitIdentOverride,
+                )
+
+            while (true) {
+                val numCommitsBehind =
+                    tempGit
+                        .logRange(tempRefSpec.localRef, "$remoteName/${tempRefSpec.remoteRef}")
+                        .size
+                if (numCommitsBehind > 0) {
+                    val commits = if (numCommitsBehind > 1) "commits" else "commit"
+                    logMergeOutOfDateWarning(numCommitsBehind, commits, tempRefSpec)
+                    break
+                }
+
+                val stack =
+                    tempGit.getLocalCommitStack(
+                        remoteName,
+                        tempRefSpec.localRef,
+                        tempRefSpec.remoteRef,
+                    )
+                if (stack.isEmpty()) {
+                    logStackIsEmptyWarning()
+                    break
+                }
+
+                val statuses = tempJaspr.getRemoteCommitStatuses(stack)
+                if (statuses.all(RemoteCommitStatus::isMergeable)) {
+                    tempJaspr.merge(tempRefSpec)
+
+                    // Since we merged from a separate directory, the local working copy will be
+                    // out of date, so let's fetch the latest changes.
+                    gitClient.fetch(remoteName)
+                    break
+                }
+                print(tempJaspr.getStatusString(tempRefSpec))
+
+                if (statuses.any { status -> status.checksPass == false }) {
+                    logger.warn("Checks are failing. Aborting auto-merge.")
+                    break
+                }
+                if (statuses.any { status -> status.approved == false }) {
+                    logger.warn("PRs are not approved. Aborting auto-merge.")
+                    break
+                }
+                if (statuses.any { status -> status.isDraft == true }) {
+                    logger.warn("Some PRs in the stack are drafts. Aborting auto-merge.")
+                    break
+                }
+
+                logger.info("Delaying for $pollingIntervalSeconds seconds... (CTRL-C to cancel)")
+                delay(pollingIntervalSeconds.seconds)
+                // Fetch the latest changes before we try again
+                tempGit.fetch(remoteName)
             }
 
-            logger.info("Delaying for $pollingIntervalSeconds seconds... (CTRL-C to cancel)")
-            delay(pollingIntervalSeconds.seconds)
+            // Either the merge was successful, or we exited the loop because the stack was not
+            // mergeable. Either way we delete the temp directory.
+            tempDir.deleteRecursively()
+            logger.debug("Cleaned up temporary directory: {}", tempDir.absolutePath)
+        } catch (e: Exception) {
+            // Keep the temporary directory on exception for troubleshooting
+            logger.error(
+                "Auto-merge failed with exception. Temporary directory has been retained for troubleshooting: {}",
+                tempDir.absolutePath,
+                e,
+            )
+            throw e
         }
     }
 
