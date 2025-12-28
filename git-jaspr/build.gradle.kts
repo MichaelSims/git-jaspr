@@ -16,6 +16,22 @@ graalvmNative {
     binaries {
         all { resources.autodetect() }
         named("main") {
+            // The class kotlin.DeprecationLevel ends up getting initialized at build time. During
+            // compilation, graalvm presumably attempts to see if a class is annotated with
+            // com.oracle.svm.core.hub.Hybrid, which has the side effect of initializing
+            // kotlin.DeprecationLevel. This causes the build to fail if we don't explicitly request
+            // that it be initialized at build time, which I will do so here.
+            //
+            // See also:
+            // https://github.com/oracle/graal
+            //   (source code for com.oracle.svm.hosted.heap.PodFeature and
+            //    com.oracle.svm.core.hub.Hybrid)
+            // https://www.graalvm.org/21.3/reference-manual/native-image/ClassInitialization/
+            // https://www.graalvm.org/21.3/reference-manual/native-image/Options/
+            // https://stackoverflow.com/questions/60654455/how-to-fix-try-avoiding-to-initialize-the-class-that-caused-initialization-wit
+            // https://stackoverflow.com/questions/78745329/graalvm-native-gradle-plugin-using-nativecompile-fails-using-nativecompile-task
+            buildArgs.add("--initialize-at-build-time=kotlin.DeprecationLevel")
+
             javaLauncher.set(
                 javaToolchains.launcherFor {
                     languageVersion.set(JavaLanguageVersion.of(21))
