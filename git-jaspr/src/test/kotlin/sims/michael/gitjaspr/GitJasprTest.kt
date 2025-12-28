@@ -1458,15 +1458,15 @@ interface GitJasprTest {
                             commit { title = "A" }
                             commit { title = "B" }
                             commit {
-                                title = "0"
+                                title = "3"
                                 id = ""
                             }
                             commit {
-                                title = "1"
+                                title = "4"
                                 id = ""
                             }
                             commit {
-                                title = "2"
+                                title = "5"
                                 id = ""
                                 localRefs += "main"
                             }
@@ -1477,23 +1477,23 @@ interface GitJasprTest {
                     "only commits in the middle missing IDs",
                     testCase {
                         repository {
-                            commit { title = "A" }
-                            commit { title = "B" }
-                            commit {
-                                title = "0"
-                                id = ""
-                            }
-                            commit {
-                                title = "1"
-                                id = ""
-                            }
-                            commit {
-                                title = "2"
-                                id = ""
-                            }
                             commit { title = "C" }
+                            commit { title = "D" }
                             commit {
-                                title = "D"
+                                title = "6"
+                                id = ""
+                            }
+                            commit {
+                                title = "7"
+                                id = ""
+                            }
+                            commit {
+                                title = "8"
+                                id = ""
+                            }
+                            commit { title = "E" }
+                            commit {
+                                title = "F"
                                 localRefs += "main"
                             }
                         }
