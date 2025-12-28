@@ -1966,6 +1966,20 @@ interface GitJasprTest {
         }
     }
 
+    @Test
+    fun `push empty stack`() {
+        withTestSetup(useFakeRemote) {
+            createCommitsFrom(
+                testCase {
+                    repository {
+                        // No commits - empty stack
+                    }
+                }
+            )
+            push()
+        }
+    }
+
     // endregion
 
     // region pr body tests
