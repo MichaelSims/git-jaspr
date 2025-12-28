@@ -60,10 +60,14 @@ class GitJaspr(
                 .getUpstreamBranch(config.remoteName)
                 ?.takeIf { upstream -> upstream.name.startsWith(namedStackPrefix) }
                 ?.let { upstream ->
-                    val name = upstream.name
-                    val trackingBranch = "$remoteName/$name"
+                    val fullName = upstream.name
+                    val trackingBranch = "$remoteName/$fullName"
+                    // Remove prefix and target branch: jaspr-named/<target>/<name> -> <name>
+                    val withoutPrefix = fullName.removePrefix(namedStackPrefix)
+                    val stackName =
+                        withoutPrefix.substringAfter('/', missingDelimiterValue = withoutPrefix)
                     NamedStackInfo(
-                        name = name.removePrefix(namedStackPrefix),
+                        name = stackName,
                         numCommitsAhead =
                             gitClient.logRange(trackingBranch, stack.last().hash).size,
                         numCommitsBehind =
@@ -168,13 +172,17 @@ class GitJaspr(
         if (stackName != null && gitClient.isHeadDetached()) {
             throw GitJasprException("Pushing a named stack from detached HEAD is not supported.")
         }
-        val prefixedStackName =
-            stackName?.let { name -> "${config.remoteNamedStackBranchPrefix}/$name" }
 
         val remoteName = config.remoteName
         gitClient.fetch(remoteName)
 
         val targetRef = refSpec.remoteRef
+        val prefixedStackName =
+            stackName?.let { name ->
+                // The original target for this stack is "baked in" to the ref name. This will come
+                // in handy later.
+                "${config.remoteNamedStackBranchPrefix}/$targetRef/$name"
+            }
         fun getLocalCommitStack() =
             gitClient.getLocalCommitStack(remoteName, refSpec.localRef, targetRef)
         val originalStack = getLocalCommitStack()

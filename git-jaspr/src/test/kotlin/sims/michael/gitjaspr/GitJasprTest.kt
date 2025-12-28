@@ -1101,7 +1101,7 @@ interface GitJasprTest {
             localGit.checkout("behind")
             localGit.setUpstreamBranch(
                 remoteName,
-                "$DEFAULT_REMOTE_NAMED_STACK_BRANCH_PREFIX/$stackName",
+                "$DEFAULT_REMOTE_NAMED_STACK_BRANCH_PREFIX/$DEFAULT_TARGET_REF/$stackName",
             )
             val actual = getAndPrintStatusString()
 
@@ -1887,7 +1887,7 @@ interface GitJasprTest {
             val stackName = "my-stack-name"
             gitJaspr.push(stackName = stackName)
             assertEquals(
-                "$DEFAULT_REMOTE_NAMED_STACK_BRANCH_PREFIX/$stackName",
+                "$DEFAULT_REMOTE_NAMED_STACK_BRANCH_PREFIX/$DEFAULT_TARGET_REF/$stackName",
                 localGit.getUpstreamBranch(remoteName)?.name,
             )
         }
@@ -1960,7 +1960,7 @@ interface GitJasprTest {
 
             gitJaspr.push()
             assertEquals(
-                "$DEFAULT_REMOTE_NAMED_STACK_BRANCH_PREFIX/$stackName",
+                "$DEFAULT_REMOTE_NAMED_STACK_BRANCH_PREFIX/$DEFAULT_TARGET_REF/$stackName",
                 localGit.getUpstreamBranch(remoteName)?.name,
             )
         }
@@ -3686,7 +3686,8 @@ interface GitJasprTest {
             // Named stack should point to commit "two"
             val namedStackBranch =
                 localGit.getRemoteBranches(remoteName).first {
-                    it.name == "$DEFAULT_REMOTE_NAMED_STACK_BRANCH_PREFIX/my-stack"
+                    it.name ==
+                        "$DEFAULT_REMOTE_NAMED_STACK_BRANCH_PREFIX/$DEFAULT_TARGET_REF/my-stack"
                 }
             val twoCommit = localGit.log().first { it.shortMessage.startsWith("two") }
             assertEquals(twoCommit.hash, namedStackBranch.commit.hash)
