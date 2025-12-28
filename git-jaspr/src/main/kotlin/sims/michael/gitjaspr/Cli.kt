@@ -553,7 +553,7 @@ object Cli {
     }
 }
 
-const val VERSION = "v26-beta"
+const val VERSION = "1.0"
 const val WORKING_DIR_PROPERTY_NAME = "git-jaspr-working-dir"
 const val CONFIG_FILE_NAME = ".git-jaspr.properties"
 const val DEFAULT_LOCAL_OBJECT = GitClient.HEAD
