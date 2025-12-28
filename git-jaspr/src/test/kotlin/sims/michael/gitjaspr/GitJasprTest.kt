@@ -3571,6 +3571,292 @@ interface GitJasprTest {
             "Do not merge manually using the UI - doing so may have unexpected results.*\n"
     }
 
+    // region dont-push tests
+    @Test
+    fun `push excludes commits matching dont-push pattern`() {
+        withTestSetup(useFakeRemote) {
+            createCommitsFrom(
+                testCase {
+                    repository {
+                        commit { title = "one" }
+                        commit { title = "two" }
+                        commit {
+                            title = "DONT PUSH: three"
+                            id = "three"
+                        }
+                        commit {
+                            title = "four"
+                            localRefs += "main"
+                        }
+                    }
+                }
+            )
+            push()
+
+            // Only commits one and two should be pushed
+            assertEquals(
+                listOf("one", "two").map { buildRemoteRef(it) },
+                localGit.getRemoteBranches(remoteName).map(RemoteBranch::name) - DEFAULT_TARGET_REF,
+            )
+        }
+    }
+
+    @Test
+    fun `push excludes all commits when all match dont-push pattern`() {
+        withTestSetup(useFakeRemote) {
+            createCommitsFrom(
+                testCase {
+                    repository {
+                        commit {
+                            title = "dont-push one"
+                            id = "one"
+                        }
+                        commit {
+                            title = "DONT PUSH two"
+                            id = "two"
+                        }
+                        commit {
+                            title = "dont push: three"
+                            id = "three"
+                            localRefs += "main"
+                        }
+                    }
+                }
+            )
+            push()
+
+            // No commits should be pushed
+            assertEquals(
+                emptyList(),
+                localGit.getRemoteBranches(remoteName).map(RemoteBranch::name) - DEFAULT_TARGET_REF,
+            )
+        }
+    }
+
+    @Test
+    fun `push excludes all commits when base commit matches dont-push pattern`() {
+        withTestSetup(useFakeRemote) {
+            createCommitsFrom(
+                testCase {
+                    repository {
+                        commit {
+                            title = "Dont push this"
+                            id = "one"
+                        }
+                        commit { title = "two" }
+                        commit {
+                            title = "three"
+                            localRefs += "main"
+                        }
+                    }
+                }
+            )
+            push()
+
+            // No commits should be pushed
+            assertEquals(
+                emptyList(),
+                localGit.getRemoteBranches(remoteName).map(RemoteBranch::name) - DEFAULT_TARGET_REF,
+            )
+        }
+    }
+
+    @Test
+    fun `push named stack points to topmost non-excluded commit`() {
+        withTestSetup(useFakeRemote) {
+            createCommitsFrom(
+                testCase {
+                    repository {
+                        commit { title = "one" }
+                        commit { title = "two" }
+                        commit {
+                            title = "dont-push three"
+                            id = "three"
+                        }
+                        commit {
+                            title = "four"
+                            localRefs += "main"
+                        }
+                    }
+                    checkout = "main"
+                }
+            )
+            gitJaspr.push(stackName = "my-stack")
+
+            // Named stack should point to commit "two"
+            val namedStackBranch =
+                localGit.getRemoteBranches(remoteName).first {
+                    it.name == "$DEFAULT_REMOTE_NAMED_STACK_BRANCH_PREFIX/my-stack"
+                }
+            val twoCommit = localGit.log().first { it.shortMessage.startsWith("two") }
+            assertEquals(twoCommit.hash, namedStackBranch.commit.hash)
+        }
+    }
+
+    @Test
+    fun `merge excludes commits matching dont-push pattern`() {
+        withTestSetup(useFakeRemote) {
+            createCommitsFrom(
+                testCase {
+                    repository {
+                        commit {
+                            title = "one"
+                            willPassVerification = true
+                            remoteRefs += buildRemoteRef("one")
+                        }
+                        commit {
+                            title = "two"
+                            willPassVerification = true
+                            remoteRefs += buildRemoteRef("two")
+                        }
+                        commit {
+                            title = "dont push three"
+                            id = "three"
+                        }
+                        commit {
+                            title = "four"
+                            localRefs += "development"
+                        }
+                    }
+                    pullRequest {
+                        headRef = buildRemoteRef("one")
+                        baseRef = "main"
+                        title = "one"
+                        willBeApprovedByUserKey = "michael"
+                    }
+                    pullRequest {
+                        headRef = buildRemoteRef("two")
+                        baseRef = buildRemoteRef("one")
+                        title = "two"
+                        willBeApprovedByUserKey = "michael"
+                    }
+                }
+            )
+
+            waitForChecksToConclude("one", "two")
+            merge(RefSpec("development", "main"))
+
+            // Only commits one and two should be merged
+            val stack = localGit.getLocalCommitStack(remoteName, "development", DEFAULT_TARGET_REF)
+            assertEquals(2, stack.size)
+            assertTrue(stack.any { it.shortMessage.startsWith("dont push three") })
+            assertTrue(stack.any { it.shortMessage.startsWith("four") })
+        }
+    }
+
+    @Test
+    fun `merge with explicit refspec excludes commits matching dont-push pattern`() {
+        withTestSetup(useFakeRemote) {
+            createCommitsFrom(
+                testCase {
+                    repository {
+                        commit {
+                            title = "one"
+                            willPassVerification = true
+                            remoteRefs += buildRemoteRef("one")
+                        }
+                        commit {
+                            title = "Dont-push two"
+                            id = "two"
+                            localRefs += "development"
+                        }
+                    }
+                    pullRequest {
+                        headRef = buildRemoteRef("one")
+                        baseRef = "main"
+                        title = "one"
+                        willBeApprovedByUserKey = "michael"
+                    }
+                }
+            )
+
+            waitForChecksToConclude("one")
+            merge(RefSpec("development", "main"))
+
+            // Commit one should be merged, but "Dont-push two" should remain
+            val stack = localGit.getLocalCommitStack(remoteName, "development", DEFAULT_TARGET_REF)
+            assertEquals(1, stack.size)
+            assertTrue(stack.any { it.shortMessage.startsWith("Dont-push two") })
+        }
+    }
+
+    @Test
+    fun `autoMerge with explicit refspec excludes commits matching dont-push pattern`() {
+        withTestSetup(useFakeRemote) {
+            createCommitsFrom(
+                testCase {
+                    repository {
+                        commit {
+                            title = "one"
+                            willPassVerification = true
+                            remoteRefs += buildRemoteRef("one")
+                        }
+                        commit {
+                            title = "two"
+                            willPassVerification = true
+                            remoteRefs += buildRemoteRef("two")
+                        }
+                        commit {
+                            title = "DONT PUSH: three"
+                            id = "three"
+                            localRefs += "development"
+                        }
+                    }
+                    pullRequest {
+                        headRef = buildRemoteRef("one")
+                        baseRef = "main"
+                        title = "one"
+                        willBeApprovedByUserKey = "michael"
+                    }
+                    pullRequest {
+                        headRef = buildRemoteRef("two")
+                        baseRef = buildRemoteRef("one")
+                        title = "two"
+                        willBeApprovedByUserKey = "michael"
+                    }
+                }
+            )
+
+            waitForChecksToConclude("one", "two")
+            autoMerge(RefSpec("development", "main"))
+
+            // Commits one and two should be merged, but "DONT PUSH: three" should remain
+            val stack = localGit.getLocalCommitStack(remoteName, "development", DEFAULT_TARGET_REF)
+            assertEquals(1, stack.size)
+            assertTrue(stack.any { it.shortMessage.startsWith("DONT PUSH: three") })
+        }
+    }
+
+    @Test
+    fun `push respects custom dont-push regex pattern`() {
+        withTestSetup(useFakeRemote) {
+            createCommitsFrom(
+                testCase {
+                    repository {
+                        commit { title = "one" }
+                        commit {
+                            title = "WIP: two"
+                            id = "two"
+                        }
+                        commit {
+                            title = "three"
+                            localRefs += "main"
+                        }
+                    }
+                }
+            )
+            gitJaspr.clone { config -> config.copy(dontPushRegex = "^(wip)\\b.*$") }.push()
+
+            // Only commit one should be pushed ("WIP: two" and "three" are excluded)
+            assertEquals(
+                listOf("one").map { buildRemoteRef(it) },
+                localGit.getRemoteBranches(remoteName).map(RemoteBranch::name) - DEFAULT_TARGET_REF,
+            )
+        }
+    }
+
+    // endregion
+
     private fun commitOrCommits(count: Int) = if (count == 1) "commit" else "commits"
 
     /**

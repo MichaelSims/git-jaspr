@@ -178,8 +178,24 @@ class GitJaspr(
         fun getLocalCommitStack() =
             gitClient.getLocalCommitStack(remoteName, refSpec.localRef, targetRef)
         val originalStack = getLocalCommitStack()
-        val stack =
+        val stackWithIds =
             if (addCommitIdsToLocalStack(originalStack)) getLocalCommitStack() else originalStack
+
+        // Filter stack based on the dont-push pattern
+        val (stack, excludedCommits) = filterStackByDontPushPattern(stackWithIds)
+        logExcludedCommits(excludedCommits)
+        if (stack.isEmpty()) {
+            if (excludedCommits.isNotEmpty()) {
+                logger.info(
+                    "All commits in the stack match the dont-push pattern. Nothing to push."
+                )
+            } else {
+                logger.info("Stack is empty. Nothing to push.")
+            }
+            return
+        }
+
+        val filteredRefSpec = refSpec.copy(localRef = stack.last().hash)
 
         val commitsWithDuplicateIds =
             stack
@@ -197,7 +213,7 @@ class GitJaspr(
 
         val pullRequests = checkSinglePullRequestPerCommit(ghClient.getPullRequests(stack))
         val pullRequestsRebased =
-            pullRequests.updateBaseRefForReorderedPrsIfAny(stack, refSpec.remoteRef)
+            pullRequests.updateBaseRefForReorderedPrsIfAny(stack, filteredRefSpec.remoteRef)
 
         val remoteBranches = gitClient.getRemoteBranches(config.remoteName)
         val remoteRefSpecs = remoteBranches.map { b -> b.toRefSpec() }
@@ -219,7 +235,7 @@ class GitJaspr(
         val namedStackRefSpec =
             (prefixedStackName ?: upstreamBranchName)?.let { name ->
                 // Convert symbolic refs (i.e. HEAD) to short hash so our comparison matches below
-                val localRef = gitClient.log(refSpec.localRef, 1).single().hash
+                val localRef = gitClient.log(filteredRefSpec.localRef, 1).single().hash
                 RefSpec(localRef, name)
             }
         val outOfDateNamedStackBranch = listOfNotNull(namedStackRefSpec) - remoteRefSpecs.toSet()
@@ -261,7 +277,7 @@ class GitJaspr(
                         // the target branch (the branch the commit will ultimately merge into). The
                         // base ref for each subsequent commit is the remote ref name (i.e.
                         // jaspr/<commit-id>) of the previous commit in the stack
-                        baseRefName = prevCommit?.toRemoteRefName() ?: refSpec.remoteRef,
+                        baseRefName = prevCommit?.toRemoteRefName() ?: filteredRefSpec.remoteRef,
                         title = currentCommit.shortMessage,
                         body =
                             buildPullRequestBody(
@@ -325,9 +341,19 @@ class GitJaspr(
             return
         }
 
-        val stack = gitClient.getLocalCommitStack(remoteName, refSpec.localRef, refSpec.remoteRef)
-        if (stack.isEmpty()) {
+        val fullStack =
+            gitClient.getLocalCommitStack(remoteName, refSpec.localRef, refSpec.remoteRef)
+        if (fullStack.isEmpty()) {
             logStackIsEmptyWarning()
+            return
+        }
+
+        // Filter stack based on dont-push pattern
+        val (stack, excludedCommits) = filterStackByDontPushPattern(fullStack)
+        logExcludedCommits(excludedCommits)
+
+        if (stack.isEmpty()) {
+            logger.warn("All commits in the stack match the dont-push pattern. Nothing to merge.")
             return
         }
 
@@ -392,20 +418,51 @@ class GitJaspr(
         cleanUpBranches(branchesToDelete)
     }
 
+    private fun logExcludedCommits(excludedCommits: List<Commit>) {
+        if (excludedCommits.isNotEmpty()) {
+            val firstExcluded = excludedCommits.first()
+            val lastExcluded = excludedCommits.last()
+            val range =
+                if (excludedCommits.size == 1) {
+                    firstExcluded.hash
+                } else {
+                    "${firstExcluded.hash}..${lastExcluded.hash}"
+                }
+            logger.info("Excluding commits matching dont-push pattern: {}", range)
+        }
+    }
+
     suspend fun autoMerge(refSpec: RefSpec, pollingIntervalSeconds: Int = 10) {
         logger.trace("autoMerge {} {}", refSpec, pollingIntervalSeconds)
+
+        // Filter the stack to exclude commits matching the dont-push pattern
+        val remoteName = config.remoteName
+        gitClient.fetch(remoteName)
+        val fullStack =
+            gitClient.getLocalCommitStack(remoteName, refSpec.localRef, refSpec.remoteRef)
+        val (filteredStack, excludedCommits) = filterStackByDontPushPattern(fullStack)
+        logExcludedCommits(excludedCommits)
+
+        if (filteredStack.isEmpty()) {
+            logger.warn(
+                "All commits in the stack match the dont-push pattern. Nothing to auto-merge."
+            )
+            return
+        }
+
+        // Use the topmost non-excluded commit as the localRef for auto-merge
+        val adjustedLocalRef = filteredStack.last().hash
 
         // We'll execute the auto-merge in a temporary clone after grabbing the current HEAD ref.
         // This way the user can run this in the background or in another terminal and continue to
         // use their working copy without interfering with the auto-merge process.
         val currentRef = gitClient.log(refSpec.localRef, 1).first().hash
-        val tempRefSpec = refSpec.copy(localRef = currentRef)
+        val tempRefSpec = refSpec.copy(localRef = adjustedLocalRef)
         logger.trace("autoMerge refSpec: {}", tempRefSpec)
 
         val tempDir = Files.createTempDirectory("git-jaspr-automerge-").toFile()
         logger.debug("Created temporary directory for auto-merge: {}", tempDir.absolutePath)
 
-        val remoteName = config.remoteName
         val remoteUri =
             requireNotNull(gitClient.getRemoteUriOrNull(remoteName)) {
                 "Could not find remote URI for remote: $remoteName"
@@ -915,6 +972,30 @@ class GitJaspr(
         return updatedPullRequests
     }
 
+    /**
+     * Filters a stack to exclude commits matching the dont-push pattern and all commits above them.
+     * Returns the filtered stack and the list of excluded commits. The stack is ordered from bottom
+     * (oldest, furthest from HEAD) to top (newest, closest to HEAD).
+     */
+    private fun filterStackByDontPushPattern(stack: List<Commit>): FilteredStack {
+        val pattern = config.dontPushRegex.toRegex(IGNORE_CASE)
+
+        // Find the first commit (from bottom to top) that matches the pattern
+        val firstMatchIndex = stack.indexOfFirst { commit -> pattern.matches(commit.shortMessage) }
+
+        return if (firstMatchIndex == -1) {
+            // No matches. Include the entire stack
+            FilteredStack(included = stack, excluded = emptyList())
+        } else {
+            // Split the stack at the match point
+            val included = stack.subList(0, firstMatchIndex)
+            val excluded = stack.subList(firstMatchIndex, stack.size)
+            FilteredStack(included, excluded)
+        }
+    }
+
+    private data class FilteredStack(val included: List<Commit>, val excluded: List<Commit>)
+
     private fun logStackIsEmptyWarning() = logger.warn("Stack is empty.")
 
     private fun logMergeOutOfDateWarning(numCommitsBehind: Int, commits: String, refSpec: RefSpec) =
@@ -958,6 +1039,10 @@ class GitJaspr(
     private fun branchOrBranches(count: Int) = if (count == 1) "branch" else "branches"
 
     private fun commitOrCommits(count: Int) = if (count == 1) "commit" else "commits"
+
+    /** Intended for tests */
+    internal fun clone(transformConfig: (Config) -> Config) =
+        GitJaspr(ghClient, gitClient, transformConfig(config), newUuid, commitIdentOverride)
 
     companion object {
         private val HEADER =

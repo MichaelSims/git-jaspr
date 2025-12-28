@@ -24,6 +24,7 @@ data class Config(
     val remoteNamedStackBranchPrefix: String = DEFAULT_REMOTE_NAMED_STACK_BRANCH_PREFIX,
     @Serializable(with = LevelSerializer::class) val logLevel: Level = Level.INFO,
     @Serializable(with = FileSerializer::class) val logsDirectory: File? = null,
+    val dontPushRegex: String = "^(dont[ -]?push)\\b.*$",
 )
 
 @Serializable data class GitHubInfo(val host: String, val owner: String, val name: String)

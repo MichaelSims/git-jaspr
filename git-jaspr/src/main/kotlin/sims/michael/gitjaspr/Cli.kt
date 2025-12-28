@@ -353,6 +353,13 @@ you'll need to re-enable it again.
             }
     private val remoteNamedStackBranchPrefix by remoteNamedStackBranchPrefixDelegate
 
+    private val dontPushRegex by
+        option().default("^(dont[ -]?push)\\b.*$").help {
+            "Regular expression pattern (case-insensitive) to match commit subjects that should not be pushed. " +
+                "When pushing or merging, commits matching this pattern and all commits above them in the stack " +
+                "will be excluded."
+        }
+
     private val showConfig by
         option(hidden = true).flag("--no-show-config", default = false).help {
             "Print the effective configuration to standard output (for debugging)"
@@ -381,6 +388,7 @@ you'll need to re-enable it again.
                 remoteNamedStackBranchPrefix,
                 logLevel,
                 logsDirectory.takeIf { logToFiles },
+                dontPushRegex,
             )
 
         DefaultAppWiring(githubToken, config, gitClient)
