@@ -414,12 +414,6 @@ class GitJaspr(
             refSpec.remoteRef,
         )
 
-        val prsToClose =
-            statuses.slice(0 until indexLastMergeable).mapNotNull(RemoteCommitStatus::pullRequest)
-        for (pr in prsToClose) {
-            ghClient.closePullRequest(pr)
-        }
-
         val lastMergedRef = stack[indexLastMergeable].toRemoteRefName()
         val prsToRebase =
             prs.filter { it.baseRefName == lastMergedRef }
@@ -435,6 +429,12 @@ class GitJaspr(
 
         // Do this cleanup separately after we've rebased remaining PRs. Otherwise, if we delete a
         // branch that's the base ref for a current PR, GitHub will implicitly close it.
+        // Additionally, after a small interval, GitHub will "notice" that PRs we rolled up to be
+        // merged can also be considered merged, since they contain the same commit hashes and those
+        // are in their target branch. We can delete the original branches, and GH will still show
+        // the PRs as merged. However, if we delete the branches too quickly, GH will show them as
+        // closed instead. So we wait a bit before cleaning up.
+        delay(2_000)
         cleanUpBranches(branchesToDelete)
     }
 
