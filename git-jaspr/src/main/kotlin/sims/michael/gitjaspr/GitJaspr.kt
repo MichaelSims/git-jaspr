@@ -2,6 +2,7 @@ package sims.michael.gitjaspr
 
 import java.nio.file.Files
 import java.time.ZonedDateTime
+import java.util.SortedSet
 import kotlin.text.RegexOption.IGNORE_CASE
 import kotlin.time.Duration.Companion.seconds
 import kotlin.time.measureTime
@@ -572,8 +573,30 @@ class GitJaspr(
 
     suspend fun clean(dryRun: Boolean) {
         logger.trace("clean{}", if (dryRun) " (dryRun)" else "")
-        gitClient.fetch(config.remoteName)
-        val orphanedBranches = getOrphanedBranches()
+        val initialPlan = getCleanPlan()
+        logger.trace("clean initial plan: {}", initialPlan)
+
+        val updatedPlan =
+            if (!dryRun && initialPlan.abandonedBranches.isNotEmpty()) {
+                // Close abandoned PRs, then recalculate the plan again (closing PRs may orphan more
+                // branches)
+                val allPrs = ghClient.getPullRequests()
+                val prsToClose = allPrs.filter { it.headRefName in initialPlan.abandonedBranches }
+                for (pr in prsToClose) {
+                    ghClient.closePullRequest(pr)
+                }
+                (initialPlan + getCleanPlan()).also { updatedPlan ->
+                    logger.trace(
+                        "clean updated plan after closing {} abandoned PRs: {}",
+                        prsToClose.size,
+                        updatedPlan,
+                    )
+                }
+            } else {
+                initialPlan
+            }
+
+        val (orphanedBranches, emptyNamedStackBranches, abandonedBranches) = updatedPlan
         for (branch in orphanedBranches) {
             val shortMessage =
                 gitClient.log("${config.remoteName}/$branch", 1).singleOrNull()?.shortMessage
@@ -583,14 +606,21 @@ class GitJaspr(
                 if (shortMessage != null) " ($shortMessage)" else "",
             )
         }
-
-        val emptyNamedStackBranches = getEmptyNamedStackBranches()
         for (branch in emptyNamedStackBranches) {
             logger.info("{} is empty (fully merged)", branch)
         }
+        for (branch in abandonedBranches) {
+            val shortMessage =
+                gitClient.log("${config.remoteName}/$branch", 1).singleOrNull()?.shortMessage
+            logger.info(
+                "{}{} is abandoned (open PR not reachable by any named stack)",
+                branch,
+                if (shortMessage != null) " ($shortMessage)" else "",
+            )
+        }
 
-        val branchesToDelete = orphanedBranches + emptyNamedStackBranches
         if (!dryRun) {
+            val branchesToDelete = updatedPlan.allBranches()
             logger.info(
                 "Deleting {} {}",
                 branchesToDelete.size,
@@ -642,6 +672,67 @@ class GitJaspr(
                 false
             }
         }
+    }
+
+    /** Returns a list of jaspr branches with open PRs that are not reachable by any named stack. */
+    internal suspend fun getAbandonedBranches(): List<String> {
+        logger.trace("getAbandonedBranches")
+        val unmergedAndReachableFromNamedStacks =
+            gitClient
+                .getRemoteBranches(config.remoteName)
+                .mapNotNull { branch ->
+                    getRemoteNamedStackRefParts(branch.name, config.remoteNamedStackBranchPrefix)
+                        ?.let { namedStackRefParts -> branch.name to namedStackRefParts.targetRef }
+                }
+                .flatMap { (branchName, targetRef) ->
+                    gitClient
+                        .logRange(
+                            "${config.remoteName}/${targetRef}",
+                            "${config.remoteName}/${branchName}",
+                        )
+                        .map(Commit::hash)
+                }
+                .toSet()
+
+        return ghClient.getPullRequests().map(PullRequest::headRefName).filter { headRefName ->
+            gitClient.log("${config.remoteName}/${headRefName}", 1).single().hash !in
+                unmergedAndReachableFromNamedStacks
+        }
+    }
+
+    data class CleanPlan(
+        val orphanedBranches: SortedSet<String> = sortedSetOf(),
+        val emptyNamedStackBranches: SortedSet<String> = sortedSetOf(),
+        val abandonedBranches: SortedSet<String> = sortedSetOf(),
+    ) {
+        operator fun plus(other: CleanPlan): CleanPlan {
+            return CleanPlan(
+                (orphanedBranches + (other.orphanedBranches - abandonedBranches)).toSortedSet(),
+                (emptyNamedStackBranches + other.emptyNamedStackBranches).toSortedSet(),
+                (abandonedBranches + other.abandonedBranches).toSortedSet(),
+            )
+        }
+
+        fun allBranches() =
+            (orphanedBranches + emptyNamedStackBranches + abandonedBranches).sorted()
+    }
+
+    internal suspend fun getCleanPlan(): CleanPlan {
+        gitClient.fetch(config.remoteName)
+        val orphanedBranches = getOrphanedBranches()
+        val emptyNamedStackBranches = getEmptyNamedStackBranches()
+        val abandonedBranches =
+            if (config.cleanAbandonedPrs) {
+                getAbandonedBranches()
+            } else {
+                emptyList()
+            }
+
+        return CleanPlan(
+            orphanedBranches.toSortedSet(),
+            emptyNamedStackBranches.toSortedSet(),
+            abandonedBranches.toSortedSet(),
+        )
     }
 
     fun installCommitIdHook() {

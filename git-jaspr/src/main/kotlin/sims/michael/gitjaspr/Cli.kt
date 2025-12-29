@@ -360,6 +360,12 @@ you'll need to re-enable it again.
                 "will be excluded."
         }
 
+    private val cleanAbandonedPrs by
+        option().flag(default = false).help {
+            "When enabled, the clean command will also close open PRs for jaspr branches that are not " +
+                "reachable by any existing named stack branch, and then delete those branches."
+        }
+
     private val showConfig by
         option(hidden = true).flag("--no-show-config", default = false).help {
             "Print the effective configuration to standard output (for debugging)"
@@ -389,6 +395,7 @@ you'll need to re-enable it again.
                 logLevel,
                 logsDirectory.takeIf { logToFiles },
                 dontPushRegex,
+                cleanAbandonedPrs,
             )
 
         DefaultAppWiring(githubToken, config, gitClient)

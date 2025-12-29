@@ -7,7 +7,9 @@ import kotlin.test.assertNotNull
 import org.junit.jupiter.api.*
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.slf4j.Logger
+import sims.michael.gitjaspr.GitJaspr.CleanPlan
 import sims.michael.gitjaspr.RemoteRefEncoding.DEFAULT_REMOTE_NAMED_STACK_BRANCH_PREFIX
+import sims.michael.gitjaspr.RemoteRefEncoding.buildRemoteNamedStackRef
 import sims.michael.gitjaspr.RemoteRefEncoding.buildRemoteRef
 import sims.michael.gitjaspr.githubtests.GitHubTestHarness
 import sims.michael.gitjaspr.githubtests.GitHubTestHarness.Companion.withTestSetup
@@ -3613,18 +3615,17 @@ interface GitJasprTest {
             merge(RefSpec("dev", "main"))
 
             // Run clean with dry run
-            gitJaspr.clean(dryRun = true)
-
-            // Verify both named stack branches still exist (dry run doesn't delete)
-            val namedStackBranches =
-                localGit
-                    .getRemoteBranches(remoteName)
-                    .filter { isNamedStackBranch(it) }
-                    .map { it.name }
-
-            assertEquals(2, namedStackBranches.size)
-            assertTrue(namedStackBranches.any { it.contains("stack-one") })
-            assertTrue(namedStackBranches.any { it.contains("stack-two") })
+            gitJaspr.getCleanPlan()
+            assertEquals(
+                CleanPlan(
+                    emptyNamedStackBranches =
+                        sortedSetOf(
+                            buildRemoteNamedStackRef("stack-one"),
+                            buildRemoteNamedStackRef("stack-two"),
+                        )
+                ),
+                gitJaspr.getCleanPlan(),
+            )
         }
     }
 
@@ -3746,6 +3747,275 @@ interface GitJasprTest {
 
             assertEquals(1, namedStackBranchesAfterClean.size)
             assertTrue(namedStackBranchesAfterClean.single().contains("stack-three"))
+        }
+    }
+
+    @Test
+    fun `clean with abandoned PRs dry run reports them`() {
+        withTestSetup(useFakeRemote) {
+            // Create a named stack and merge it, so it's empty
+            createCommitsFrom(
+                testCase {
+                    repository {
+                        commit {
+                            title = "will_merge_a"
+                            willPassVerification = true
+                            remoteRefs += buildRemoteRef("will_merge_a")
+                            localRefs += "dev"
+                        }
+                    }
+                    pullRequest {
+                        headRef = buildRemoteRef("will_merge_a")
+                        baseRef = "main"
+                        title = "will_merge_a"
+                        willBeApprovedByUserKey = "michael"
+                    }
+                    checkout = "dev"
+                }
+            )
+
+            gitJaspr.push(stackName = "empty_stack")
+            waitForChecksToConclude("will_merge_a")
+            merge(RefSpec("dev", "main"))
+
+            // Create an orphaned commit (no PR)
+            createCommitsFrom(
+                testCase {
+                    repository {
+                        commit {
+                            title = "will_orphan_a"
+                            remoteRefs += buildRemoteRef("will_orphan_a")
+                        }
+                    }
+                }
+            )
+
+            // Push the same stack twice, abandoning commit D the second time
+            createCommitsFrom(
+                testCase {
+                    repository {
+                        commit { title = "A" }
+                        commit { title = "B" }
+                        commit { title = "C" }
+                        commit { title = "D" }
+                        commit {
+                            title = "E"
+                            localRefs += "dev"
+                        }
+                    }
+                }
+            )
+
+            gitJaspr.push(stackName = "my-stack")
+
+            createCommitsFrom(
+                testCase {
+                    repository {
+                        commit { title = "A" }
+                        commit { title = "B" }
+                        commit { title = "C" }
+                        // D is dropped - its PR will be abandoned (unreachable by any named stack)
+                        commit {
+                            title = "E"
+                            localRefs += "dev"
+                        }
+                    }
+                }
+            )
+
+            gitJaspr.push(stackName = "my-stack")
+
+            // Get the clean plan with cleanAbandonedPrs enabled
+            val gitJasprWithCleanAbandoned =
+                gitJaspr.clone { config -> config.copy(cleanAbandonedPrs = true) }
+            assertEquals(
+                CleanPlan(
+                    orphanedBranches = sortedSetOf(buildRemoteRef("will_orphan_a")),
+                    emptyNamedStackBranches = sortedSetOf(buildRemoteNamedStackRef("empty_stack")),
+                    abandonedBranches = sortedSetOf(buildRemoteRef("D")),
+                ),
+                gitJasprWithCleanAbandoned.getCleanPlan(),
+            )
+
+            // Run clean with dry run to ensure nothing is actually deleted
+            gitJasprWithCleanAbandoned.clean(dryRun = true)
+
+            // Verify PRs are still open (dry run doesn't close them)
+            val prsAfterClean = gitHub.getPullRequests()
+            assertEquals(5, prsAfterClean.size)
+
+            // Verify D branch still exists
+            val jasprBranchesAfterClean =
+                localGit
+                    .getRemoteBranches(remoteName)
+                    .filterNot { isNamedStackBranch(it) }
+                    .map { it.name }
+            assertTrue(jasprBranchesAfterClean.contains(buildRemoteRef("D")))
+        }
+    }
+
+    @Test
+    fun `clean with abandoned PRs closes and deletes them`() {
+        withTestSetup(useFakeRemote, rollBackChanges = false) {
+            // Create a named stack and merge it, so it's empty
+            createCommitsFrom(
+                testCase {
+                    repository {
+                        commit {
+                            title = "will_merge_a"
+                            willPassVerification = true
+                            remoteRefs += buildRemoteRef("will_merge_a")
+                            localRefs += "dev"
+                        }
+                    }
+                    pullRequest {
+                        headRef = buildRemoteRef("will_merge_a")
+                        baseRef = "main"
+                        title = "will_merge_a"
+                        willBeApprovedByUserKey = "michael"
+                    }
+                    checkout = "dev"
+                }
+            )
+
+            gitJaspr.push(stackName = "empty_stack")
+            waitForChecksToConclude("will_merge_a")
+            merge(RefSpec("dev", "main"))
+
+            // Create an orphaned commit (no PR)
+            createCommitsFrom(
+                testCase {
+                    repository {
+                        commit {
+                            title = "will_orphan_a"
+                            remoteRefs += buildRemoteRef("will_orphan_a")
+                        }
+                    }
+                }
+            )
+
+            // Push the same stack twice, abandoning commit D the second time
+            createCommitsFrom(
+                testCase {
+                    repository {
+                        commit { title = "will_merge_a" }
+                        commit { title = "A" }
+                        commit { title = "B" }
+                        commit { title = "C" }
+                        commit { title = "D" }
+                        commit {
+                            title = "E"
+                            localRefs += "dev"
+                        }
+                    }
+                }
+            )
+
+            gitJaspr.push(stackName = "my-stack")
+
+            createCommitsFrom(
+                testCase {
+                    repository {
+                        commit {
+                            title = "will_merge_a"
+                            willPassVerification = true
+                        }
+                        commit {
+                            title = "A"
+                            willPassVerification = true
+                        }
+                        commit {
+                            title = "B"
+                            willPassVerification = true
+                        }
+                        commit {
+                            title = "C"
+                            willPassVerification = true
+                        }
+                        // D is dropped - its PR will be abandoned (unreachable by any named stack)
+                        commit {
+                            title = "E"
+                            willPassVerification = true
+                            localRefs += "dev"
+                        }
+                    }
+                    pullRequest {
+                        headRef = buildRemoteRef("A")
+                        baseRef = "main"
+                        title = "A"
+                        willBeApprovedByUserKey = "michael"
+                    }
+                    pullRequest {
+                        headRef = buildRemoteRef("B")
+                        baseRef = buildRemoteRef("A")
+                        title = "B"
+                        willBeApprovedByUserKey = "michael"
+                    }
+                    pullRequest {
+                        headRef = buildRemoteRef("C")
+                        baseRef = buildRemoteRef("B")
+                        title = "C"
+                        willBeApprovedByUserKey = "michael"
+                    }
+                    pullRequest {
+                        headRef = buildRemoteRef("E")
+                        baseRef = buildRemoteRef("C")
+                        title = "E"
+                        willBeApprovedByUserKey = "michael"
+                    }
+                }
+            )
+
+            gitJaspr.push(stackName = "my-stack")
+            assertEquals(
+                listOf(
+                        buildRemoteNamedStackRef("empty_stack"),
+                        buildRemoteNamedStackRef("my-stack"),
+                        buildRemoteRef("A"),
+                        buildRemoteRef("B"),
+                        buildRemoteRef("C"),
+                        buildRemoteRef("D"),
+                        buildRemoteRef("E"),
+                        buildRemoteRef("E_01"),
+                        buildRemoteRef("will_orphan_a"),
+                        "main",
+                    )
+                    .toSet(),
+                localGit.getRemoteBranches(remoteName).map(RemoteBranch::name).toSet(),
+            )
+
+            val gitJasprWithCleanAbandoned =
+                gitJaspr.clone { config -> config.copy(cleanAbandonedPrs = true) }
+            gitJasprWithCleanAbandoned.clean(dryRun = false)
+
+            assertEquals(
+                listOf(
+                        buildRemoteNamedStackRef("my-stack"),
+                        buildRemoteRef("A"),
+                        buildRemoteRef("B"),
+                        buildRemoteRef("C"),
+                        buildRemoteRef("E"),
+                        buildRemoteRef("E_01"),
+                        "main",
+                    )
+                    .toSet(),
+                localGit.getRemoteBranches(remoteName).map(RemoteBranch::name).toSet(),
+            )
+
+            waitForChecksToConclude("A", "B", "C", "E")
+            merge(RefSpec("dev", "main"))
+
+            assertEquals(
+                listOf(buildRemoteNamedStackRef("my-stack"), "main").toSet(),
+                localGit.getRemoteBranches(remoteName).map(RemoteBranch::name).toSet(),
+            )
+
+            gitJasprWithCleanAbandoned.clean(dryRun = false)
+
+            assertEquals(
+                listOf("main"),
+                localGit.getRemoteBranches(remoteName).map(RemoteBranch::name),
+            )
         }
     }
 
