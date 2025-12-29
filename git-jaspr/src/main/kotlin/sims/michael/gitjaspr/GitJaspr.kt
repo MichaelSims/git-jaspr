@@ -16,7 +16,9 @@ import sims.michael.gitjaspr.GitJaspr.StatusBits.Status.PENDING
 import sims.michael.gitjaspr.GitJaspr.StatusBits.Status.SUCCESS
 import sims.michael.gitjaspr.GitJaspr.StatusBits.Status.WARNING
 import sims.michael.gitjaspr.RemoteRefEncoding.REV_NUM_DELIMITER
+import sims.michael.gitjaspr.RemoteRefEncoding.buildRemoteNamedStackRef
 import sims.michael.gitjaspr.RemoteRefEncoding.buildRemoteRef
+import sims.michael.gitjaspr.RemoteRefEncoding.getRemoteNamedStackRefParts
 import sims.michael.gitjaspr.RemoteRefEncoding.getRemoteRefParts
 
 class GitJaspr(
@@ -54,26 +56,21 @@ class GitJaspr(
             val numCommitsAhead: Int,
             val numCommitsBehind: Int,
         )
-        val namedStackPrefix = "${config.remoteNamedStackBranchPrefix}/"
         val namedStackInfo =
-            gitClient
-                .getUpstreamBranch(config.remoteName)
-                ?.takeIf { upstream -> upstream.name.startsWith(namedStackPrefix) }
-                ?.let { upstream ->
-                    val fullName = upstream.name
-                    val trackingBranch = "$remoteName/$fullName"
-                    // Remove prefix and target branch: jaspr-named/<target>/<name> -> <name>
-                    val withoutPrefix = fullName.removePrefix(namedStackPrefix)
-                    val stackName =
-                        withoutPrefix.substringAfter('/', missingDelimiterValue = withoutPrefix)
-                    NamedStackInfo(
-                        name = stackName,
-                        numCommitsAhead =
-                            gitClient.logRange(trackingBranch, stack.last().hash).size,
-                        numCommitsBehind =
-                            gitClient.logRange(stack.last().hash, trackingBranch).size,
-                    )
-                }
+            gitClient.getUpstreamBranch(config.remoteName)?.let { upstream ->
+                getRemoteNamedStackRefParts(upstream.name, config.remoteNamedStackBranchPrefix)
+                    ?.stackName
+                    ?.let { stackName ->
+                        val trackingBranch = "$remoteName/${upstream.name}"
+                        NamedStackInfo(
+                            name = stackName,
+                            numCommitsAhead =
+                                gitClient.logRange(trackingBranch, stack.last().hash).size,
+                            numCommitsBehind =
+                                gitClient.logRange(stack.last().hash, trackingBranch).size,
+                        )
+                    }
+            }
 
         val numCommitsBehindBase =
             gitClient.logRange(stack.last().hash, "$remoteName/${refSpec.remoteRef}").size
@@ -183,9 +180,11 @@ class GitJaspr(
 
         val targetRef = refSpec.remoteRef
         val prefixedStackName =
-            // The original target for this stack is "baked in" to the ref name. This will come
-            // in handy later.
-            "${config.remoteNamedStackBranchPrefix}/$targetRef/$effectiveStackName"
+            buildRemoteNamedStackRef(
+                effectiveStackName,
+                targetRef,
+                config.remoteNamedStackBranchPrefix,
+            )
         fun getLocalCommitStack() =
             gitClient.getLocalCommitStack(remoteName, refSpec.localRef, targetRef)
         val originalStack = getLocalCommitStack()
@@ -623,27 +622,23 @@ class GitJaspr(
 
     internal fun getEmptyNamedStackBranches(): List<String> {
         logger.trace("getEmptyNamedStackBranches")
-        val namedStackPrefix = config.remoteNamedStackBranchPrefix
         val remoteBranchNames =
             gitClient.getRemoteBranches(config.remoteName).map(RemoteBranch::name)
         return remoteBranchNames.filter { branchName ->
-            if (branchName.startsWith("$namedStackPrefix/")) {
+            val parts = getRemoteNamedStackRefParts(branchName, config.remoteNamedStackBranchPrefix)
+            if (parts != null) {
                 // Named stack branch - check if it has commits not in its target
-                // Format: jaspr-named/<target>/<name>
-                val withoutPrefix = branchName.removePrefix("$namedStackPrefix/")
-                val targetRef = withoutPrefix.substringBefore('/')
-
-                // Check if there are any commits in the named stack that aren't in the target
                 val stack =
                     gitClient.getLocalCommitStack(
                         config.remoteName,
                         "${config.remoteName}/$branchName",
-                        targetRef,
+                        parts.targetRef,
                     )
 
                 // If the stack is empty, the named branch is fully merged and can be cleaned
                 stack.isEmpty()
             } else {
+                // Not a named stack branch
                 false
             }
         }
@@ -1067,18 +1062,7 @@ class GitJaspr(
     }
 
     private fun RemoteBranch.extractStackNameFromBranch(): String? {
-        val namedStackPrefix = config.remoteNamedStackBranchPrefix
-
-        return if (name.startsWith("$namedStackPrefix/")) {
-            // Extract the stack name from the existing upstream branch
-            // Format is: jaspr-named/<target>/<name>
-            val withoutPrefix = name.removePrefix("$namedStackPrefix/")
-            withoutPrefix
-                .substringAfter('/', missingDelimiterValue = "")
-                .takeIf(CharSequence::isNotEmpty)
-        } else {
-            null
-        }
+        return getRemoteNamedStackRefParts(name, config.remoteNamedStackBranchPrefix)?.stackName
     }
 
     private fun generateRandomStackName(): String {
