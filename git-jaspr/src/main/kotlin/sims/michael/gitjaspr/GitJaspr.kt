@@ -169,20 +169,23 @@ class GitJaspr(
             )
         }
 
-        if (stackName != null && gitClient.isHeadDetached()) {
-            throw GitJasprException("Pushing a named stack from detached HEAD is not supported.")
+        if (gitClient.isHeadDetached()) {
+            throw GitJasprException("Pushing a stack from detached HEAD is not supported.")
         }
 
         val remoteName = config.remoteName
         gitClient.fetch(remoteName)
 
+        val effectiveStackName =
+            stackName
+                ?: gitClient.getUpstreamBranch(remoteName)?.extractStackNameFromBranch()
+                ?: generateRandomStackName()
+
         val targetRef = refSpec.remoteRef
         val prefixedStackName =
-            stackName?.let { name ->
-                // The original target for this stack is "baked in" to the ref name. This will come
-                // in handy later.
-                "${config.remoteNamedStackBranchPrefix}/$targetRef/$name"
-            }
+            // The original target for this stack is "baked in" to the ref name. This will come
+            // in handy later.
+            "${config.remoteNamedStackBranchPrefix}/$targetRef/$effectiveStackName"
         fun getLocalCommitStack() =
             gitClient.getLocalCommitStack(remoteName, refSpec.localRef, targetRef)
         val originalStack = getLocalCommitStack()
@@ -233,19 +236,9 @@ class GitJaspr(
                 remoteName,
                 outOfDateBranches.map(RefSpec::remoteRef),
             )
-        val upstreamBranchName =
-            gitClient
-                .getUpstreamBranch(remoteName)
-                ?.takeIf { branch ->
-                    branch.name.startsWith("${config.remoteNamedStackBranchPrefix}/")
-                }
-                ?.name
-        val namedStackRefSpec =
-            (prefixedStackName ?: upstreamBranchName)?.let { name ->
-                // Convert symbolic refs (i.e. HEAD) to short hash so our comparison matches below
-                val localRef = gitClient.log(filteredRefSpec.localRef, 1).single().hash
-                RefSpec(localRef, name)
-            }
+        // Convert symbolic refs (i.e. HEAD) to short hash so our comparison matches below
+        val localRef = gitClient.log(filteredRefSpec.localRef, 1).single().hash
+        val namedStackRefSpec = RefSpec(localRef, prefixedStackName)
         val outOfDateNamedStackBranch = listOfNotNull(namedStackRefSpec) - remoteRefSpecs.toSet()
         val refSpecs =
             outOfDateBranches.map(RefSpec::forcePush) +
@@ -262,9 +255,7 @@ class GitJaspr(
             refOrRefs(revisionHistoryRefs.size),
         )
 
-        if (namedStackRefSpec != null) {
-            gitClient.setUpstreamBranch(remoteName, namedStackRefSpec.remoteRef)
-        }
+        gitClient.setUpstreamBranch(remoteName, namedStackRefSpec.remoteRef)
 
         val existingPrsByCommitId = pullRequestsRebased.associateBy(PullRequest::commitId)
 
@@ -1073,6 +1064,41 @@ class GitJaspr(
             EMPTY("ㄧ"),
             WARNING("❗"),
         }
+    }
+
+    private fun RemoteBranch.extractStackNameFromBranch(): String? {
+        val namedStackPrefix = config.remoteNamedStackBranchPrefix
+
+        return if (name.startsWith("$namedStackPrefix/")) {
+            // Extract the stack name from the existing upstream branch
+            // Format is: jaspr-named/<target>/<name>
+            val withoutPrefix = name.removePrefix("$namedStackPrefix/")
+            withoutPrefix
+                .substringAfter('/', missingDelimiterValue = "")
+                .takeIf(CharSequence::isNotEmpty)
+        } else {
+            null
+        }
+    }
+
+    private fun generateRandomStackName(): String {
+        val userName =
+            gitClient.getConfigValue("user.name") ?: System.getenv("USER") ?: "guyincognito"
+
+        // Generate a random stack name and prefix it with user identifier
+        val randomName = StackNameGenerator.generateName()
+        val nameParts = userName.trim().split(Regex("[\\s|.]+"))
+
+        val prefix =
+            if (nameParts.size == 1) {
+                nameParts[0].lowercase()
+            } else {
+                val firstInitial = nameParts[0].take(1)
+                val lastName = nameParts.last()
+                "$firstInitial$lastName".lowercase()
+            }
+
+        return "$prefix-$randomName"
     }
 
     private fun refOrRefs(count: Int) = if (count == 1) "ref" else "refs"

@@ -860,15 +860,17 @@ class CliGitClientTest {
             val git = CliGitClient(localGit.workingDirectory)
             val reflog = git.reflog()
             // Build a list of short messages in the order that HEAD moved, then reverse it to match
-            // the reflog order
-            // This bakes some assumptions about how our test harness works, so if that changes this
-            // will break
+            // the reflog order. This bakes some assumptions about how our test harness works, so if
+            // that changes, this will break
             val expectedShortMessages =
                 buildList {
                         add(INITIAL_COMMIT_SHORT_MESSAGE) // The result of "git init"
                         for (title in titles) {
                             add(INITIAL_COMMIT_SHORT_MESSAGE)
-                            add(title)
+                            // This short title will appear twice. Once for when we committed it,
+                            // and once for when the test harness did the equivalent of
+                            // "git checkout -b main-temp-checkout"
+                            repeat(2) { add(title) }
                         }
                     }
                     .reversed()

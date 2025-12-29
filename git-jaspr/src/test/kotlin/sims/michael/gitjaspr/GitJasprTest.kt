@@ -3,6 +3,7 @@ package sims.michael.gitjaspr
 import java.util.MissingFormatArgumentException
 import kotlin.test.assertContains
 import kotlin.test.assertEquals
+import kotlin.test.assertNotNull
 import org.junit.jupiter.api.*
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.slf4j.Logger
@@ -12,6 +13,7 @@ import sims.michael.gitjaspr.githubtests.GitHubTestHarness
 import sims.michael.gitjaspr.githubtests.GitHubTestHarness.Companion.withTestSetup
 import sims.michael.gitjaspr.githubtests.TestCaseData
 import sims.michael.gitjaspr.githubtests.generatedtestdsl.testCase
+import sims.michael.gitjaspr.testing.DEFAULT_COMMITTER
 
 interface GitJasprTest {
 
@@ -626,7 +628,8 @@ interface GitJasprTest {
                 }
             )
 
-            push()
+            val stackName = "flubber"
+            gitJaspr.push(stackName = stackName)
 
             waitForChecksToConclude("one", "two", "three")
 
@@ -638,7 +641,7 @@ interface GitJasprTest {
                 |[✅✅✅✅ㄧㄧ] %s : %s : one
                 """
                     .trimMargin()
-                    .toStatusString(actual),
+                    .toStatusString(actual, NamedStackInfo(stackName, 0, 0, remoteName)),
                 getActual = { actual },
             )
         }
@@ -685,7 +688,8 @@ interface GitJasprTest {
                 }
             )
 
-            push()
+            val stackName = "flubber"
+            gitJaspr.push(stackName = stackName)
 
             waitForChecksToConclude("one", "two", "three")
 
@@ -697,7 +701,7 @@ interface GitJasprTest {
                 |[✅✅✅✅ㄧㄧ] %s : %s : one
                 """
                     .trimMargin()
-                    .toStatusString(actual),
+                    .toStatusString(actual, NamedStackInfo(stackName, 0, 0, remoteName)),
                 actual,
             )
         }
@@ -1537,7 +1541,10 @@ interface GitJasprTest {
 
             assertEquals(
                 (1..3).map { buildRemoteRef(it.toString()) },
-                localGit.getRemoteBranches(remoteName).map(RemoteBranch::name) - DEFAULT_TARGET_REF,
+                localGit
+                    .getRemoteBranches(remoteName)
+                    .filterNot(::isNamedStackBranch)
+                    .map(RemoteBranch::name) - DEFAULT_TARGET_REF,
             )
         }
     }
@@ -1594,6 +1601,7 @@ interface GitJasprTest {
                 },
                 localGit
                     .getRemoteBranches(remoteName)
+                    .filterNot(::isNamedStackBranch)
                     .map(RemoteBranch::name)
                     .filter { name ->
                         name.startsWith(RemoteRefEncoding.DEFAULT_REMOTE_BRANCH_PREFIX)
@@ -1977,6 +1985,62 @@ interface GitJasprTest {
                 }
             )
             push()
+        }
+    }
+
+    @Test
+    fun `push without explicit stack name generates one with git user name prefix`() {
+        withTestSetup(useFakeRemote) {
+            createCommitsFrom(
+                testCase {
+                    repository {
+                        commit { title = "one" }
+                        commit { title = "two" }
+                        commit {
+                            title = "three"
+                            localRefs += "main"
+                        }
+                    }
+                    checkout = "main"
+                }
+            )
+
+            localGit.setConfigValue("user.name", DEFAULT_COMMITTER.name)
+            localGit.setConfigValue("user.email", DEFAULT_COMMITTER.email)
+            // Push without providing a stack name
+            gitJaspr.push()
+
+            // Get the upstream branch name
+            val upstreamBranch = localGit.getUpstreamBranch(remoteName)
+            assertNotNull(upstreamBranch)
+
+            // Verify the branch name format: jaspr-named/<target>/<prefix>-<adjective>-<noun>
+            // where prefix is the first initial plus last name from git configuration
+            val branchName = upstreamBranch.name
+            assertTrue(
+                branchName.startsWith(
+                    "$DEFAULT_REMOTE_NAMED_STACK_BRANCH_PREFIX/$DEFAULT_TARGET_REF/"
+                )
+            )
+
+            // Extract the generated name part
+            val generatedName =
+                branchName.removePrefix(
+                    "$DEFAULT_REMOTE_NAMED_STACK_BRANCH_PREFIX/$DEFAULT_TARGET_REF/"
+                )
+
+            // Derive the expected prefix using the same logic as in GitJaspr.push()
+            val nameParts = DEFAULT_COMMITTER.name.trim().split(Regex("[\\s.]+"))
+            val firstInitial = nameParts[0].take(1)
+            val lastName = nameParts.last()
+            val expectedPrefix = "$firstInitial$lastName".lowercase()
+            assertEquals(
+                expectedPrefix,
+                generatedName.split("-")[0],
+                "Prefix should be derived from user.name '${DEFAULT_COMMITTER.name}'",
+            )
+
+            logger.info("Generated stack name: $generatedName")
         }
     }
 
@@ -3114,7 +3178,10 @@ interface GitJasprTest {
             merge(RefSpec("dev2", "main"))
             assertEquals(
                 listOf(buildRemoteRef("c"), buildRemoteRef("c_01"), "main"),
-                localGit.getRemoteBranches(remoteName).map(RemoteBranch::name),
+                localGit
+                    .getRemoteBranches(remoteName)
+                    .filterNot(::isNamedStackBranch)
+                    .map(RemoteBranch::name),
             )
         }
     }
@@ -3366,7 +3433,10 @@ interface GitJasprTest {
             gitJaspr.clean(false)
             assertEquals(
                 listOf(buildRemoteRef("a"), buildRemoteRef("a_01"), buildRemoteRef("z"), "main"),
-                localGit.getRemoteBranches(remoteName).map(RemoteBranch::name),
+                localGit
+                    .getRemoteBranches(remoteName)
+                    .filterNot(::isNamedStackBranch)
+                    .map(RemoteBranch::name),
             )
         }
     }
@@ -3819,7 +3889,10 @@ interface GitJasprTest {
             // Only commits one and two should be pushed
             assertEquals(
                 listOf("one", "two").map { buildRemoteRef(it) },
-                localGit.getRemoteBranches(remoteName).map(RemoteBranch::name) - DEFAULT_TARGET_REF,
+                localGit
+                    .getRemoteBranches(remoteName)
+                    .filterNot(::isNamedStackBranch)
+                    .map(RemoteBranch::name) - DEFAULT_TARGET_REF,
             )
         }
     }
@@ -3851,7 +3924,10 @@ interface GitJasprTest {
             // No commits should be pushed
             assertEquals(
                 emptyList(),
-                localGit.getRemoteBranches(remoteName).map(RemoteBranch::name) - DEFAULT_TARGET_REF,
+                localGit
+                    .getRemoteBranches(remoteName)
+                    .filterNot(::isNamedStackBranch)
+                    .map(RemoteBranch::name) - DEFAULT_TARGET_REF,
             )
         }
     }
@@ -3879,7 +3955,10 @@ interface GitJasprTest {
             // No commits should be pushed
             assertEquals(
                 emptyList(),
-                localGit.getRemoteBranches(remoteName).map(RemoteBranch::name) - DEFAULT_TARGET_REF,
+                localGit
+                    .getRemoteBranches(remoteName)
+                    .filterNot(::isNamedStackBranch)
+                    .map(RemoteBranch::name) - DEFAULT_TARGET_REF,
             )
         }
     }
@@ -4074,12 +4153,19 @@ interface GitJasprTest {
             // Only commit one should be pushed ("WIP: two" and "three" are excluded)
             assertEquals(
                 listOf("one").map { buildRemoteRef(it) },
-                localGit.getRemoteBranches(remoteName).map(RemoteBranch::name) - DEFAULT_TARGET_REF,
+                localGit
+                    .getRemoteBranches(remoteName)
+                    .filterNot(::isNamedStackBranch)
+                    .map(RemoteBranch::name) - DEFAULT_TARGET_REF,
             )
         }
     }
 
     // endregion
+
+    private fun isNamedStackBranch(branch: RemoteBranch): Boolean {
+        return branch.name.startsWith(DEFAULT_REMOTE_NAMED_STACK_BRANCH_PREFIX)
+    }
 
     private fun commitOrCommits(count: Int) = if (count == 1) "commit" else "commits"
 

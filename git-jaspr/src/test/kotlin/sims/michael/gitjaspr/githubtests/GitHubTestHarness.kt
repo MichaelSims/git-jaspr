@@ -222,6 +222,11 @@ private constructor(
         val checkout = testCase.checkout
         if (checkout != null) {
             localGit.checkout(checkout)
+        } else {
+            // Jaspr no longer supports pushing from detached HEAD, so we need to be on a branch
+            val name = "main-temp-checkout"
+            localGit.branch(name, force = true)
+            localGit.checkout(name)
         }
 
         if (testCase.localWillBeDirty) {
