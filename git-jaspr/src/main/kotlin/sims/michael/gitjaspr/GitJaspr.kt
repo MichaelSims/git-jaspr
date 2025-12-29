@@ -580,6 +580,39 @@ class GitJaspr(
         }
     }
 
+    suspend fun clean(dryRun: Boolean) {
+        logger.trace("clean{}", if (dryRun) " (dryRun)" else "")
+        gitClient.fetch(config.remoteName)
+        val orphanedBranches = getOrphanedBranches()
+        for (branch in orphanedBranches) {
+            val shortMessage =
+                gitClient.log("${config.remoteName}/$branch", 1).singleOrNull()?.shortMessage
+            logger.info(
+                "{}{} is orphaned",
+                branch,
+                if (shortMessage != null) " ($shortMessage)" else "",
+            )
+        }
+
+        val emptyNamedStackBranches = getEmptyNamedStackBranches()
+        for (branch in emptyNamedStackBranches) {
+            logger.info("{} is empty (fully merged)", branch)
+        }
+
+        val branchesToDelete = orphanedBranches + emptyNamedStackBranches
+        if (!dryRun) {
+            logger.info(
+                "Deleting {} {}",
+                branchesToDelete.size,
+                branchOrBranches(branchesToDelete.size),
+            )
+            gitClient.push(
+                branchesToDelete.map { RefSpec(FORCE_PUSH_PREFIX, it) },
+                config.remoteName,
+            )
+        }
+    }
+
     internal suspend fun getOrphanedBranches(): List<String> {
         logger.trace("getOrphanedBranches")
         val pullRequests = ghClient.getPullRequests().map(PullRequest::headRefName).toSet()
@@ -597,29 +630,31 @@ class GitJaspr(
         return orphanedBranches
     }
 
-    suspend fun clean(dryRun: Boolean) {
-        logger.trace("clean{}", if (dryRun) " (dryRun)" else "")
-        gitClient.fetch(config.remoteName)
-        val orphanedBranches = getOrphanedBranches()
-        for (branch in orphanedBranches) {
-            val shortMessage =
-                gitClient.log("${config.remoteName}/$branch", 1).singleOrNull()?.shortMessage
-            logger.info(
-                "{}{} is orphaned",
-                branch,
-                if (shortMessage != null) " ($shortMessage)" else "",
-            )
-        }
-        if (!dryRun) {
-            logger.info(
-                "Deleting {} {}",
-                orphanedBranches.size,
-                branchOrBranches(orphanedBranches.size),
-            )
-            gitClient.push(
-                orphanedBranches.map { RefSpec(FORCE_PUSH_PREFIX, it) },
-                config.remoteName,
-            )
+    internal fun getEmptyNamedStackBranches(): List<String> {
+        logger.trace("getEmptyNamedStackBranches")
+        val namedStackPrefix = config.remoteNamedStackBranchPrefix
+        val remoteBranchNames =
+            gitClient.getRemoteBranches(config.remoteName).map(RemoteBranch::name)
+        return remoteBranchNames.filter { branchName ->
+            if (branchName.startsWith("$namedStackPrefix/")) {
+                // Named stack branch - check if it has commits not in its target
+                // Format: jaspr-named/<target>/<name>
+                val withoutPrefix = branchName.removePrefix("$namedStackPrefix/")
+                val targetRef = withoutPrefix.substringBefore('/')
+
+                // Check if there are any commits in the named stack that aren't in the target
+                val stack =
+                    gitClient.getLocalCommitStack(
+                        config.remoteName,
+                        "${config.remoteName}/$branchName",
+                        targetRef,
+                    )
+
+                // If the stack is empty, the named branch is fully merged and can be cleaned
+                stack.isEmpty()
+            } else {
+                false
+            }
         }
     }
 

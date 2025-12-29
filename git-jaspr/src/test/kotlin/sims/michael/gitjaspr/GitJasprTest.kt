@@ -3456,6 +3456,229 @@ interface GitJasprTest {
         }
     }
 
+    @Test
+    fun `clean dry run reports empty named stack branches`() {
+        withTestSetup(useFakeRemote) {
+            createCommitsFrom(
+                testCase {
+                    repository {
+                        commit {
+                            title = "one"
+                            willPassVerification = true
+                            remoteRefs += buildRemoteRef("one")
+                        }
+                        commit {
+                            title = "two"
+                            willPassVerification = true
+                            remoteRefs += buildRemoteRef("two")
+                        }
+                        commit {
+                            title = "three"
+                            willPassVerification = true
+                            remoteRefs += buildRemoteRef("three")
+                            localRefs += "dev"
+                        }
+                    }
+                    pullRequest {
+                        headRef = buildRemoteRef("one")
+                        baseRef = "main"
+                        title = "one"
+                        willBeApprovedByUserKey = "michael"
+                    }
+                    pullRequest {
+                        headRef = buildRemoteRef("two")
+                        baseRef = buildRemoteRef("one")
+                        title = "two"
+                        willBeApprovedByUserKey = "michael"
+                    }
+                    pullRequest {
+                        headRef = buildRemoteRef("three")
+                        baseRef = buildRemoteRef("two")
+                        title = "three"
+                        willBeApprovedByUserKey = "michael"
+                    }
+                }
+            )
+
+            // Push two named stacks
+            gitJaspr.push(stackName = "stack-one")
+
+            createCommitsFrom(
+                testCase {
+                    repository {
+                        commit {
+                            title = "one"
+                            willPassVerification = true
+                            remoteRefs += buildRemoteRef("one")
+                        }
+                        commit {
+                            title = "two"
+                            willPassVerification = true
+                            remoteRefs += buildRemoteRef("two")
+                        }
+                        commit {
+                            title = "three"
+                            willPassVerification = true
+                            remoteRefs += buildRemoteRef("three")
+                        }
+                        commit {
+                            title = "four"
+                            willPassVerification = true
+                            remoteRefs += buildRemoteRef("four")
+                            localRefs += "dev"
+                        }
+                    }
+                    pullRequest {
+                        headRef = buildRemoteRef("four")
+                        baseRef = buildRemoteRef("three")
+                        title = "four"
+                        willBeApprovedByUserKey = "michael"
+                    }
+                }
+            )
+            gitJaspr.push(stackName = "stack-two")
+
+            // Merge all commits into main to make both stacks empty
+            waitForChecksToConclude("one", "two", "three", "four")
+            merge(RefSpec("dev", "main"))
+
+            // Run clean with dry run
+            gitJaspr.clean(dryRun = true)
+
+            // Verify both named stack branches still exist (dry run doesn't delete)
+            val namedStackBranches =
+                localGit
+                    .getRemoteBranches(remoteName)
+                    .filter { isNamedStackBranch(it) }
+                    .map { it.name }
+
+            assertEquals(2, namedStackBranches.size)
+            assertTrue(namedStackBranches.any { it.contains("stack-one") })
+            assertTrue(namedStackBranches.any { it.contains("stack-two") })
+        }
+    }
+
+    @Test
+    fun `clean deletes empty named stack branches`() {
+        withTestSetup(useFakeRemote) {
+            createCommitsFrom(
+                testCase {
+                    repository {
+                        commit {
+                            title = "one"
+                            willPassVerification = true
+                            remoteRefs += buildRemoteRef("one")
+                        }
+                        commit {
+                            title = "two"
+                            willPassVerification = true
+                            remoteRefs += buildRemoteRef("two")
+                            localRefs += "dev"
+                        }
+                    }
+                    pullRequest {
+                        headRef = buildRemoteRef("one")
+                        baseRef = "main"
+                        title = "one"
+                        willBeApprovedByUserKey = "michael"
+                    }
+                    pullRequest {
+                        headRef = buildRemoteRef("two")
+                        baseRef = buildRemoteRef("one")
+                        title = "two"
+                        willBeApprovedByUserKey = "michael"
+                    }
+                }
+            )
+
+            // Push first named stack
+            gitJaspr.push(stackName = "stack-one")
+
+            createCommitsFrom(
+                testCase {
+                    repository {
+                        commit {
+                            title = "one"
+                            willPassVerification = true
+                            remoteRefs += buildRemoteRef("one")
+                        }
+                        commit {
+                            title = "two"
+                            willPassVerification = true
+                            remoteRefs += buildRemoteRef("two")
+                        }
+                        commit {
+                            title = "three"
+                            willPassVerification = true
+                            remoteRefs += buildRemoteRef("three")
+                            localRefs += "dev"
+                        }
+                    }
+                    pullRequest {
+                        headRef = buildRemoteRef("three")
+                        baseRef = buildRemoteRef("two")
+                        title = "three"
+                        willBeApprovedByUserKey = "michael"
+                    }
+                }
+            )
+
+            // Push second named stack
+            gitJaspr.push(stackName = "stack-two")
+
+            // Merge the first two stacks into main (making them empty)
+            waitForChecksToConclude("one", "two", "three")
+            merge(RefSpec("dev", "main"))
+
+            // Create one more commit and push a third stack that is NOT empty
+            createCommitsFrom(
+                testCase {
+                    repository {
+                        commit {
+                            title = "one"
+                            willPassVerification = true
+                            remoteRefs += buildRemoteRef("one")
+                        }
+                        commit {
+                            title = "two"
+                            willPassVerification = true
+                            remoteRefs += buildRemoteRef("two")
+                        }
+                        commit {
+                            title = "three"
+                            willPassVerification = true
+                            remoteRefs += buildRemoteRef("three")
+                        }
+                        commit {
+                            title = "four"
+                            localRefs += "dev"
+                        }
+                    }
+                }
+            )
+            gitJaspr.push(stackName = "stack-three")
+
+            // Verify all three stacks exist before clean
+            val namedStackBranchesBeforeClean =
+                localGit.getRemoteBranches(remoteName).filter { isNamedStackBranch(it) }
+
+            assertEquals(3, namedStackBranchesBeforeClean.size)
+
+            // Now run clean (not dry run)
+            gitJaspr.clean(dryRun = false)
+
+            // Verify only stack-three remains (stack-one and stack-two were deleted)
+            val namedStackBranchesAfterClean =
+                localGit
+                    .getRemoteBranches(remoteName)
+                    .filter { isNamedStackBranch(it) }
+                    .map { it.name }
+
+            assertEquals(1, namedStackBranchesAfterClean.size)
+            assertTrue(namedStackBranchesAfterClean.single().contains("stack-three"))
+        }
+    }
+
     // endregion
 
     private data class NamedStackInfo(
