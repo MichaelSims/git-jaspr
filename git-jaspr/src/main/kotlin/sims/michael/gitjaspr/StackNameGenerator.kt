@@ -3,7 +3,7 @@ package sims.michael.gitjaspr
 import kotlin.random.Random
 
 object StackNameGenerator {
-    private val adjectives =
+    internal val adjectives =
         listOf(
             // Common emotional states
             "furious",
@@ -201,9 +201,6 @@ object StackNameGenerator {
             "primordial",
 
             // Intensity
-            "vehement",
-            "fervent",
-            "ardent",
             "torrid",
             "sultry",
             "sweltering",
@@ -244,8 +241,6 @@ object StackNameGenerator {
             "abundant",
             "plenteous",
             "bountiful",
-            "luxuriant",
-            "exuberant",
             "sparse",
             "meager",
             "scanty",
@@ -351,8 +346,6 @@ object StackNameGenerator {
             "tenuous",
             "flimsy",
             "insubstantial",
-            "ethereal",
-            "gossamer",
             "wispy",
             "feathery",
             "downy",
@@ -378,7 +371,6 @@ object StackNameGenerator {
             // Nature/organic
             "verdant",
             "lush",
-            "luxuriant",
             "rampant",
             "prolific",
             "fecund",
@@ -443,7 +435,7 @@ object StackNameGenerator {
             "cryptic",
         )
 
-    private val nouns =
+    internal val nouns =
         listOf(
             // D&D Monsters
             "beholder",
@@ -536,7 +528,6 @@ object StackNameGenerator {
             "unicorn",
             "kirin",
             "qilin",
-            "basilisk",
             "wyvern",
             "wyrm",
             "drake",
@@ -588,14 +579,9 @@ object StackNameGenerator {
             "heracles",
 
             // Archaic/obscure terms
-            "wyvern",
-            "basilisk",
-            "cockatrice",
             "amphisbaena",
             "catoblepas",
             "leucrota",
-            "manticore",
-            "peryton",
             "yale",
             "enfield",
             "bonacon",
@@ -662,8 +648,6 @@ object StackNameGenerator {
             "specter",
             "poltergeist",
             "doppelganger",
-            "changeling",
-            "fetch",
             "tulpa",
             "egregore",
 
@@ -707,11 +691,9 @@ object StackNameGenerator {
             "draper",
             "haberdasher",
             "vintner",
-            "chandler",
             "apothecary",
 
             // Archaic terms for people
-            "varlet",
             "churl",
             "thrall",
             "yeoman",
@@ -754,20 +736,14 @@ object StackNameGenerator {
             "trilithon",
 
             // More mythological creatures
-            "minotaur",
-            "centaur",
-            "satyr",
             "faun",
-            "dryad",
             "naiad",
             "nereid",
             "oceanid",
             "hamadryad",
             "oreiad",
             "pleiades",
-            "gorgon",
             "fury",
-            "harpy",
             "siren",
             "valkyrie",
             "norns",
@@ -826,7 +802,6 @@ object StackNameGenerator {
             // More occupations/roles
             "scrivener",
             "scribe",
-            "herald",
             "bard",
             "minstrel",
             "troubadour",

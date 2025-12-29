@@ -121,3 +121,9 @@ class GitJasprException(override val message: String) : RuntimeException(message
         initCause(cause)
     }
 }
+
+class PushFailedException(override val message: String) : RuntimeException(message) {
+    constructor(message: String, cause: Throwable) : this(message) {
+        initCause(cause)
+    }
+}

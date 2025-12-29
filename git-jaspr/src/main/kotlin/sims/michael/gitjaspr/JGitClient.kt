@@ -21,6 +21,7 @@ import org.eclipse.jgit.lib.Constants
 import org.eclipse.jgit.lib.PersonIdent
 import org.eclipse.jgit.revwalk.RevCommit
 import org.eclipse.jgit.transport.PushResult
+import org.eclipse.jgit.transport.RefLeaseSpec
 import org.eclipse.jgit.transport.RemoteRefUpdate
 import org.eclipse.jgit.transport.SshSessionFactory
 import org.eclipse.jgit.transport.URIish
@@ -284,6 +285,49 @@ class JGitClient(
                 checkNoPushErrors(
                     git.push().setRemote(remoteName).setAtomic(true).setRefSpecs(specs).call()
                 )
+            }
+        }
+    }
+
+    override fun pushWithLease(
+        refSpecs: List<RefSpec>,
+        remoteName: String,
+        forceWithLeaseRefs: Map<String, String?>,
+    ) {
+        logger.trace("pushWithLease {} with lease refs {}", refSpecs, forceWithLeaseRefs)
+        if (refSpecs.isNotEmpty()) {
+            useGit { git ->
+                val specs =
+                    refSpecs.map { (localRef, remoteRef) ->
+                        org.eclipse.jgit.transport.RefSpec(
+                            "$localRef:${GitClient.R_HEADS}$remoteRef"
+                        )
+                    }
+
+                val leaseSpecs =
+                    forceWithLeaseRefs.map { (ref, expectedValue) ->
+                        val fullRef = "${GitClient.R_HEADS}$ref"
+                        if (expectedValue == null) {
+                            // Ref must not exist - use empty string to indicate non-existence
+                            RefLeaseSpec(fullRef, "")
+                        } else {
+                            // Ref must have specific value
+                            RefLeaseSpec(fullRef, expectedValue)
+                        }
+                    }
+
+                try {
+                    checkNoPushErrors(
+                        git.push()
+                            .setRemote(remoteName)
+                            .setAtomic(true)
+                            .setRefSpecs(specs)
+                            .setRefLeaseSpecs(leaseSpecs)
+                            .call()
+                    )
+                } catch (e: Exception) {
+                    throw PushFailedException("Push with lease failed: ${e.message}", e)
+                }
             }
         }
     }

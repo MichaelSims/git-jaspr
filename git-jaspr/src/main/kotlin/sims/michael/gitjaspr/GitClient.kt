@@ -65,6 +65,22 @@ interface GitClient {
 
     fun push(refSpecs: List<RefSpec>, remoteName: String = DEFAULT_REMOTE_NAME)
 
+    /**
+     * Push with force-with-lease protection.
+     *
+     * @param refSpecs The refSpecs to push
+     * @param remoteName The remote name
+     * @param forceWithLeaseRefs Map of remote ref name to expected old value (null means must not
+     *   exist)
+     * @throws PushFailedException if the push fails (e.g., ref exists when it shouldn't, or has
+     *   unexpected value)
+     */
+    fun pushWithLease(
+        refSpecs: List<RefSpec>,
+        remoteName: String = DEFAULT_REMOTE_NAME,
+        forceWithLeaseRefs: Map<String, String?> = emptyMap(),
+    )
+
     fun getRemoteUriOrNull(remoteName: String): String?
 
     fun addRemote(remoteName: String, remoteUri: String)

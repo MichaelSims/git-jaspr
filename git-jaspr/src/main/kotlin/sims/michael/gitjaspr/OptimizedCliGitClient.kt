@@ -27,6 +27,14 @@ private constructor(private val cliGitClient: CliGitClient, private val jGitClie
         cliGitClient.push(refSpecs, remoteName)
     }
 
+    override fun pushWithLease(
+        refSpecs: List<RefSpec>,
+        remoteName: String,
+        forceWithLeaseRefs: Map<String, String?>,
+    ) {
+        cliGitClient.pushWithLease(refSpecs, remoteName, forceWithLeaseRefs)
+    }
+
     companion object {
         operator fun invoke(
             workingDirectory: File,
