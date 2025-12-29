@@ -322,6 +322,27 @@ class JGitClient(
         useGit { git -> git.remoteAdd().setName(remoteName).setUri(URIish(remoteUri)).call() }
     }
 
+    override fun getConfigValue(key: String): String? {
+        logger.trace("getConfigValue {}", key)
+        return useGit { git ->
+            git.repository.config.getString(
+                key.substringBeforeLast('.'),
+                null,
+                key.substringAfterLast('.'),
+            )
+        }
+    }
+
+    override fun setConfigValue(key: String, value: String) {
+        logger.trace("setConfigValue {} {}", key, value)
+        useGit { git ->
+            val config = git.repository.config
+            config.setString(key.substringBeforeLast('.'), null, key.substringAfterLast('.'), value)
+
+            config.save()
+        }
+    }
+
     override fun getUpstreamBranch(remoteName: String): RemoteBranch? = useGit { git ->
         val prefix = "${Constants.R_REMOTES}$remoteName/"
         val repository = git.repository

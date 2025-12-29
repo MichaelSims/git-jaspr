@@ -69,6 +69,11 @@ interface GitClient {
 
     fun addRemote(remoteName: String, remoteUri: String)
 
+    fun getConfigValue(key: String): String?
+
+    // As of this writing, this only allows "local" (working copy specific) config changes
+    fun setConfigValue(key: String, value: String)
+
     fun getUpstreamBranch(remoteName: String): RemoteBranch?
 
     fun setUpstreamBranch(remoteName: String, branchName: String)

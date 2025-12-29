@@ -314,6 +314,20 @@ class CliGitClient(
         executeCommand(listOf("git", "remote", "add", remoteName, remoteUri))
     }
 
+    override fun getConfigValue(key: String): String? {
+        logger.trace("getConfigValue {}", key)
+        return executeCommand(listOf("git", "config", "--get", key))
+            .output
+            .string
+            .trim()
+            .takeIf(String::isNotBlank)
+    }
+
+    override fun setConfigValue(key: String, value: String) {
+        logger.trace("setConfigValue {} {}", key, value)
+        executeCommand(listOf("git", "config", key, value))
+    }
+
     override fun getUpstreamBranch(remoteName: String): RemoteBranch? {
         logger.trace("getUpstreamBranch {}", remoteName)
         val prefix = "$remoteName/"
