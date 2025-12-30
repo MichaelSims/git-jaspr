@@ -8,6 +8,7 @@ import java.io.File
 import java.time.ZoneId
 import java.time.ZonedDateTime.ofInstant
 import org.eclipse.jgit.api.CheckoutResult
+import org.eclipse.jgit.api.CommitCommand
 import org.eclipse.jgit.api.Git
 import org.eclipse.jgit.api.ListBranchCommand
 import org.eclipse.jgit.api.ResetCommand
@@ -18,6 +19,7 @@ import org.eclipse.jgit.lib.ConfigConstants.CONFIG_KEY_MERGE
 import org.eclipse.jgit.lib.ConfigConstants.CONFIG_KEY_REMOTE
 import org.eclipse.jgit.lib.Constants
 import org.eclipse.jgit.lib.PersonIdent
+import org.eclipse.jgit.lib.RefUpdate.Result.NO_CHANGE
 import org.eclipse.jgit.revwalk.RevCommit
 import org.eclipse.jgit.transport.PushResult
 import org.eclipse.jgit.transport.RefLeaseSpec
@@ -27,6 +29,7 @@ import org.eclipse.jgit.transport.URIish
 import org.eclipse.jgit.transport.ssh.jsch.JschConfigSessionFactory
 import org.slf4j.LoggerFactory
 import sims.michael.gitjaspr.RemoteRefEncoding.getRemoteRefParts
+import sims.michael.gitjaspr.RetryWithBackoff.retryWithBackoff
 
 class JGitClient(
     override val workingDirectory: File,
@@ -251,29 +254,68 @@ class JGitClient(
     }
 
     override fun commit(
-        message: String,
-        footerLines: Map<String, String>,
+        message: String?,
+        footerLines: Map<String, String>?,
         committer: Ident?,
         author: Ident?,
+        amend: Boolean,
     ): Commit {
-        logger.trace("commit {} {} {} {}", message, footerLines, committer, author)
+        logger.trace("commit {} {} {} {} {}", message, footerLines, committer, author, amend)
+
+        require(amend || message != null) { "message is required when not amending" }
+
         return useGit { git ->
-            val commitCommand =
-                git.commit().setMessage(CommitParsers.addFooters(message, footerLines))
-
-            if (committer != null) {
-                commitCommand.setCommitter(PersonIdent(committer.name, committer.email))
-                if (author == null) {
-                    // If only the committer is set, use it as the author as well. This matches
-                    // JGit's behavior
-                    commitCommand.setAuthor(PersonIdent(committer.name, committer.email))
+            fun createCommitCommand(): CommitCommand {
+                val commitCommand = git.commit().setAmend(amend)
+                if (message != null || footerLines != null) {
+                    val existingFullMessage: String?
+                    val existingFooterLines: Map<String, String>?
+                    if (amend) {
+                        val r = git.repository
+                        val head = r.parseCommit(r.findRef(GitClient.HEAD).objectId)
+                        existingFooterLines = CommitParsers.getFooters(head.fullMessage)
+                        existingFullMessage = head.fullMessage
+                    } else {
+                        existingFooterLines = null
+                        existingFullMessage = null
+                    }
+                    val footers = footerLines ?: existingFooterLines ?: emptyMap()
+                    val newMessage =
+                        message ?: CommitParsers.trimFooters(checkNotNull(existingFullMessage))
+                    commitCommand.setMessage(CommitParsers.addFooters(newMessage, footers))
                 }
-            }
-            if (author != null) {
-                commitCommand.setAuthor(PersonIdent(author.name, author.email))
+
+                if (committer != null) {
+                    val committerPersonIdent = committer.toPersonIdent()
+                    commitCommand.setCommitter(committerPersonIdent)
+                    if (author == null && !amend) {
+                        // If only the committer is set, use it as the author as well. This matches
+                        // JGit's behavior (but only for new commits (i.e. amend == false))
+                        commitCommand.setAuthor(committerPersonIdent)
+                    }
+                }
+                if (author != null) {
+                    commitCommand.setAuthor(PersonIdent(author.name, author.email))
+                }
+                if (amend && message == null && footerLines == null) {
+                    // Read the existing message and explicitly set it, otherwise JGit will complain
+                    val r = git.repository
+                    val head = r.parseCommit(r.findRef(GitClient.HEAD).objectId)
+                    commitCommand.setMessage(head.fullMessage)
+                }
+                return commitCommand
             }
 
-            commitCommand.call().toCommit(git)
+            // Retry a few times on an amend. From tests if we create a test commit and amend it
+            // within the same second, JGit throws an exception since the commit object didn't
+            // change. If we retry a couple of times, enough time will pass that the commit date
+            // will bump.
+            fun shouldRetry(e: Exception) = e.message.orEmpty().contains(NO_CHANGE.name)
+            val result =
+                retryWithBackoff(logger, shouldRetry = ::shouldRetry) {
+                    createCommitCommand().call()
+                }
+            result.toCommit(git)
         }
     }
 

@@ -56,10 +56,11 @@ interface GitClient {
     fun setCommitId(commitId: String, committer: Ident? = null, author: Ident? = null)
 
     fun commit(
-        message: String,
-        footerLines: Map<String, String> = emptyMap(),
+        message: String? = null,
+        footerLines: Map<String, String>? = null,
         committer: Ident? = null,
         author: Ident? = null,
+        amend: Boolean = false,
     ): Commit
 
     fun cherryPick(commit: Commit, committer: Ident? = null, author: Ident? = null): Commit

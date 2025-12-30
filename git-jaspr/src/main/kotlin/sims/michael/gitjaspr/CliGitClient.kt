@@ -231,16 +231,48 @@ class CliGitClient(
     }
 
     override fun commit(
-        message: String,
-        footerLines: Map<String, String>,
+        message: String?,
+        footerLines: Map<String, String>?,
         committer: Ident?,
         author: Ident?,
+        amend: Boolean,
     ): Commit {
-        logger.trace("commit {} {} {} {}", message, footerLines, committer, author)
-        executeCommand(
-            listOf("git", "commit", "-m", CommitParsers.addFooters(message, footerLines)),
-            getIdentEnvironmentMap(committer, author),
-        )
+        logger.trace("commit {} {} {} {} {}", message, footerLines, committer, author, amend)
+
+        require(amend || message != null) { "Message is required unless amending the HEAD commit" }
+
+        val command = buildList {
+            add("git")
+            add("commit")
+            if (amend) {
+                add("--amend")
+            }
+
+            if (message != null || footerLines != null) {
+                val existingFullMessage: String?
+                val existingFooterLines: Map<String, String>?
+                if (amend) {
+                    val head = log("HEAD", 1).single()
+                    existingFullMessage = head.fullMessage
+                    existingFooterLines = CommitParsers.getFooters(existingFullMessage)
+                } else {
+                    existingFullMessage = null
+                    existingFooterLines = null
+                }
+                val footers = footerLines ?: existingFooterLines ?: emptyMap()
+                val newMessage =
+                    message ?: CommitParsers.trimFooters(checkNotNull(existingFullMessage))
+                add("-m")
+                add(CommitParsers.addFooters(newMessage, footers))
+            } else {
+                add("--no-edit")
+            }
+
+            if (author != null && amend) {
+                add("--reset-author")
+            }
+        }
+        executeCommand(command, getIdentEnvironmentMap(committer, author))
         return log("HEAD", 1).single()
     }
 

@@ -1,6 +1,7 @@
 package sims.michael.gitjaspr
 
 import java.io.File
+import kotlin.test.assertNotEquals
 import org.eclipse.jgit.lib.Constants
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertFalse
@@ -225,6 +226,204 @@ interface GitClientTest {
             val modified4 = git.log("HEAD", 1).single()
             assertEquals(customCommitter, modified4.committer)
             assertEquals(customAuthor, modified4.author)
+        }
+    }
+
+    @Test
+    fun `amend commit with no content changes`() {
+        withTestSetup {
+            createCommitsFrom(
+                testCase {
+                    repository {
+                        commit {
+                            title = "Initial"
+                            localRefs += "main"
+                        }
+                    }
+                }
+            )
+
+            val git = createGitClient(localGit.workingDirectory)
+            val file = File(localGit.workingDirectory, "test.txt")
+
+            file.writeText("content1")
+            git.add("test.txt")
+            val commit1 = git.commit("Commit 1")
+            val commitDate1 = commit1.commitDate
+
+            // The delay is required to verify that the commitDate is bumped even when not changing
+            // any content
+            val delayInMillis = 1_500L
+            Thread.sleep(delayInMillis)
+            val commit2 = git.commit(amend = true)
+            val commitDate2 = commit2.commitDate
+
+            // The delay is required to verify that the commitDate is bumped even when not changing
+            // any content
+            Thread.sleep(delayInMillis)
+            val commit3 = git.commit(amend = true)
+            val commitDate3 = commit3.commitDate
+
+            // Committer date should be different after each amend
+            assertNotEquals(commitDate1, commitDate2)
+            assertNotEquals(commitDate2, commitDate3)
+            assertNotEquals(commitDate1, commitDate3)
+        }
+    }
+
+    @Test
+    fun `amend commit message`() {
+        withTestSetup {
+            createCommitsFrom(
+                testCase {
+                    repository {
+                        commit {
+                            title = "Initial"
+                            localRefs += "main"
+                        }
+                    }
+                }
+            )
+
+            val git = createGitClient(localGit.workingDirectory)
+            val file = File(localGit.workingDirectory, "test.txt")
+
+            file.writeText("content1")
+            git.add("test.txt")
+            git.commit("Original message", footerLines = mapOf("Key1" to "value1"))
+
+            // Test 1: Amend with a new message, null footerLines (should keep original footers)
+            val commit2 = git.commit("Amended message", amend = true)
+            assertEquals("Amended message", commit2.shortMessage)
+            assertEquals("value1", CommitParsers.getFooters(commit2.fullMessage)["Key1"])
+
+            // Test 2: Amend with a null message, null footerLines (should keep both)
+            val commit3 = git.commit(amend = true)
+            assertEquals("Amended message", commit3.shortMessage)
+            assertEquals("value1", CommitParsers.getFooters(commit3.fullMessage)["Key1"])
+
+            // Test 3: Amend with a new message and new footers
+            val commit4 =
+                git.commit("New message", footerLines = mapOf("Key2" to "value2"), amend = true)
+            assertEquals("New message", commit4.shortMessage)
+            assertEquals(null, CommitParsers.getFooters(commit4.fullMessage)["Key1"])
+            assertEquals("value2", CommitParsers.getFooters(commit4.fullMessage)["Key2"])
+
+            // Test 4: Amend with a null message and new footers (should keep message, replace
+            // footers)
+            val commit5 = git.commit(footerLines = mapOf("Key3" to "value3"), amend = true)
+            assertEquals("New message", commit5.shortMessage)
+            assertEquals(null, CommitParsers.getFooters(commit5.fullMessage)["Key2"])
+            assertEquals("value3", CommitParsers.getFooters(commit5.fullMessage)["Key3"])
+        }
+    }
+
+    @Test
+    fun `amend commit footer lines`() {
+        withTestSetup {
+            createCommitsFrom(
+                testCase {
+                    repository {
+                        commit {
+                            title = "Initial"
+                            localRefs += "main"
+                        }
+                    }
+                }
+            )
+
+            val git = createGitClient(localGit.workingDirectory)
+            val file = File(localGit.workingDirectory, "test.txt")
+
+            file.writeText("content1")
+            git.add("test.txt")
+            git.commit("Message", footerLines = mapOf("Key1" to "value1"))
+
+            // Test 1: Amend with same message and new footers (footers should be replaced)
+            val commit2 =
+                git.commit("Message", footerLines = mapOf("Key2" to "value2"), amend = true)
+            assertEquals("Message", commit2.shortMessage)
+            assertEquals(null, CommitParsers.getFooters(commit2.fullMessage)["Key1"])
+            assertEquals("value2", CommitParsers.getFooters(commit2.fullMessage)["Key2"])
+
+            // Test 2: Amend with null message and null footers (should keep both)
+            val commit3 = git.commit(amend = true)
+            assertEquals("Message", commit3.shortMessage)
+            assertEquals("value2", CommitParsers.getFooters(commit3.fullMessage)["Key2"])
+
+            // Test 3: Amend with new message and null footers (should keep existing footers)
+            val commit4 = git.commit("New Message", amend = true)
+            assertEquals("New Message", commit4.shortMessage)
+            assertEquals("value2", CommitParsers.getFooters(commit4.fullMessage)["Key2"])
+
+            // Test 4: Amend with null message and empty footers (should clear footers)
+            val commit5 = git.commit(footerLines = emptyMap(), amend = true)
+            assertEquals("New Message", commit5.shortMessage)
+            assertEquals(null, CommitParsers.getFooters(commit5.fullMessage)["Key2"])
+        }
+    }
+
+    @Test
+    fun `amend commit committer`() {
+        withTestSetup {
+            createCommitsFrom(
+                testCase {
+                    repository {
+                        commit {
+                            title = "Initial"
+                            localRefs += "main"
+                        }
+                    }
+                }
+            )
+
+            val git = createGitClient(localGit.workingDirectory)
+            val file = File(localGit.workingDirectory, "test.txt")
+            val customCommitter = Ident("Custom Committer", "committer@example.com")
+
+            file.writeText("content1")
+            git.add("test.txt")
+            val commit1 = git.commit("Message")
+            val originalAuthor = commit1.author
+
+            // Amend with custom committer only (no message change)
+            val commit2 = git.commit(committer = customCommitter, amend = true)
+
+            // Committer should change, author should remain the same
+            assertEquals(customCommitter, commit2.committer)
+            assertEquals(originalAuthor, commit2.author)
+        }
+    }
+
+    @Test
+    fun `amend commit author`() {
+        withTestSetup {
+            createCommitsFrom(
+                testCase {
+                    repository {
+                        commit {
+                            title = "Initial"
+                            localRefs += "main"
+                        }
+                    }
+                }
+            )
+
+            val git = createGitClient(localGit.workingDirectory)
+            val file = File(localGit.workingDirectory, "test.txt")
+            val customAuthor = Ident("Custom Author", "author@example.com")
+
+            file.writeText("content1")
+            git.add("test.txt")
+            val commit1 = git.commit("Message")
+            val originalCommitter = commit1.committer
+
+            // Amend with custom author only (no message change)
+            val commit2 = git.commit(author = customAuthor, amend = true)
+
+            // Author should change, committer should remain the same
+            assertEquals(originalCommitter, commit2.committer)
+            assertEquals(customAuthor, commit2.author)
         }
     }
 
