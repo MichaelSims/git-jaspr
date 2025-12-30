@@ -3010,9 +3010,12 @@ interface GitJasprTest {
             waitForChecksToConclude("one", "two", "three", "four", "five")
 
             merge(RefSpec("development", "main"))
+            // Note that "four" will be the last mergeable commit because "five" has not been
+            // approved. Therefore we should check that PR five is pointing at "main"
+            // (DEFAULT_TARGET_REF)
             assertEquals(
                 DEFAULT_TARGET_REF,
-                gitHub.getPullRequestsByHeadRef(buildRemoteRef("four")).last().baseRefName,
+                gitHub.getPullRequestsByHeadRef(buildRemoteRef("five")).last().baseRefName,
             )
         }
     }
