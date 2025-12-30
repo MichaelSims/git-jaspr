@@ -42,7 +42,7 @@ class WorktreeSupportTest {
             val mainRepoDir = tempDir.resolve("main-repo")
             val mainGit = CliGitClient(mainRepoDir).init()
             mainRepoDir.resolve("README.txt").writeText("Test repo")
-            mainGit.add("README.txt").commit("Initial commit", commitIdent = DEFAULT_COMMITTER)
+            mainGit.add("README.txt").commit("Initial commit", committer = DEFAULT_COMMITTER)
 
             // Create a worktree using git
             val worktreeDir = tempDir.resolve("worktree")
@@ -85,7 +85,7 @@ class WorktreeSupportTest {
             val mainRepoDir = tempDir.resolve("main-repo")
             val mainGit = CliGitClient(mainRepoDir).init()
             mainRepoDir.resolve("README.txt").writeText("Test repo")
-            mainGit.add("README.txt").commit("Initial commit", commitIdent = DEFAULT_COMMITTER)
+            mainGit.add("README.txt").commit("Initial commit", committer = DEFAULT_COMMITTER)
 
             // Create a worktree
             val worktreeDir = tempDir.resolve("worktree")
@@ -124,7 +124,7 @@ class WorktreeSupportTest {
             val mainRepoDir = tempDir.resolve("main-repo")
             val mainGit = JGitClient(mainRepoDir).init()
             mainRepoDir.resolve("README.txt").writeText("Test repo")
-            mainGit.add("README.txt").commit("Initial commit", commitIdent = DEFAULT_COMMITTER)
+            mainGit.add("README.txt").commit("Initial commit", committer = DEFAULT_COMMITTER)
 
             // Create a worktree using git
             val worktreeDir = tempDir.resolve("worktree")
@@ -159,7 +159,7 @@ class WorktreeSupportTest {
             worktreeDir.resolve("worktree-file.txt").writeText("Created in worktree")
             worktreeGit
                 .add("worktree-file.txt")
-                .commit("Commit from worktree", commitIdent = DEFAULT_COMMITTER)
+                .commit("Commit from worktree", committer = DEFAULT_COMMITTER)
 
             val newLog = worktreeGit.log()
             assertEquals(2, newLog.size)
@@ -181,14 +181,14 @@ class WorktreeSupportTest {
             val mainRepoDir = tempDir.resolve("main-repo")
             val mainGit = CliGitClient(mainRepoDir).init()
             mainRepoDir.resolve("README.txt").writeText("Test repo")
-            mainGit.add("README.txt").commit("Initial commit", commitIdent = DEFAULT_COMMITTER)
+            mainGit.add("README.txt").commit("Initial commit", committer = DEFAULT_COMMITTER)
 
             // Create additional commits
             mainRepoDir.resolve("file1.txt").writeText("File 1")
-            mainGit.add("file1.txt").commit("Add file 1", commitIdent = DEFAULT_COMMITTER)
+            mainGit.add("file1.txt").commit("Add file 1", committer = DEFAULT_COMMITTER)
 
             mainRepoDir.resolve("file2.txt").writeText("File 2")
-            mainGit.add("file2.txt").commit("Add file 2", commitIdent = DEFAULT_COMMITTER)
+            mainGit.add("file2.txt").commit("Add file 2", committer = DEFAULT_COMMITTER)
 
             // Create a worktree
             val worktreeDir = tempDir.resolve("worktree")
@@ -235,7 +235,7 @@ class WorktreeSupportTest {
             val mainRepoDir = tempDir.resolve("main-repo")
             val mainGit = JGitClient(mainRepoDir).init()
             mainRepoDir.resolve("README.txt").writeText("Test repo")
-            mainGit.add("README.txt").commit("Initial commit", commitIdent = DEFAULT_COMMITTER)
+            mainGit.add("README.txt").commit("Initial commit", committer = DEFAULT_COMMITTER)
 
             // Create a worktree
             val worktreeDir = tempDir.resolve("worktree")
@@ -275,7 +275,7 @@ class WorktreeSupportTest {
             val mainRepoDir = tempDir.resolve("main-repo")
             val mainGit = JGitClient(mainRepoDir).init()
             mainRepoDir.resolve("README.txt").writeText("Test repo")
-            mainGit.add("README.txt").commit("Initial commit", commitIdent = DEFAULT_COMMITTER)
+            mainGit.add("README.txt").commit("Initial commit", committer = DEFAULT_COMMITTER)
 
             // Create a worktree
             val worktreeDir = tempDir.resolve("worktree")

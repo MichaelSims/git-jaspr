@@ -7,10 +7,6 @@ import java.util.Properties
 import java.util.concurrent.atomic.AtomicBoolean
 import kotlin.text.RegexOption.IGNORE_CASE
 import kotlinx.coroutines.runBlocking
-import org.eclipse.jgit.junit.MockSystemReader
-import org.eclipse.jgit.lib.Constants.GIT_COMMITTER_EMAIL_KEY
-import org.eclipse.jgit.lib.Constants.GIT_COMMITTER_NAME_KEY
-import org.eclipse.jgit.util.SystemReader
 import org.slf4j.LoggerFactory
 import org.zeroturnaround.exec.ProcessExecutor
 import sims.michael.gitjaspr.*
@@ -139,10 +135,6 @@ private constructor(
             @Suppress("GrazieInspection")
             while (iterator.hasNext()) {
                 val commitData = iterator.next()
-
-                // Called for JGitClient's sake. If we're fully switched to CliGitClient, this can
-                // be removed
-                setGitCommitterInfo(commitData.committer.toIdent())
 
                 val existingHash = commitHashesByTitle[commitData.title]
                 val commit =
@@ -378,7 +370,7 @@ private constructor(
         val readme = "README.txt"
         val readmeFile = repoDir.resolve(readme)
         readmeFile.writeText("This is a test repo.\n")
-        return add(readme).commit(INITIAL_COMMIT_SHORT_MESSAGE, commitIdent = DEFAULT_COMMITTER)
+        return add(readme).commit(INITIAL_COMMIT_SHORT_MESSAGE, committer = DEFAULT_COMMITTER)
     }
 
     private fun CommitData.create(): Commit {
@@ -413,7 +405,7 @@ private constructor(
                             put("verify-result", if (safeWillPassVerification) "0" else "13")
                         }
                     },
-                commitIdent = committer.toIdent(),
+                committer = committer.toIdent(),
             )
     }
 
@@ -425,18 +417,6 @@ private constructor(
         require((commit.localRefs + commit.remoteRefs).isNotEmpty()) {
             "\"${commit.title}\" is not connected to any branches. Assign a local or remote ref to fix this"
         }
-    }
-
-    private fun setGitCommitterInfo(ident: Ident) {
-        SystemReader.setInstance(
-            MockSystemReader().apply {
-                setProperty(GIT_COMMITTER_NAME_KEY, ident.name.ifBlank { DEFAULT_COMMITTER.name })
-                setProperty(
-                    GIT_COMMITTER_EMAIL_KEY,
-                    ident.email.ifBlank { DEFAULT_COMMITTER.email },
-                )
-            }
-        )
     }
 
     private fun requireNoDuplicatedCommitTitles(testCase: TestCaseData) {

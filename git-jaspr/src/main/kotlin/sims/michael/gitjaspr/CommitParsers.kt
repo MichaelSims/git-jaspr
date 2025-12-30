@@ -22,10 +22,17 @@ object CommitParsers {
 
     fun parseCommitLogEntry(logEntry: String): Commit {
         val split = logEntry.split(GIT_FORMAT_SEPARATOR)
-        check(split.size == 8) { "Log entry is in unexpected format: $logEntry" }
-        val (firstChunk, secondChunk) = split.chunked(5)
-        val (hash, shortMessage, committerName, committerEmail, commitIds) = firstChunk
-        val (commitTimestamp, authorTimestamp, fullMessage) = secondChunk
+        check(split.size == 10) { "Log entry is in unexpected format: $logEntry" }
+        val hash = split[0]
+        val shortMessage = split[1]
+        val authorName = split[2]
+        val authorEmail = split[3]
+        val committerName = split[4]
+        val committerEmail = split[5]
+        val commitIds = split[6]
+        val commitTimestamp = split[7]
+        val authorTimestamp = split[8]
+        val fullMessage = split[9]
 
         fun String.timestampToZonedDateTime() =
             Instant.ofEpochSecond(toLong()).atZone(ZoneId.systemDefault()).canonicalize()
@@ -35,6 +42,7 @@ object CommitParsers {
             shortMessage,
             fullMessage,
             commitIds.split(GIT_LOG_TRAILER_SEPARATOR).last().takeUnless(String::isBlank),
+            Ident(authorName, authorEmail),
             Ident(committerName, committerEmail),
             commitTimestamp.timestampToZonedDateTime(),
             authorTimestamp.timestampToZonedDateTime(),

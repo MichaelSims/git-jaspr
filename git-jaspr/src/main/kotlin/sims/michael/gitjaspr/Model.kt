@@ -7,6 +7,7 @@ import java.time.LocalDateTime
 import java.time.ZoneId
 import java.time.ZonedDateTime
 import kotlinx.serialization.Serializable
+import org.eclipse.jgit.lib.PersonIdent
 import sims.michael.gitjaspr.RemoteRefEncoding.DEFAULT_REMOTE_BRANCH_PREFIX
 import sims.michael.gitjaspr.RemoteRefEncoding.DEFAULT_REMOTE_NAMED_STACK_BRANCH_PREFIX
 import sims.michael.gitjaspr.generated.getpullrequests.RateLimit as GetPullRequestsRateLimit
@@ -35,6 +36,7 @@ data class Commit(
     val shortMessage: String,
     val fullMessage: String,
     val id: String?,
+    val author: Ident,
     val committer: Ident,
     // Format with date.format(DateTimeFormatter.ofPattern("E MMM d, YYYY, h:mm:ss a z"))
     val commitDate: ZonedDateTime,
@@ -44,6 +46,8 @@ data class Commit(
 data class Ident(val name: String, val email: String) {
     override fun toString() = "$name <$email>"
 }
+
+fun Ident.toPersonIdent() = PersonIdent(name, email)
 
 data class RefSpec(val localRef: String, val remoteRef: String) {
     override fun toString() = "$localRef:$remoteRef"

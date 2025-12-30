@@ -203,68 +203,56 @@ class CliGitClient(
         executeCommand(listOf("git", "add", filePattern))
     }
 
-    override fun setCommitId(commitId: String, commitIdent: Ident?) {
-        logger.trace("setCommitId {}", commitId)
+    override fun setCommitId(commitId: String, committer: Ident?, author: Ident?) {
+        logger.trace("setCommitId {} {} {}", commitId, committer, author)
         val head = log("HEAD", 1).single()
         require(!CommitParsers.getFooters(head.fullMessage).containsKey("commit-id")) {
             "Commit already has a commit-id footer: $head"
         }
+        val shouldResetAuthor = author != null && head.author != author
         executeCommand(
-            listOf(
-                "git",
-                "commit",
-                "--amend",
-                "-m",
-                CommitParsers.addFooters(head.fullMessage, mapOf(COMMIT_ID_LABEL to commitId)),
-            ),
-            if (commitIdent != null) {
-                mapOf(
-                    "GIT_COMMITTER_NAME" to commitIdent.name,
-                    "GIT_COMMITTER_EMAIL" to commitIdent.email,
-                    "GIT_AUTHOR_NAME" to commitIdent.name,
-                    "GIT_AUTHOR_EMAIL" to commitIdent.email,
+            buildList {
+                addAll(listOf("git", "commit", "--amend"))
+                if (shouldResetAuthor) {
+                    addAll(listOf("--reset-author"))
+                }
+                addAll(
+                    listOf(
+                        "-m",
+                        CommitParsers.addFooters(
+                            head.fullMessage,
+                            mapOf(COMMIT_ID_LABEL to commitId),
+                        ),
+                    )
                 )
-            } else {
-                emptyMap()
             },
+            getIdentEnvironmentMap(committer, author?.takeIf { shouldResetAuthor }),
         )
     }
 
     override fun commit(
         message: String,
         footerLines: Map<String, String>,
-        commitIdent: Ident?,
+        committer: Ident?,
+        author: Ident?,
     ): Commit {
-        logger.trace("commit {} {}", message, footerLines)
+        logger.trace("commit {} {} {} {}", message, footerLines, committer, author)
         executeCommand(
             listOf("git", "commit", "-m", CommitParsers.addFooters(message, footerLines)),
-            if (commitIdent != null) {
-                mapOf(
-                    "GIT_COMMITTER_NAME" to commitIdent.name,
-                    "GIT_COMMITTER_EMAIL" to commitIdent.email,
-                    "GIT_AUTHOR_NAME" to commitIdent.name,
-                    "GIT_AUTHOR_EMAIL" to commitIdent.email,
-                )
-            } else {
-                emptyMap()
-            },
+            getIdentEnvironmentMap(committer, author),
         )
         return log("HEAD", 1).single()
     }
 
-    override fun cherryPick(commit: Commit, commitIdent: Ident?): Commit {
-        logger.trace("cherryPick {}", commit)
-        executeCommand(
-            listOf("git", "cherry-pick", commit.hash),
-            if (commitIdent != null) {
-                mapOf(
-                    "GIT_COMMITTER_NAME" to commitIdent.name,
-                    "GIT_COMMITTER_EMAIL" to commitIdent.email,
-                )
-            } else {
-                emptyMap()
-            },
-        )
+    override fun cherryPick(commit: Commit, committer: Ident?, author: Ident?): Commit {
+        logger.trace("cherryPick {} {} {}", commit, committer, author)
+        val env = getIdentEnvironmentMap(committer, author)
+        executeCommand(listOf("git", "cherry-pick", commit.hash), env)
+        if (author != null && log("HEAD", 1).single().author != author) {
+            logger.debug("Resetting author to {} after cherry-pick via commit --amend", author)
+            executeCommand(listOf("git", "commit", "--amend", "--no-edit", "--reset-author"), env)
+        }
+
         return log("HEAD", 1).single()
     }
 
@@ -407,14 +395,32 @@ class CliGitClient(
         return getCurrentBranchName().isEmpty()
     }
 
+    private fun getIdentEnvironmentMap(committer: Ident?, author: Ident?) = buildMap {
+        if (committer != null) {
+            put("GIT_COMMITTER_NAME", committer.name)
+            put("GIT_COMMITTER_EMAIL", committer.email)
+            if (author == null) {
+                // If only committer is set, also set author to the same
+                put("GIT_AUTHOR_NAME", committer.name)
+                put("GIT_AUTHOR_EMAIL", committer.email)
+            }
+        }
+        if (author != null) {
+            put("GIT_AUTHOR_NAME", author.name)
+            put("GIT_AUTHOR_EMAIL", author.email)
+        }
+    }
+
     private fun gitLog(vararg logArg: String): List<Commit> {
         // Thanks to https://www.nushell.sh/cookbook/parsing_git_log.html for inspiration here
         val prettyFormat =
             listOf(
                     "--pretty=format:%h", // hash
                     "%s", // subject
-                    "%cN", // commit name
-                    "%cE", // commit email
+                    "%aN", // author name
+                    "%aE", // author email
+                    "%cN", // committer name
+                    "%cE", // committer email
                     "%(trailers:key=commit-id,separator=$GIT_LOG_TRAILER_SEPARATOR,valueonly=true)", // trailers
                     "%ct", // commit timestamp
                     "%at", // author timestamp

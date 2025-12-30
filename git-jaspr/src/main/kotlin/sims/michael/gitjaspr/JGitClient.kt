@@ -5,7 +5,6 @@ import com.jcraft.jsch.IdentityRepository
 import com.jcraft.jsch.JSch
 import com.jcraft.jsch.SSHAgentConnector
 import java.io.File
-import java.time.Instant
 import java.time.ZoneId
 import java.time.ZonedDateTime.ofInstant
 import org.eclipse.jgit.api.CheckoutResult
@@ -224,51 +223,82 @@ class JGitClient(
         return apply { useGit { git -> git.add().addFilepattern(filePattern).call() } }
     }
 
-    override fun setCommitId(commitId: String, commitIdent: Ident?) {
-        logger.trace("setCommitId {}", commitId)
-        // JGitClient doesn't support per-commit idents, so we are ignoring the commitIdent argument
-        // intentionally
+    override fun setCommitId(commitId: String, committer: Ident?, author: Ident?) {
+        logger.trace("setCommitId {} {} {}", commitId, committer, author)
         useGit { git ->
             val r = git.repository
             val head = r.parseCommit(r.findRef(GitClient.HEAD).objectId)
             require(!CommitParsers.getFooters(head.fullMessage).containsKey(COMMIT_ID_LABEL))
-            git.commit()
-                .setAmend(true)
-                .setMessage(
-                    CommitParsers.addFooters(head.fullMessage, mapOf(COMMIT_ID_LABEL to commitId))
-                )
-                .call()
+            val amendCommand =
+                git.commit()
+                    .setAmend(true)
+                    .setMessage(
+                        CommitParsers.addFooters(
+                            head.fullMessage,
+                            mapOf(COMMIT_ID_LABEL to commitId),
+                        )
+                    )
+
+            if (committer != null) {
+                amendCommand.setCommitter(PersonIdent(committer.name, committer.email))
+            }
+            if (author != null) {
+                amendCommand.setAuthor(PersonIdent(author.name, author.email))
+            }
+
+            amendCommand.call()
         }
     }
 
     override fun commit(
         message: String,
         footerLines: Map<String, String>,
-        commitIdent: Ident?,
+        committer: Ident?,
+        author: Ident?,
     ): Commit {
-        logger.trace("commit {} {}", message, footerLines)
-        // JGitClient doesn't support per-commit idents, so we are ignoring the commitIdent argument
-        // intentionally
+        logger.trace("commit {} {} {} {}", message, footerLines, committer, author)
         return useGit { git ->
-            val committer = PersonIdent(PersonIdent(git.repository), Instant.now())
-            git.commit()
-                .setMessage(CommitParsers.addFooters(message, footerLines))
-                .setCommitter(committer)
-                .call()
-                .toCommit(git)
+            val commitCommand =
+                git.commit().setMessage(CommitParsers.addFooters(message, footerLines))
+
+            if (committer != null) {
+                commitCommand.setCommitter(PersonIdent(committer.name, committer.email))
+                if (author == null) {
+                    // If only the committer is set, use it as the author as well. This matches
+                    // JGit's behavior
+                    commitCommand.setAuthor(PersonIdent(committer.name, committer.email))
+                }
+            }
+            if (author != null) {
+                commitCommand.setAuthor(PersonIdent(author.name, author.email))
+            }
+
+            commitCommand.call().toCommit(git)
         }
     }
 
-    override fun cherryPick(commit: Commit, commitIdent: Ident?): Commit {
-        logger.trace("cherryPick {}", commit)
-        // JGitClient doesn't support per-commit idents, so we are ignoring the commitIdent argument
-        // intentionally
+    override fun cherryPick(commit: Commit, committer: Ident?, author: Ident?): Commit {
+        logger.trace("cherryPick {} {} {}", commit, committer, author)
         return useGit { git ->
-            git.cherryPick()
-                .include(git.repository.resolve(commit.hash))
-                .call()
-                .newHead
-                .toCommit(git)
+            git.cherryPick().include(git.repository.resolve(commit.hash)).call()
+
+            val r = git.repository
+            val headCommit = r.parseCommit(r.findRef(GitClient.HEAD).objectId).toCommit(git)
+
+            val isUpdatingCommitter = committer != null && committer != headCommit.committer
+            val isUpdatingAuthor = author != null && author != headCommit.author
+            if (isUpdatingCommitter || isUpdatingAuthor) {
+                val amendCommand = git.commit().setAmend(true).setMessage(headCommit.fullMessage)
+                if (isUpdatingCommitter) {
+                    amendCommand.setCommitter(committer.toPersonIdent())
+                }
+                if (isUpdatingAuthor) {
+                    amendCommand.setAuthor(author.toPersonIdent())
+                }
+                amendCommand.call().toCommit(git)
+            } else {
+                headCommit
+            }
         }
     }
 
@@ -478,6 +508,7 @@ private fun RevCommit.toCommit(git: Git): Commit {
         shortMessage,
         fullMessage,
         CommitParsers.getFooters(fullMessage)[COMMIT_ID_LABEL],
+        Ident(authorIdent.name, authorIdent.emailAddress),
         Ident(committerIdent.name, committerIdent.emailAddress),
         committerIdent.whenAsZonedDateTime(),
         authorIdent.whenAsZonedDateTime(),

@@ -53,15 +53,16 @@ interface GitClient {
 
     fun add(filePattern: String): GitClient
 
-    fun setCommitId(commitId: String, commitIdent: Ident? = null)
+    fun setCommitId(commitId: String, committer: Ident? = null, author: Ident? = null)
 
     fun commit(
         message: String,
         footerLines: Map<String, String> = emptyMap(),
-        commitIdent: Ident? = null,
+        committer: Ident? = null,
+        author: Ident? = null,
     ): Commit
 
-    fun cherryPick(commit: Commit, commitIdent: Ident? = null): Commit
+    fun cherryPick(commit: Commit, committer: Ident? = null, author: Ident? = null): Commit
 
     fun push(refSpecs: List<RefSpec>, remoteName: String = DEFAULT_REMOTE_NAME)
 
