@@ -3113,17 +3113,20 @@ interface GitJasprTest {
                     repository {
                         commit {
                             title = "a"
+                            remoteRefs += buildRemoteRef("1")
                             willPassVerification = true
                             remoteRefs += buildRemoteRef("a_01")
                         }
                         commit {
                             title = "b"
+                            remoteRefs += buildRemoteRef("2")
                             willPassVerification = true
                             remoteRefs += buildRemoteRef("b_01")
                         }
                         commit {
                             title = "c"
                             localRefs += "dev1"
+                            remoteRefs += buildRemoteRef("3")
                             willPassVerification = true
                             remoteRefs += buildRemoteRef("c_01")
                         }
