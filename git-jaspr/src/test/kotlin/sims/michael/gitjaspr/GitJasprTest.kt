@@ -3288,24 +3288,39 @@ interface GitJasprTest {
                 testCase {
                     repository {
                         commit {
-                            title = "a"
+                            title = "1"
                             remoteRefs += buildRemoteRef("1")
                             willPassVerification = true
-                            remoteRefs += buildRemoteRef("a_01")
                         }
                         commit {
-                            title = "b"
+                            title = "2"
                             remoteRefs += buildRemoteRef("2")
                             willPassVerification = true
-                            remoteRefs += buildRemoteRef("b_01")
                         }
                         commit {
-                            title = "c"
+                            title = "3"
                             localRefs += "dev1"
                             remoteRefs += buildRemoteRef("3")
                             willPassVerification = true
-                            remoteRefs += buildRemoteRef("c_01")
                         }
+                    }
+                    pullRequest {
+                        headRef = buildRemoteRef("1")
+                        baseRef = "main"
+                        title = "1"
+                        willBeApprovedByUserKey = "michael"
+                    }
+                    pullRequest {
+                        headRef = buildRemoteRef("2")
+                        baseRef = buildRemoteRef("1")
+                        title = "2"
+                        willBeApprovedByUserKey = "michael"
+                    }
+                    pullRequest {
+                        headRef = buildRemoteRef("3")
+                        baseRef = buildRemoteRef("2")
+                        title = "3"
+                        willBeApprovedByUserKey = "michael"
                     }
                 }
             )
@@ -3365,7 +3380,11 @@ interface GitJasprTest {
             merge(RefSpec("dev2", "main"))
             assertEquals(
                 setOf(buildRemoteRef("c") to "main"),
-                gitHub.getPullRequests().map { it.headRefName to it.baseRefName }.toSet(),
+                gitHub
+                    .getPullRequests()
+                    .filter { it.headRefName == buildRemoteRef("c") }
+                    .map { it.headRefName to it.baseRefName }
+                    .toSet(),
             )
         }
     }
