@@ -17,6 +17,7 @@ import sims.michael.gitjaspr.githubtests.GitHubTestHarness
 import sims.michael.gitjaspr.githubtests.GitHubTestHarness.Companion.withTestSetup
 import sims.michael.gitjaspr.githubtests.TestCaseData
 import sims.michael.gitjaspr.githubtests.generatedtestdsl.testCase
+import sims.michael.gitjaspr.testing.DEFAULT_COMMITTER
 
 interface GitJasprTest {
 
@@ -4107,6 +4108,169 @@ interface GitJasprTest {
             assertEquals(
                 listOf("main"),
                 localGit.getRemoteBranches(remoteName).map(RemoteBranch::name),
+            )
+        }
+    }
+
+    @Test
+    fun `clean respects commit ownership for orphaned branches`() {
+        withTestSetup(useFakeRemote) {
+            // Create commits with the default user
+            createCommitsFrom(
+                testCase {
+                    repository {
+                        commit {
+                            title = "A"
+                            remoteRefs += buildRemoteRef("A")
+                        }
+                        commit {
+                            title = "B"
+                            remoteRefs += buildRemoteRef("B")
+                            localRefs += "main"
+                        }
+                    }
+                    checkout = "main"
+                }
+            )
+
+            // Create commits with the other user
+            localGit.setConfigValue("user.name", "Other User")
+            localGit.setConfigValue("user.email", "other@example.com")
+            createCommitsFrom(
+                testCase {
+                    repository {
+                        commit {
+                            title = "X"
+                            remoteRefs += buildRemoteRef("X")
+                            committer {
+                                name = "Other User"
+                                email = "other@example.com"
+                            }
+                        }
+                        commit {
+                            title = "Y"
+                            remoteRefs += buildRemoteRef("Y")
+                            localRefs += "dev"
+                            committer {
+                                name = "Other User"
+                                email = "other@example.com"
+                            }
+                        }
+                    }
+                    checkout = "dev"
+                }
+            )
+
+            // Switch back to the original user
+            localGit.setConfigValue("user.name", DEFAULT_COMMITTER.name)
+            localGit.setConfigValue("user.email", DEFAULT_COMMITTER.email)
+
+            // Get orphaned branches - should return ALL orphaned branches regardless of ownership
+            val orphanedBranches = gitJaspr.getOrphanedBranches()
+            assertEquals(
+                setOf(
+                    buildRemoteRef("A"),
+                    buildRemoteRef("B"),
+                    buildRemoteRef("X"),
+                    buildRemoteRef("Y"),
+                ),
+                orphanedBranches.toSet(),
+            )
+
+            // Get clean plan - should only include branches owned by the current user
+            val cleanPlan = gitJaspr.getCleanPlan()
+            assertEquals(
+                setOf(buildRemoteRef("A"), buildRemoteRef("B")),
+                cleanPlan.orphanedBranches,
+            )
+        }
+    }
+
+    @Test
+    fun `clean with cleanAllCommits true ignores commit ownership`() {
+        withTestSetup(useFakeRemote) {
+            // Create commits with default user
+            createCommitsFrom(
+                testCase {
+                    repository {
+                        commit {
+                            title = "A"
+                            remoteRefs += buildRemoteRef("A")
+                        }
+                        commit {
+                            title = "B"
+                            remoteRefs += buildRemoteRef("B")
+                            localRefs += "main"
+                        }
+                    }
+                    checkout = "main"
+                }
+            )
+
+            // Create commits with other user
+            localGit.setConfigValue("user.name", "Other User")
+            localGit.setConfigValue("user.email", "other@example.com")
+            createCommitsFrom(
+                testCase {
+                    repository {
+                        commit { title = "B" }
+                        commit {
+                            title = "X"
+                            remoteRefs += buildRemoteRef("X")
+                            committer {
+                                name = "Other User"
+                                email = "other@example.com"
+                            }
+                        }
+                        commit {
+                            title = "Y"
+                            remoteRefs += buildRemoteRef("Y")
+                            localRefs += "dev"
+                            committer {
+                                name = "Other User"
+                                email = "other@example.com"
+                            }
+                        }
+                    }
+                    checkout = "dev"
+                }
+            )
+
+            // Switch back to original user
+            localGit.setConfigValue("user.name", DEFAULT_COMMITTER.name)
+            localGit.setConfigValue("user.email", DEFAULT_COMMITTER.email)
+
+            // Get orphaned branches - should return ALL regardless of cleanAllCommits setting
+            val orphanedBranches = gitJaspr.getOrphanedBranches()
+            assertEquals(
+                setOf(
+                    buildRemoteRef("A"),
+                    buildRemoteRef("B"),
+                    buildRemoteRef("X"),
+                    buildRemoteRef("Y"),
+                ),
+                orphanedBranches.toSet(),
+            )
+
+            // Get clean plan with cleanAllCommits = false - should only include owned branches
+            val cleanPlan = gitJaspr.getCleanPlan()
+            assertEquals(
+                setOf(buildRemoteRef("A"), buildRemoteRef("B")),
+                cleanPlan.orphanedBranches,
+            )
+
+            // Get clean plan with cleanAllCommits = true - should include all branches
+            val gitJasprWithCleanAll =
+                gitJaspr.clone { config -> config.copy(cleanAllCommits = true) }
+            val cleanPlanAll = gitJasprWithCleanAll.getCleanPlan()
+            assertEquals(
+                setOf(
+                    buildRemoteRef("A"),
+                    buildRemoteRef("B"),
+                    buildRemoteRef("X"),
+                    buildRemoteRef("Y"),
+                ),
+                cleanPlanAll.orphanedBranches,
             )
         }
     }

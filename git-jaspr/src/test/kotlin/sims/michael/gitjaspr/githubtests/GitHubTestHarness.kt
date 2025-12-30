@@ -107,6 +107,14 @@ private constructor(
                 remoteRepo.toURI().toString()
             }
         localGit.clone(uriToClone, remoteName)
+
+        // Configure the local repo with default committer identity for ownership checks
+        // Some tests verify clean behavior which filters based on "ownership". If not specified,
+        // test commits have an owner and author equal to the DEFAULT_COMMITTER. We check ownership
+        // based on what ident information the current user would have if they made a new commit, so
+        // we need to make sure these are equal to each other
+        localGit.setConfigValue("user.name", DEFAULT_COMMITTER.name)
+        localGit.setConfigValue("user.email", DEFAULT_COMMITTER.email)
     }
 
     suspend fun createCommitsFrom(testCase: TestCaseData) {

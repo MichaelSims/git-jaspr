@@ -366,6 +366,12 @@ you'll need to re-enable it again.
                 "reachable by any existing named stack branch, and then delete those branches."
         }
 
+    private val cleanAllCommits by
+        option().flag(default = false).help {
+            "When enabled, the clean command will remove branches regardless of who authored the commits. " +
+                "By default, only branches with commits authored by the current user will be removed."
+        }
+
     private val showConfig by
         option(hidden = true).flag("--no-show-config", default = false).help {
             "Print the effective configuration to standard output (for debugging)"
@@ -396,6 +402,7 @@ you'll need to re-enable it again.
                 logsDirectory.takeIf { logToFiles },
                 dontPushRegex,
                 cleanAbandonedPrs,
+                cleanAllCommits,
             )
 
         DefaultAppWiring(githubToken, config, gitClient)

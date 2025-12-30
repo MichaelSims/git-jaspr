@@ -659,8 +659,8 @@ class GitJaspr(
         val pullRequests = ghClient.getPullRequests().map(PullRequest::headRefName).toSet()
         gitClient.fetch(config.remoteName, prune = true)
         val orphanedBranches =
-            gitClient.getRemoteBranches(config.remoteName).map(RemoteBranch::name).filter {
-                val remoteRefParts = getRemoteRefParts(it, config.remoteBranchPrefix)
+            gitClient.getRemoteBranches(config.remoteName).map(RemoteBranch::name).filter { name ->
+                val remoteRefParts = getRemoteRefParts(name, config.remoteBranchPrefix)
                 if (remoteRefParts != null) {
                     val (targetRef, commitId, _) = remoteRefParts
                     buildRemoteRef(commitId, targetRef) !in pullRequests
@@ -698,9 +698,15 @@ class GitJaspr(
     /** Returns a list of jaspr branches with open PRs that are not reachable by any named stack. */
     internal suspend fun getAbandonedBranches(): List<String> {
         logger.trace("getAbandonedBranches")
+        val remoteBranches = gitClient.getRemoteBranches(config.remoteName)
+        val namedStackBranches =
+            remoteBranches.filter { branch ->
+                getRemoteNamedStackRefParts(branch.name, config.remoteNamedStackBranchPrefix) !=
+                    null
+            }
+
         val unmergedAndReachableFromNamedStacks =
-            gitClient
-                .getRemoteBranches(config.remoteName)
+            namedStackBranches
                 .mapNotNull { branch ->
                     getRemoteNamedStackRefParts(branch.name, config.remoteNamedStackBranchPrefix)
                         ?.let { namedStackRefParts -> branch.name to namedStackRefParts.targetRef }
@@ -715,10 +721,19 @@ class GitJaspr(
                 }
                 .toSet()
 
-        return ghClient.getPullRequests().map(PullRequest::headRefName).filter { headRefName ->
-            gitClient.log("${config.remoteName}/${headRefName}", 1).single().hash !in
-                unmergedAndReachableFromNamedStacks
-        }
+        // Return abandoned branches (those with open PRs not reachable by any of our named stacks)
+        val allPrs = ghClient.getPullRequests()
+        return remoteBranches
+            .filter { branch ->
+                val headRefName = branch.name
+                if (headRefName in allPrs.map(PullRequest::headRefName)) {
+                    gitClient.log("${config.remoteName}/${headRefName}", 1).single().hash !in
+                        unmergedAndReachableFromNamedStacks
+                } else {
+                    false
+                }
+            }
+            .map(RemoteBranch::name)
     }
 
     data class CleanPlan(
@@ -740,13 +755,37 @@ class GitJaspr(
 
     internal suspend fun getCleanPlan(): CleanPlan {
         gitClient.fetch(config.remoteName)
-        val orphanedBranches = getOrphanedBranches()
+        val allOrphanedBranches = getOrphanedBranches()
         val emptyNamedStackBranches = getEmptyNamedStackBranches()
-        val abandonedBranches =
+        val allAbandonedBranches =
             if (config.cleanAbandonedPrs) {
                 getAbandonedBranches()
             } else {
                 emptyList()
+            }
+
+        // Filter orphaned and abandoned branches by ownership unless cleanAllCommits is true
+        val remoteBranches = gitClient.getRemoteBranches(config.remoteName)
+        val remoteBranchesById = remoteBranches.associateBy(RemoteBranch::name)
+
+        val orphanedBranches =
+            if (config.cleanAllCommits) {
+                allOrphanedBranches
+            } else {
+                allOrphanedBranches.filter { branchName ->
+                    remoteBranchesById[branchName]?.let { branch -> ownsCommit(branch.commit) }
+                        ?: false
+                }
+            }
+
+        val abandonedBranches =
+            if (config.cleanAllCommits) {
+                allAbandonedBranches
+            } else {
+                allAbandonedBranches.filter { branchName ->
+                    remoteBranchesById[branchName]?.let { branch -> ownsCommit(branch.commit) }
+                        ?: false
+                }
             }
 
         return CleanPlan(
@@ -1176,6 +1215,18 @@ class GitJaspr(
     private fun RemoteBranch.extractStackNameFromBranch(): String? {
         return getRemoteNamedStackRefParts(name, config.remoteNamedStackBranchPrefix)?.stackName
     }
+
+    /** Get the current user's commit author identity that would be used for new commits. */
+    private fun getCurrentUserIdent(): Ident {
+        val name = gitClient.getConfigValue("user.name") ?: System.getenv("USER") ?: "unknown"
+        val email = gitClient.getConfigValue("user.email") ?: "unknown@unknown.com"
+        return Ident(name, email)
+    }
+
+    /**
+     * Check if the current user owns a commit (i.e., the commit's author matches the current user).
+     */
+    private fun ownsCommit(commit: Commit) = commit.author == getCurrentUserIdent()
 
     /**
      * Generate a unique stack name by trying random names and checking for collisions. Uses
