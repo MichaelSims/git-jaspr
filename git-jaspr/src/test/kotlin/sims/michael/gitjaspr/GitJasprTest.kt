@@ -58,6 +58,8 @@ interface GitJasprTest {
 
     @Test
     fun `push fails unless workdir is clean`() {
+        // This test fails when ran from GitJasprFunctionalExternalProcessTest because the exception
+        // type is lost. This is not a problem but I should probably try to fix it at some point
         withTestSetup(useFakeRemote) {
             createCommitsFrom(
                 testCase {
