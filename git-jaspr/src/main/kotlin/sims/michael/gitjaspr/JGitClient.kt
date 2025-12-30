@@ -33,7 +33,7 @@ class JGitClient(
     override val workingDirectory: File,
     override val remoteBranchPrefix: String = RemoteRefEncoding.DEFAULT_REMOTE_BRANCH_PREFIX,
 ) : GitClient {
-    private val logger = LoggerFactory.getLogger(GitClient::class.java)
+    private val logger = LoggerFactory.getLogger(JGitClient::class.java)
 
     override fun init(): GitClient {
         logger.trace("init")
