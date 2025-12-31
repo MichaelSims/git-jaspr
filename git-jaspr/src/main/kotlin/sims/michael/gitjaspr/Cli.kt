@@ -361,13 +361,14 @@ you'll need to re-enable it again.
         }
 
     private val cleanAbandonedPrs by
-        option().flag(default = false).help {
+        option().flag("--ignore-abandoned-prs", default = false).help {
             "When enabled, the clean command will also close open PRs for jaspr branches that are not " +
-                "reachable by any existing named stack branch, and then delete those branches."
+                "reachable by any existing named stack branch, and then delete those branches. The default is to " +
+                "ignore these."
         }
 
     private val cleanAllCommits by
-        option().flag(default = false).help {
+        option().flag("--clean-only-my-commits", default = false).help {
             "When enabled, the clean command will remove branches regardless of who authored the commits. " +
                 "By default, only branches with commits authored by the current user will be removed."
         }
