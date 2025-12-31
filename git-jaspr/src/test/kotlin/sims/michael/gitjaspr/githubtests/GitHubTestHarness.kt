@@ -33,10 +33,12 @@ private constructor(
     private val configByUserKey: Map<String, UserConfig>,
     private val useFakeRemote: Boolean = true,
     private val getPullRequestsPageSize: Int,
+    createLocalGitClient: (File) -> GitClient = ::createDefaultGitClient,
+    createRemoteGitClient: (File) -> GitClient = ::createDefaultGitClient,
 ) {
 
-    val localGit: GitClient = OptimizedCliGitClient(localRepo)
-    val remoteGit: GitClient = OptimizedCliGitClient(remoteRepo)
+    val localGit: GitClient = createLocalGitClient(localRepo)
+    val remoteGit: GitClient = createRemoteGitClient(remoteRepo)
 
     private val ghClientsByUserKey: Map<String, GitHubClient> by lazy {
         if (!useFakeRemote) {
@@ -484,6 +486,8 @@ private constructor(
             remoteBranchPrefix: String = DEFAULT_REMOTE_BRANCH_PREFIX,
             remoteName: String = DEFAULT_REMOTE_NAME,
             getPullRequestsPageSize: Int = GitHubClient.GET_PULL_REQUESTS_DEFAULT_PAGE_SIZE,
+            createLocalGitClient: (File) -> GitClient = ::createDefaultGitClient,
+            createRemoteGitClient: (File) -> GitClient = ::createDefaultGitClient,
             block: suspend GitHubTestHarness.() -> Unit,
         ): GitHubTestHarness {
             val scratchDir = createTempDir()
@@ -526,6 +530,8 @@ private constructor(
                         configByUserKey,
                         useFakeRemote,
                         getPullRequestsPageSize,
+                        createLocalGitClient,
+                        createRemoteGitClient,
                     )
                 testHarness.apply {
                     try {
@@ -539,6 +545,9 @@ private constructor(
                 }
             }
         }
+
+        private fun createDefaultGitClient(workingDirectory: File): GitClient =
+            OptimizedCliGitClient(workingDirectory)
 
         private val logger = LoggerFactory.getLogger(GitHubTestHarness::class.java)
 
