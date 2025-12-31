@@ -34,7 +34,7 @@ interface GitJasprTest {
     suspend fun GitHubTestHarness.merge(refSpec: RefSpec) = gitJaspr.merge(refSpec)
 
     suspend fun GitHubTestHarness.autoMerge(refSpec: RefSpec, pollingIntervalSeconds: Int = 10) =
-        gitJaspr.autoMerge(refSpec)
+        gitJaspr.autoMerge(refSpec, pollingIntervalSeconds = 1, maxAttempts = 5)
 
     suspend fun GitHubTestHarness.getRemoteCommitStatuses(stack: List<Commit>) =
         gitJaspr.getRemoteCommitStatuses(stack)

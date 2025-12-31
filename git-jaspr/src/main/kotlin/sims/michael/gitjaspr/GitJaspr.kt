@@ -453,7 +453,11 @@ class GitJaspr(
         }
     }
 
-    suspend fun autoMerge(refSpec: RefSpec, pollingIntervalSeconds: Int = 10) {
+    suspend fun autoMerge(
+        refSpec: RefSpec,
+        pollingIntervalSeconds: Int = 10,
+        maxAttempts: Int = Int.MAX_VALUE,
+    ) {
         logger.trace("autoMerge {} {}", refSpec, pollingIntervalSeconds)
 
         // Filter the stack to exclude commits matching the dont-push pattern
@@ -526,7 +530,8 @@ class GitJaspr(
                     commitIdentOverride,
                 )
 
-            while (true) {
+            var attemptsMade = 0
+            while (attemptsMade < maxAttempts) {
                 val numCommitsBehind =
                     tempGit
                         .logRange(tempRefSpec.localRef, "$remoteName/${tempRefSpec.remoteRef}")
@@ -572,6 +577,7 @@ class GitJaspr(
                     break
                 }
 
+                attemptsMade++
                 logger.info("Delaying for $pollingIntervalSeconds seconds... (CTRL-C to cancel)")
                 delay(pollingIntervalSeconds.seconds)
                 // Fetch the latest changes before we try again
