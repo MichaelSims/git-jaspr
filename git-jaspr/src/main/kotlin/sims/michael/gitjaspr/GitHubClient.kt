@@ -57,6 +57,9 @@ class GitHubClientImpl(
         )
     }
 
+    // This is not strictly duplicated since there are multiple model objects named PullRequest that
+    // look the same but are distinct types
+    @Suppress("DuplicatedCode")
     override suspend fun getPullRequestsById(commitFilter: List<String>?): List<PullRequest> {
         logger.trace("getPullRequestsById {}", commitFilter ?: "")
 
@@ -123,7 +126,7 @@ class GitHubClientImpl(
                 }
             }
             .also { pullRequests ->
-                logger.trace("getPullRequests {}: {}", pullRequests.size, pullRequests)
+                logger.trace("getPullRequestsById {}: {}", pullRequests.size, pullRequests)
             }
     }
 

@@ -290,7 +290,7 @@ class JGitClient(
                     commitCommand.setCommitter(committerPersonIdent)
                     if (author == null && !amend) {
                         // If only the committer is set, use it as the author as well. This matches
-                        // JGit's behavior (but only for new commits (i.e. amend == false))
+                        // JGit's behavior (but only for new commits (i.e., amend == false))
                         commitCommand.setAuthor(committerPersonIdent)
                     }
                 }
@@ -306,8 +306,8 @@ class JGitClient(
                 return commitCommand
             }
 
-            // Retry a few times on an amend. From tests if we create a test commit and amend it
-            // within the same second, JGit throws an exception since the commit object didn't
+            // Retry a few times if we're amending. From tests if we create a test commit and amend
+            // it within the same second, JGit throws an exception since the commit object didn't
             // change. If we retry a couple of times, enough time will pass that the commit date
             // will bump.
             fun shouldRetry(e: Exception) = e.message.orEmpty().contains(NO_CHANGE.name)

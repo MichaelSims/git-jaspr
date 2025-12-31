@@ -215,7 +215,7 @@ interface GitClientTest {
             // Test 3: Author only
             file.writeText("content3")
             git.add("test.txt")
-            val commit3 = git.commit("Commit 3")
+            git.commit("Commit 3")
             git.setCommitId("id-3", author = customAuthor)
             val modified3 = git.log("HEAD", 1).single()
             assertEquals(customAuthor, modified3.author)
@@ -223,7 +223,7 @@ interface GitClientTest {
             // Test 4: Both committer and author
             file.writeText("content4")
             git.add("test.txt")
-            val commit4 = git.commit("Commit 4")
+            git.commit("Commit 4")
             git.setCommitId("id-4", committer = customCommitter, author = customAuthor)
             val modified4 = git.log("HEAD", 1).single()
             assertEquals(customCommitter, modified4.committer)
@@ -266,7 +266,7 @@ interface GitClientTest {
             val commit3 = git.commit(amend = true)
             val commitDate3 = commit3.commitDate
 
-            // Committer date should be different after each amend
+            // Committer date should be different after each amend operation
             assertNotEquals(commitDate1, commitDate2)
             assertNotEquals(commitDate2, commitDate3)
             assertNotEquals(commitDate1, commitDate3)
@@ -341,24 +341,24 @@ interface GitClientTest {
             git.add("test.txt")
             git.commit("Message", footerLines = mapOf("Key1" to "value1"))
 
-            // Test 1: Amend with same message and new footers (footers should be replaced)
+            // Test 1: Amend with the same message and new footers (footers should be replaced)
             val commit2 =
                 git.commit("Message", footerLines = mapOf("Key2" to "value2"), amend = true)
             assertEquals("Message", commit2.shortMessage)
             assertEquals(null, CommitParsers.getFooters(commit2.fullMessage)["Key1"])
             assertEquals("value2", CommitParsers.getFooters(commit2.fullMessage)["Key2"])
 
-            // Test 2: Amend with null message and null footers (should keep both)
+            // Test 2: Amend with a null message and null footers (should keep both)
             val commit3 = git.commit(amend = true)
             assertEquals("Message", commit3.shortMessage)
             assertEquals("value2", CommitParsers.getFooters(commit3.fullMessage)["Key2"])
 
-            // Test 3: Amend with new message and null footers (should keep existing footers)
+            // Test 3: Amend with the new message and null footers (should keep existing footers)
             val commit4 = git.commit("New Message", amend = true)
             assertEquals("New Message", commit4.shortMessage)
             assertEquals("value2", CommitParsers.getFooters(commit4.fullMessage)["Key2"])
 
-            // Test 4: Amend with null message and empty footers (should clear footers)
+            // Test 4: Amend with a null message and empty footers (should clear footers)
             val commit5 = git.commit(footerLines = emptyMap(), amend = true)
             assertEquals("New Message", commit5.shortMessage)
             assertEquals(null, CommitParsers.getFooters(commit5.fullMessage)["Key2"])

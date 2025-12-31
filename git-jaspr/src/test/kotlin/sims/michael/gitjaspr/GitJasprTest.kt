@@ -59,7 +59,7 @@ interface GitJasprTest {
     @Test
     fun `push fails unless workdir is clean`() {
         // This test fails when ran from GitJasprFunctionalExternalProcessTest because the exception
-        // type is lost. This is not a problem but I should probably try to fix it at some point
+        // type is lost. This is not a problem, but I should probably try to fix it at some point
         withTestSetup(useFakeRemote) {
             createCommitsFrom(
                 testCase {
@@ -3022,7 +3022,7 @@ interface GitJasprTest {
 
             merge(RefSpec("development", "main"))
             // Note that "four" will be the last mergeable commit because "five" has not been
-            // approved. Therefore we should check that PR five is pointing at "main"
+            // approved. Therefore, we should check that PR five is pointing at "main"
             // (DEFAULT_TARGET_REF)
             assertEquals(
                 DEFAULT_TARGET_REF,
@@ -3790,7 +3790,7 @@ interface GitJasprTest {
                 }
             )
 
-            // Push first named stack
+            // Push a first named stack
             gitJaspr.push(stackName = "stack-one")
 
             createCommitsFrom(
@@ -3822,10 +3822,10 @@ interface GitJasprTest {
                 }
             )
 
-            // Push second named stack
+            // Push a second named stack
             gitJaspr.push(stackName = "stack-two")
 
-            // Merge the first two stacks into main (making them empty)
+            // Merge the first two stacks into the main branch (making them empty)
             waitForChecksToConclude("one", "two", "three")
             merge(RefSpec("dev", "main"))
 
@@ -4224,7 +4224,7 @@ interface GitJasprTest {
     @Test
     fun `clean with cleanAllCommits true ignores commit ownership`() {
         withTestSetup(useFakeRemote) {
-            // Create commits with default user
+            // Create commits with the default user
             createCommitsFrom(
                 testCase {
                     repository {
@@ -4242,7 +4242,7 @@ interface GitJasprTest {
                 }
             )
 
-            // Create commits with other user
+            // Create commits with another user
             localGit.setConfigValue("user.name", "Other User")
             localGit.setConfigValue("user.email", "other@example.com")
             createCommitsFrom(
@@ -4271,11 +4271,11 @@ interface GitJasprTest {
                 }
             )
 
-            // Switch back to original user
+            // Switch back to the original user
             localGit.setConfigValue("user.name", DEFAULT_COMMITTER.name)
             localGit.setConfigValue("user.email", DEFAULT_COMMITTER.email)
 
-            // Get orphaned branches - should return ALL regardless of cleanAllCommits setting
+            // Get orphaned branches - should return ALL regardless of the cleanAllCommits setting
             val orphanedBranches = gitJaspr.getOrphanedBranches()
             assertEquals(
                 setOf(
@@ -4287,14 +4287,14 @@ interface GitJasprTest {
                 orphanedBranches.toSet(),
             )
 
-            // Get clean plan with cleanAllCommits = false - should only include owned branches
+            // Get the clean plan with cleanAllCommits = false - should only include owned branches
             val cleanPlan = gitJaspr.getCleanPlan()
             assertEquals(
                 setOf(buildRemoteRef("A"), buildRemoteRef("B")),
                 cleanPlan.orphanedBranches,
             )
 
-            // Get clean plan with cleanAllCommits = true - should include all branches
+            // Get the clean plan with cleanAllCommits = true - should include all branches
             val gitJasprWithCleanAll =
                 gitJaspr.clone { config -> config.copy(cleanAllCommits = true) }
             val cleanPlanAll = gitJasprWithCleanAll.getCleanPlan()

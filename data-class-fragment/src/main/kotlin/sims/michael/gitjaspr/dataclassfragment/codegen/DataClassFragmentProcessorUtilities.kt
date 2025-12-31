@@ -25,8 +25,6 @@ import java.math.BigInteger
 import java.time.Instant
 import java.time.LocalDate
 import java.util.Queue
-import javax.lang.model.element.Element
-import javax.lang.model.element.ElementKind
 import kotlin.reflect.KClass
 import kotlin.time.measureTimedValue
 import sims.michael.gitjaspr.dataclassfragment.ArrayPropertyWithNullability
@@ -246,12 +244,6 @@ private fun failIfColumnIsUntyped(columnType: KSType) {
         "Data class generation for untyped columns is not supported"
     }
 }
-
-fun Element.collectEnclosedInterfaces(): List<Element> =
-    (listOf(this) + enclosedElements.flatMap { it.collectEnclosedInterfaces() }).filter {
-        typeElement ->
-        typeElement.kind == ElementKind.INTERFACE
-    }
 
 context(_: SymbolProcessorEnvironment)
 fun Resolver.collectFragments() =

@@ -199,7 +199,7 @@ class CliGitClientTest : GitClientTest {
     }
 
     @Test
-    fun `logRange throws when given nonexistant refs`() {
+    fun `logRange throws when given nonexistent refs`() {
         withTestSetup {
             createCommitsFrom(
                 testCase {

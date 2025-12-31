@@ -359,9 +359,9 @@ class CliGitClient(
     override fun getRemoteUriOrNull(remoteName: String): String? {
         // Intentionally avoiding trace logging since this is called during initialization and shows
         // up in the output of --show-config, which I want to avoid. It might be better in the
-        // future to either log everything to STDERR, or conditionally log to STDERR depending on
-        // the command + options (i.e. git jaspr status --show-config should log to STDERR to
-        // separate logging from that command's output.
+        // future to either log everything to STDERR or conditionally log to STDERR depending on
+        // the command + options (i.e., git jaspr status --show-config should log to STDERR to
+        // separate logging from that command's output).
         return executeCommand(listOf("git", "remote", "get-url", remoteName))
             .output
             .string
@@ -460,7 +460,7 @@ class CliGitClient(
                     "%(trailers:key=commit-id,separator=$GIT_LOG_TRAILER_SEPARATOR,valueonly=true)", // trailers
                     "%ct", // commit timestamp
                     "%at", // author timestamp
-                    "%B", // raw body (subject + body)
+                    "%B", // raw body (subject and body)
                 )
                 .joinToString(GIT_FORMAT_SEPARATOR)
 

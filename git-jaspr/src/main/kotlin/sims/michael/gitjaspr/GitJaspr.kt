@@ -222,7 +222,7 @@ class GitJaspr(
                 remoteName,
                 outOfDateBranches.map(RefSpec::remoteRef),
             )
-        // Convert symbolic refs (i.e. HEAD) to short hash so our comparison matches below
+        // Convert symbolic refs (i.e., HEAD) to short hash so our comparison matches below
         val localRef = gitClient.log(filteredRefSpec.localRef, 1).single().hash
 
         // Determine the effective stack name
@@ -296,7 +296,7 @@ class GitJaspr(
                         headRefName = currentCommit.toRemoteRefName(),
                         // The base ref for the first commit in the stack (prevCommit == null) is
                         // the target branch (the branch the commit will ultimately merge into). The
-                        // base ref for each subsequent commit is the remote ref name (i.e.
+                        // base ref for each successive commit is the remote ref name (i.e.,
                         // jaspr/<commit-id>) of the previous commit in the stack
                         baseRefName = prevCommit?.toRemoteRefName() ?: filteredRefSpec.remoteRef,
                         title = currentCommit.shortMessage,
@@ -320,10 +320,10 @@ class GitJaspr(
 
         for (pr in prsToMutate) {
             if (pr.id == null) {
-                // create pull request
+                // create the pull request
                 ghClient.createPullRequest(pr)
             } else {
-                // update pull request
+                // update the pull request
                 ghClient.updatePullRequest(pr)
             }
         }
@@ -369,7 +369,7 @@ class GitJaspr(
             return
         }
 
-        // Filter stack based on dont-push pattern
+        // Filter stack based on the dont-push pattern
         val (stack, excludedCommits) = filterStackByDontPushPattern(fullStack)
         logExcludedCommits(excludedCommits)
 
@@ -1118,7 +1118,7 @@ class GitJaspr(
      * This is necessary because there is no way to atomically force push the PR branches AND update
      * their baseRefs. We have to do one or the other first, and if at any point a PR's
      * `baseRefName..headRefName` is empty, GitHub will implicitly close that PR and make it
-     * impossible for us to update in the future. To avoid this we temporarily update the
+     * impossible for us to update in the future. To avoid this, we temporarily update the
      * [PullRequest.baseRefName] of any moved PR to point to [remoteRef] (which should be the
      * ultimate target of the PR and therefore guaranteed to be non-empty). These PRs will be
      * updated again after we force push the branches.

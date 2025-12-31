@@ -177,7 +177,7 @@ private constructor(
                 }
 
                 // Create temp branches to track which refs need to either be restored or deleted
-                // when the test is finished and we roll back the changes (important in functional
+                // when the test is finished. We will roll back the changes (important in functional
                 // tests to leave the remote repo in the same state we found it)
                 for (localRef in commitData.localRefs) {
                     val previousCommit = localGit.branch(localRef, force = true)
@@ -254,7 +254,7 @@ private constructor(
                         title = pr.title,
                         body = pr.body,
                         // This logic is incomplete. In this context, we could have PRs with
-                        // multiple commits. If we want to support this so we can test how JASPR
+                        // multiple commits. If we want to support this so we can test how Jaspr
                         // reacts, this logic needs to be updated to set checksPass only if _all_
                         // commits in the PR will pass. It's unlikely that I'll make this change,
                         // but I'll leave this comment here
@@ -311,7 +311,7 @@ private constructor(
                 .mapNotNull { name -> deleteRegex.matchEntire(name) }
                 .map { result ->
                     RefSpec(
-                        "", // Will force push below
+                        "", // This will result in a force push
                         result.groupValues.last(String::isNotBlank),
                     )
                 }
@@ -360,8 +360,8 @@ private constructor(
                     .output
                     .lines
                     .forEach { logger.trace("{}: {}", label, it) }
-            } catch (e: IOException) {
-                logger.error("Couldn't run git log, whatsa matta, you don't have git installed!?")
+            } catch (_: IOException) {
+                logger.error("\"git log\" failed, is git installed and on the PATH?")
                 canRunGit.set(false)
             }
             logger.trace(divider)
