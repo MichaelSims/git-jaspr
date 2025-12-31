@@ -460,17 +460,17 @@ class GitJaspr(
     ) {
         logger.trace("autoMerge {} {}", refSpec, pollingIntervalSeconds)
 
-        // Filter the stack to exclude commits matching the dont-push pattern
+        // Filter the stack to exclude commits matching the dont-push pattern or draft commits
         val remoteName = config.remoteName
         gitClient.fetch(remoteName)
         val fullStack =
             gitClient.getLocalCommitStack(remoteName, refSpec.localRef, refSpec.remoteRef)
-        val (filteredStack, excludedCommits) = filterStackByDontPushPattern(fullStack)
+        val (filteredStack, excludedCommits) = filterStackByDontPushOrDraft(fullStack)
         logExcludedCommits(excludedCommits)
 
         if (filteredStack.isEmpty()) {
             logger.warn(
-                "All commits in the stack match the dont-push pattern. Nothing to auto-merge."
+                "All commits in the stack are either drafts or match the dont-push pattern. Nothing to auto-merge."
             )
             return
         }
@@ -570,10 +570,6 @@ class GitJaspr(
                 }
                 if (statuses.any { status -> status.approved == false }) {
                     logger.warn("PRs are not approved. Aborting auto-merge.")
-                    break
-                }
-                if (statuses.any { status -> status.isDraft == true }) {
-                    logger.warn("Some PRs in the stack are drafts. Aborting auto-merge.")
                     break
                 }
 
@@ -1169,6 +1165,31 @@ class GitJaspr(
 
         // Find the first commit (from bottom to top) that matches the pattern
         val firstMatchIndex = stack.indexOfFirst { commit -> pattern.matches(commit.shortMessage) }
+
+        return if (firstMatchIndex == -1) {
+            // No matches. Include the entire stack
+            FilteredStack(included = stack, excluded = emptyList())
+        } else {
+            // Split the stack at the match point
+            val included = stack.subList(0, firstMatchIndex)
+            val excluded = stack.subList(firstMatchIndex, stack.size)
+            FilteredStack(included, excluded)
+        }
+    }
+
+    /**
+     * Filters a stack to exclude commits matching the dont-push pattern or draft commits and all
+     * commits above them. Returns the filtered stack and the list of excluded commits. The stack is
+     * ordered from bottom (oldest, furthest from HEAD) to top (newest, closest to HEAD).
+     */
+    private suspend fun filterStackByDontPushOrDraft(stack: List<Commit>): FilteredStack {
+        val dontPushPattern = config.dontPushRegex.toRegex(IGNORE_CASE)
+        val statuses = getRemoteCommitStatuses(stack)
+
+        val firstMatchIndex =
+            statuses.indexOfFirst { status ->
+                dontPushPattern.matches(status.localCommit.shortMessage) || status.isDraft == true
+            }
 
         return if (firstMatchIndex == -1) {
             // No matches. Include the entire stack

@@ -4723,6 +4723,126 @@ interface GitJasprTest {
         }
     }
 
+    @Test
+    fun `autoMerge merges mergeable commits and stops at draft commit in middle of stack`() {
+        withTestSetup(useFakeRemote) {
+            createCommitsFrom(
+                testCase {
+                    repository {
+                        commit {
+                            title = "one"
+                            willPassVerification = true
+                            remoteRefs += buildRemoteRef("one")
+                        }
+                        commit {
+                            title = "two"
+                            willPassVerification = true
+                            remoteRefs += buildRemoteRef("two")
+                        }
+                        commit {
+                            title = "draft: three"
+                            id = "three"
+                            willPassVerification = true
+                            remoteRefs += buildRemoteRef("three")
+                        }
+                        commit {
+                            title = "four"
+                            willPassVerification = true
+                            remoteRefs += buildRemoteRef("four")
+                            localRefs += "development"
+                        }
+                    }
+                    pullRequest {
+                        headRef = buildRemoteRef("one")
+                        baseRef = "main"
+                        title = "one"
+                        willBeApprovedByUserKey = "michael"
+                    }
+                    pullRequest {
+                        headRef = buildRemoteRef("two")
+                        baseRef = buildRemoteRef("one")
+                        title = "two"
+                        willBeApprovedByUserKey = "michael"
+                    }
+                    pullRequest {
+                        headRef = buildRemoteRef("three")
+                        baseRef = buildRemoteRef("two")
+                        title = "draft: three"
+                    }
+                    pullRequest {
+                        headRef = buildRemoteRef("four")
+                        baseRef = buildRemoteRef("three")
+                        title = "four"
+                        willBeApprovedByUserKey = "michael"
+                    }
+                }
+            )
+
+            waitForChecksToConclude("one", "two", "three", "four")
+            autoMerge(RefSpec("development", "main"))
+
+            // Commits one and two should be merged, but draft:three and four should remain
+            val stack = localGit.getLocalCommitStack(remoteName, "development", DEFAULT_TARGET_REF)
+            assertEquals(2, stack.size)
+            assertTrue(stack.any { it.shortMessage.startsWith("draft: three") })
+            assertTrue(stack.any { it.shortMessage.startsWith("four") })
+        }
+    }
+
+    @Test
+    fun `autoMerge merges up to last mergeable commit when isDraft is true`() {
+        withTestSetup(useFakeRemote) {
+            createCommitsFrom(
+                testCase {
+                    repository {
+                        commit {
+                            title = "one"
+                            willPassVerification = true
+                            remoteRefs += buildRemoteRef("one")
+                        }
+                        commit {
+                            title = "two"
+                            willPassVerification = true
+                            remoteRefs += buildRemoteRef("two")
+                        }
+                        commit {
+                            title = "WIP: three"
+                            id = "three"
+                            willPassVerification = true
+                            remoteRefs += buildRemoteRef("three")
+                            localRefs += "development"
+                        }
+                    }
+                    pullRequest {
+                        headRef = buildRemoteRef("one")
+                        baseRef = "main"
+                        title = "one"
+                        willBeApprovedByUserKey = "michael"
+                    }
+                    pullRequest {
+                        headRef = buildRemoteRef("two")
+                        baseRef = buildRemoteRef("one")
+                        title = "two"
+                        willBeApprovedByUserKey = "michael"
+                    }
+                    pullRequest {
+                        headRef = buildRemoteRef("three")
+                        baseRef = buildRemoteRef("two")
+                        title = "WIP: three"
+                    }
+                }
+            )
+
+            waitForChecksToConclude("one", "two", "three")
+            autoMerge(RefSpec("development", "main"))
+
+            // Commits one and two should be merged, but WIP:three should remain
+            val stack = localGit.getLocalCommitStack(remoteName, "development", DEFAULT_TARGET_REF)
+            assertEquals(1, stack.size)
+            assertTrue(stack.any { it.shortMessage.startsWith("WIP: three") })
+        }
+    }
+
     // endregion
 
     private fun isNamedStackBranch(branch: RemoteBranch): Boolean {
