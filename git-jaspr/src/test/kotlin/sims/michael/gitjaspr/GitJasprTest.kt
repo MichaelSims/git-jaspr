@@ -2892,13 +2892,14 @@ interface GitJasprTest {
                             remoteRefs += buildRemoteRef("b")
                         }
                         commit {
-                            title = "draft: c"
+                            title = "dontpush: c"
                             id = "c"
                             willPassVerification = true
                             remoteRefs += buildRemoteRef("c")
                         }
                         commit {
-                            title = "d"
+                            title = "draft: d"
+                            id = "d"
                             willPassVerification = true
                             remoteRefs += buildRemoteRef("d")
                         }
@@ -2924,13 +2925,13 @@ interface GitJasprTest {
                     pullRequest {
                         headRef = buildRemoteRef("c")
                         baseRef = buildRemoteRef("b")
-                        title = "draft: c"
+                        title = "dontpush: c"
                         willBeApprovedByUserKey = "michael"
                     }
                     pullRequest {
                         headRef = buildRemoteRef("d")
                         baseRef = buildRemoteRef("c")
-                        title = "d"
+                        title = "draft: d"
                     }
                     pullRequest {
                         headRef = buildRemoteRef("e")
@@ -2945,7 +2946,7 @@ interface GitJasprTest {
             merge(RefSpec("development", "main"))
             assertEquals(
                 // All mergeable commits were merged, leaving c, d, and e as the only one not merged
-                listOf("draft: c", "d", "e"),
+                listOf("dontpush: c", "draft: d", "e"),
                 localGit
                     .getLocalCommitStack(remoteName, "development", DEFAULT_TARGET_REF)
                     .map(Commit::shortMessage),
