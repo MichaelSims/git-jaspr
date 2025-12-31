@@ -647,7 +647,7 @@ interface GitJasprTest {
                 |[✅✅✅✅ㄧㄧ] %s : %s : one
                 """
                     .trimMargin()
-                    .toStatusString(actual, NamedStackInfo(stackName, 0, 0, remoteName)),
+                    .toStatusString(actual),
                 getActual = { actual },
             )
         }
@@ -707,7 +707,7 @@ interface GitJasprTest {
                 |[✅✅✅✅ㄧㄧ] %s : %s : one
                 """
                     .trimMargin()
-                    .toStatusString(actual, NamedStackInfo(stackName, 0, 0, remoteName)),
+                    .toStatusString(actual),
                 actual,
             )
         }
@@ -1908,7 +1908,7 @@ interface GitJasprTest {
     }
 
     @Test
-    fun `push new named stack from detached HEAD is unsupported`() {
+    fun `push from detached HEAD is supported`() {
         withTestSetup(useFakeRemote) {
             createCommitsFrom(
                 testCase {
@@ -1925,11 +1925,22 @@ interface GitJasprTest {
                 }
             )
 
-            localGit.checkout(localGit.log().first().hash)
-            val message =
-                assertThrows<GitJasprException> { gitJaspr.push(stackName = "my-stack-name") }
-                    .message
-            assertContains(message, "detached HEAD")
+            localGit.checkout(localGit.log().last().hash)
+            gitJaspr.push()
+            // Assert we have a named stack and it points to commit five
+            assertEquals(
+                "five",
+                localGit
+                    .getRemoteBranches(remoteName)
+                    .single { branch ->
+                        RemoteRefEncoding.getRemoteNamedStackRefParts(
+                            branch.name,
+                            DEFAULT_REMOTE_NAMED_STACK_BRANCH_PREFIX,
+                        ) != null
+                    }
+                    .commit
+                    .shortMessage,
+            )
         }
     }
 

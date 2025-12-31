@@ -475,6 +475,7 @@ class JGitClient(
 
     override fun setUpstreamBranch(remoteName: String, branchName: String) {
         logger.trace("setUpstreamBranch {} {}", remoteName, branchName)
+        check(!isHeadDetached()) { "Cannot set upstream branch when in detached HEAD" }
         require(getRemoteBranches(remoteName).map(RemoteBranch::name).contains(branchName)) {
             "Remote $remoteName does not contain branch $branchName"
         }

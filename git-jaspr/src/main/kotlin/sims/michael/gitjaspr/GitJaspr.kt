@@ -168,10 +168,6 @@ class GitJaspr(
             )
         }
 
-        if (gitClient.isHeadDetached()) {
-            throw GitJasprException("Pushing a stack from detached HEAD is not supported.")
-        }
-
         val remoteName = config.remoteName
         gitClient.fetch(remoteName)
 
@@ -276,7 +272,12 @@ class GitJaspr(
             refOrRefs(revisionHistoryRefs.size),
         )
 
-        gitClient.setUpstreamBranch(remoteName, namedStackRefSpec.remoteRef)
+        val upstream = namedStackRefSpec.remoteRef
+        if (gitClient.isHeadDetached()) {
+            logDetachedHeadWarning(upstream, remoteName)
+        } else {
+            gitClient.setUpstreamBranch(remoteName, upstream)
+        }
 
         val existingPrsByCommitId = pullRequestsRebased.associateBy(PullRequest::commitId)
 
@@ -1281,6 +1282,17 @@ class GitJaspr(
             "Failed to generate a unique stack name after $maxAttempts attempts. " +
                 "This is likely a bug, please report it."
         )
+    }
+
+    private fun logDetachedHeadWarning(upstream: String, remoteName: String) {
+        logger.warn(
+            "You are currently in detached HEAD which prevents me from setting the upstream branch to the named " +
+                "stack branch. "
+        )
+        logger.warn("You may want to do one of:")
+        logger.warn("git checkout {}", upstream)
+        logger.warn("git checkout -b <some-name> {}/{}", remoteName, upstream)
+        logger.warn("to do this manually.")
     }
 
     private fun refOrRefs(count: Int) = if (count == 1) "ref" else "refs"

@@ -829,10 +829,7 @@ class CliGitClientTest : GitClientTest {
                         add(INITIAL_COMMIT_SHORT_MESSAGE) // The result of "git init"
                         for (title in titles) {
                             add(INITIAL_COMMIT_SHORT_MESSAGE)
-                            // This short title will appear twice. Once for when we committed it,
-                            // and once for when the test harness did the equivalent of
-                            // "git checkout -b main-temp-checkout"
-                            repeat(2) { add(title) }
+                            add(title)
                         }
                     }
                     .reversed()

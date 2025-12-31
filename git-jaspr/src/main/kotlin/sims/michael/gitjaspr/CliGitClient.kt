@@ -390,6 +390,9 @@ class CliGitClient(
 
     override fun getUpstreamBranch(remoteName: String): RemoteBranch? {
         logger.trace("getUpstreamBranch {}", remoteName)
+        if (isHeadDetached()) {
+            return null
+        }
         val prefix = "$remoteName/"
         return executeCommand(
                 listOf("git", "rev-parse", "--abbrev-ref", "--symbolic-full-name", "@{u}")
@@ -409,6 +412,7 @@ class CliGitClient(
 
     override fun setUpstreamBranch(remoteName: String, branchName: String) {
         logger.trace("setUpstreamBranch {} {}", remoteName, branchName)
+        check(!isHeadDetached()) { "Cannot set upstream branch when in detached HEAD" }
         executeCommand(listOf("git", "branch", "--set-upstream-to", "$remoteName/$branchName"))
     }
 

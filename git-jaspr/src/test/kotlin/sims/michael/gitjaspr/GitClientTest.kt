@@ -2,10 +2,12 @@ package sims.michael.gitjaspr
 
 import java.io.File
 import kotlin.test.assertNotEquals
+import kotlin.test.assertNull
 import org.eclipse.jgit.lib.Constants
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertFalse
 import org.junit.jupiter.api.Test
+import org.junit.jupiter.api.assertThrows
 import org.slf4j.Logger
 import sims.michael.gitjaspr.githubtests.GitHubTestHarness
 import sims.michael.gitjaspr.githubtests.GitHubTestHarness.Companion.withTestSetup
@@ -424,6 +426,51 @@ interface GitClientTest {
             // Author should change, committer should remain the same
             assertEquals(originalCommitter, commit2.committer)
             assertEquals(customAuthor, commit2.author)
+        }
+    }
+
+    @Test
+    fun `getUpstreamBranch returns null when in detached HEAD`() {
+        withTestSetup {
+            createCommitsFrom(
+                testCase {
+                    repository {
+                        commit { title = "a" }
+                        commit { title = "b" }
+                        commit {
+                            title = "c"
+                            localRefs += "main"
+                        }
+                    }
+                    checkout = "main"
+                }
+            )
+            localGit.checkout(localGit.log().last().hash)
+            assertNull(localGit.getUpstreamBranch(remoteName))
+        }
+    }
+
+    @Test
+    fun `setUpstreamBranch when in detached HEAD fails`() {
+        withTestSetup {
+            createCommitsFrom(
+                testCase {
+                    repository {
+                        commit { title = "a" }
+                        commit { title = "b" }
+                        commit {
+                            title = "c"
+                            remoteRefs += "remoteBranch"
+                            localRefs += "main"
+                        }
+                    }
+                    checkout = "main"
+                }
+            )
+            localGit.checkout(localGit.log().last().hash)
+            assertThrows<IllegalStateException> {
+                localGit.setUpstreamBranch(remoteName, "remoteBranch")
+            }
         }
     }
 
