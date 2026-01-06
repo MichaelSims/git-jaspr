@@ -707,6 +707,10 @@ class GitJaspr(
                 getRemoteNamedStackRefParts(branch.name, config.remoteNamedStackBranchPrefix) !=
                     null
             }
+        val remoteJasprBranches =
+            remoteBranches.filter { branch ->
+                getRemoteRefParts(branch.name, config.remoteBranchPrefix) != null
+            }
 
         val unmergedAndReachableFromNamedStacks =
             namedStackBranches
@@ -726,7 +730,7 @@ class GitJaspr(
 
         // Return abandoned branches (those with open PRs not reachable by any of our named stacks)
         val allPrs = ghClient.getPullRequests()
-        return remoteBranches
+        return remoteJasprBranches
             .filter { branch ->
                 val headRefName = branch.name
                 if (headRefName in allPrs.map(PullRequest::headRefName)) {

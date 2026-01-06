@@ -4,6 +4,7 @@ import java.util.MissingFormatArgumentException
 import kotlin.random.Random
 import kotlin.test.assertContains
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
 import kotlin.test.assertNotEquals
 import kotlin.test.assertNotNull
 import org.junit.jupiter.api.*
@@ -4145,6 +4146,96 @@ interface GitJasprTest {
                 listOf("main"),
                 localGit.getRemoteBranches(remoteName).map(RemoteBranch::name),
             )
+        }
+    }
+
+    @Test
+    fun `clean only considers jaspr branches as abandoned`() {
+        withTestSetup(useFakeRemote) {
+            // Create a jaspr branch with an open PR
+            createCommitsFrom(
+                testCase {
+                    repository {
+                        commit {
+                            title = "jaspr_commit"
+                            remoteRefs += buildRemoteRef("jaspr_commit")
+                            localRefs += "dev"
+                        }
+                    }
+                    pullRequest {
+                        headRef = buildRemoteRef("jaspr_commit")
+                        baseRef = "main"
+                        title = "jaspr_commit"
+                    }
+                    checkout = "dev"
+                }
+            )
+
+            // Push a named stack so we have something to track
+            gitJaspr.push(stackName = "my-stack")
+
+            // Create a non-jaspr branch with an open PR manually (not through jaspr)
+            localGit.checkout("main")
+            createCommitsFrom(
+                testCase {
+                    repository {
+                        commit {
+                            title = "non_jaspr_commit"
+                            remoteRefs += "non-jaspr-branch"
+                            localRefs += "non-jaspr-branch"
+                        }
+                    }
+                }
+            )
+
+            // Create a PR for the non-jaspr branch
+            gitHub.createPullRequest(
+                PullRequest(
+                    id = null,
+                    commitId = null,
+                    number = null,
+                    headRefName = "non-jaspr-branch",
+                    baseRefName = "main",
+                    title = "Non-Jaspr PR",
+                    body = "This is a body",
+                )
+            )
+
+            // Push another stack that doesn't include the jaspr commit (making it abandoned)
+            localGit.checkout("dev")
+            createCommitsFrom(
+                testCase {
+                    repository {
+                        commit {
+                            title = "new_commit"
+                            localRefs += "dev"
+                        }
+                    }
+                }
+            )
+
+            gitJaspr.push(stackName = "my-stack")
+
+            // Get the clean plan with cleanAbandonedPrs enabled
+            val gitJasprWithCleanAbandoned =
+                gitJaspr.clone { config -> config.copy(cleanAbandonedPrs = true) }
+            val cleanPlan = gitJasprWithCleanAbandoned.getCleanPlan()
+
+            // The jaspr branch should be in abandonedBranches
+            assertTrue(
+                cleanPlan.abandonedBranches.contains(buildRemoteRef("jaspr_commit")),
+                "Jaspr branch should be considered abandoned",
+            )
+
+            // The non-jaspr branch should NOT be in abandonedBranches
+            assertFalse(
+                cleanPlan.abandonedBranches.contains("non-jaspr-branch"),
+                "Non-jaspr branch should NOT be considered abandoned",
+            )
+
+            // Verify both PRs still exist
+            val allPrs = gitHub.getPullRequests()
+            assertEquals(3, allPrs.size) // jaspr_commit, new_commit, and non-jaspr-branch
         }
     }
 
