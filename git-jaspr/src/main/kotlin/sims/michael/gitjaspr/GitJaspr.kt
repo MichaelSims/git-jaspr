@@ -55,27 +55,6 @@ class GitJaspr(
                 }
                 .filter { (_, statuses) -> statuses.size > 1 }
 
-        data class NamedStackInfo(
-            val name: String,
-            val numCommitsAhead: Int,
-            val numCommitsBehind: Int,
-        )
-        val namedStackInfo =
-            gitClient.getUpstreamBranch(config.remoteName)?.let { upstream ->
-                getRemoteNamedStackRefParts(upstream.name, config.remoteNamedStackBranchPrefix)
-                    ?.stackName
-                    ?.let { stackName ->
-                        val trackingBranch = "$remoteName/${upstream.name}"
-                        NamedStackInfo(
-                            name = stackName,
-                            numCommitsAhead =
-                                gitClient.logRange(trackingBranch, stack.last().hash).size,
-                            numCommitsBehind =
-                                gitClient.logRange(stack.last().hash, trackingBranch).size,
-                        )
-                    }
-            }
-
         val numCommitsBehindBase =
             gitClient.logRange(stack.last().hash, "$remoteName/${refSpec.remoteRef}").size
         return buildString {
@@ -110,27 +89,9 @@ class GitJaspr(
                 }
                 appendLine(status.localCommit.shortMessage)
             }
-            if (namedStackInfo != null) {
-                with(namedStackInfo) {
-                    appendLine()
-                    appendLine("Stack name: $name")
-                    appendLine(
-                        if (numCommitsBehind == 0 && numCommitsAhead == 0) {
-                            "Your stack is up to date with the remote stack in '$remoteName'."
-                        } else if (numCommitsBehind > 0 && numCommitsAhead == 0) {
-                            "Your stack is behind the remote stack in '$remoteName' by " +
-                                "$numCommitsBehind ${commitOrCommits(numCommitsBehind)}."
-                        } else if (numCommitsBehind == 0) { // && numCommitsAhead > 0
-                            "Your stack is ahead of the remote stack in '$remoteName' by " +
-                                "$numCommitsAhead ${commitOrCommits(numCommitsAhead)}."
-                        } else { // numBehind > 0 && numCommitsAhead > 0
-                            "Your stack and the remote stack in '$remoteName' have diverged, and have " +
-                                "$numCommitsAhead and $numCommitsBehind different commits each, " +
-                                "respectively."
-                        }
-                    )
-                }
-            }
+
+            appendNamedStackInfo(headStackCommit = stack.last().hash)
+
             if (numCommitsBehindBase > 0) {
                 appendLine()
                 append("Your stack is out-of-date with the base branch ")
@@ -153,6 +114,52 @@ class GitJaspr(
                 )
                 appendLine(
                     "Please correct this by amending the commits and deleting the commit-id lines, then retry your operation."
+                )
+            }
+        }
+    }
+
+    private fun StringBuilder.appendNamedStackInfo(headStackCommit: String) {
+        val remoteName = config.remoteName
+        data class NamedStackInfo(
+            val name: String,
+            val numCommitsAhead: Int,
+            val numCommitsBehind: Int,
+        )
+
+        val namedStackInfo =
+            gitClient.getUpstreamBranch(config.remoteName)?.let { upstream ->
+                getRemoteNamedStackRefParts(upstream.name, config.remoteNamedStackBranchPrefix)
+                    ?.stackName
+                    ?.let { name ->
+                        val trackingBranch = "${config.remoteName}/${upstream.name}"
+                        NamedStackInfo(
+                            name,
+                            numCommitsAhead =
+                                gitClient.logRange(trackingBranch, headStackCommit).size,
+                            numCommitsBehind =
+                                gitClient.logRange(headStackCommit, trackingBranch).size,
+                        )
+                    }
+            }
+        if (namedStackInfo != null) {
+            with(namedStackInfo) {
+                appendLine()
+                appendLine("Stack name: $name")
+                appendLine(
+                    if (numCommitsBehind == 0 && numCommitsAhead == 0) {
+                        "Your stack is up to date with the remote stack in '$remoteName'."
+                    } else if (numCommitsBehind > 0 && numCommitsAhead == 0) {
+                        "Your stack is behind the remote stack in '$remoteName' by " +
+                            "$numCommitsBehind ${commitOrCommits(numCommitsBehind)}."
+                    } else if (numCommitsBehind == 0) { // && numCommitsAhead > 0
+                        "Your stack is ahead of the remote stack in '$remoteName' by " +
+                            "$numCommitsAhead ${commitOrCommits(numCommitsAhead)}."
+                    } else { // numBehind > 0 && numCommitsAhead > 0
+                        "Your stack and the remote stack in '$remoteName' have diverged, and have " +
+                            "$numCommitsAhead and $numCommitsBehind different commits each, " +
+                            "respectively."
+                    }
                 )
             }
         }
