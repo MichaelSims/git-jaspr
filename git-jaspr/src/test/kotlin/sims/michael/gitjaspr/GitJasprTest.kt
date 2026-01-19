@@ -1984,9 +1984,20 @@ interface GitJasprTest {
             )
 
             gitJaspr.push()
+
+            val remoteNamedStack =
+                "$remoteName/${buildRemoteNamedStackRef(stackName, DEFAULT_TARGET_REF)}"
+            val remoteDiff = localGit.logRange("main", remoteNamedStack).map(Commit::shortMessage)
+            val localDiff = localGit.logRange(remoteNamedStack, "main").map(Commit::shortMessage)
             assertEquals(
-                "$DEFAULT_REMOTE_NAMED_STACK_BRANCH_PREFIX/$DEFAULT_TARGET_REF/$stackName",
-                localGit.getUpstreamBranch(remoteName)?.name,
+                emptyList(),
+                remoteDiff,
+                "main and $remoteNamedStack should be the same, but remote diff isn't empty",
+            )
+            assertEquals(
+                emptyList(),
+                localDiff,
+                "main and $remoteNamedStack should be the same, but local diff isn't empty",
             )
         }
     }
