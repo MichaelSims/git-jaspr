@@ -10,44 +10,69 @@ object RemoteRefEncoding {
         commitId: String,
         targetRef: String = DEFAULT_TARGET_REF,
         prefix: String = DEFAULT_REMOTE_BRANCH_PREFIX,
-    ): String = listOf(prefix, targetRef, commitId).joinToString("/")
+    ): String = RemoteRef(commitId, targetRef, prefix).name()
 
-    // The original target for this stack is "baked in" to the ref name.
-    fun buildRemoteNamedStackRef(
-        stackName: String,
-        targetRef: String = DEFAULT_TARGET_REF,
-        prefix: String = DEFAULT_REMOTE_NAMED_STACK_BRANCH_PREFIX,
-    ): String = listOf(prefix, targetRef, stackName).joinToString("/")
+    fun getCommitIdFromRemoteRef(remoteRef: String, remoteBranchPrefix: String): String? =
+        RemoteRef.parse(remoteRef, remoteBranchPrefix)?.commitId
 
-    fun getRemoteRefParts(remoteRef: String, remoteBranchPrefix: String): RemoteRefParts? =
-        "^$remoteBranchPrefix/(.*)/(.*?)(?:$REV_NUM_DELIMITER(\\d+))?$"
-            .toRegex()
-            .matchEntire(remoteRef)
-            ?.let { result ->
-                val values = result.groupValues
-                RemoteRefParts(
-                    targetRef = values[1],
-                    commitId = values[2],
-                    values.getOrNull(3)?.toIntOrNull(),
-                )
+    data class RemoteRef(
+        val commitId: String,
+        val targetRef: String = DEFAULT_TARGET_REF,
+        val prefix: String = DEFAULT_REMOTE_BRANCH_PREFIX,
+        val revisionNum: Int? = null,
+        val remoteName: String? = null,
+    ) {
+        fun name(): String =
+            listOfNotBlank(remoteName, prefix, targetRef, commitId).joinToString("/") +
+                revisionNum?.let { "$REV_NUM_DELIMITER$it" }.orEmpty()
+
+        companion object {
+            fun parse(remoteRef: String, remoteBranchPrefix: String): RemoteRef? {
+                val matchResult =
+                    "^$remoteBranchPrefix/(.*)/(.*?)(?:${REV_NUM_DELIMITER}(\\d+))?$"
+                        .toRegex()
+                        .matchEntire(remoteRef)
+                return matchResult?.let { result ->
+                    val values = result.groupValues
+                    RemoteRef(
+                        commitId = values[2],
+                        targetRef = values[1],
+                        remoteBranchPrefix,
+                        values.getOrNull(3)?.toIntOrNull(),
+                    )
+                }
             }
-
-    fun getRemoteNamedStackRefParts(
-        remoteRef: String,
-        remoteNamedStackBranchPrefix: String,
-    ): RemoteNamedStackRefParts? {
-        val matchResult =
-            "^$remoteNamedStackBranchPrefix/(.*?)/(.*)$".toRegex().matchEntire(remoteRef)
-        return matchResult?.let { result ->
-            val values = result.groupValues
-            RemoteNamedStackRefParts(targetRef = values[1], stackName = values[2])
         }
     }
 
-    fun getCommitIdFromRemoteRef(remoteRef: String, remoteBranchPrefix: String): String? =
-        getRemoteRefParts(remoteRef, remoteBranchPrefix)?.commitId
+    data class RemoteNamedStackRef(
+        val stackName: String,
+        val targetRef: String = DEFAULT_TARGET_REF,
+        val prefix: String = DEFAULT_REMOTE_NAMED_STACK_BRANCH_PREFIX,
+        val remoteName: String? = null,
+    ) {
+        fun name(): String =
+            listOfNotBlank(remoteName, prefix, targetRef, stackName).joinToString("/")
 
-    data class RemoteRefParts(val targetRef: String, val commitId: String, val revisionNum: Int?)
-
-    data class RemoteNamedStackRefParts(val targetRef: String, val stackName: String)
+        companion object {
+            fun parse(
+                remoteRef: String,
+                remoteNamedStackBranchPrefix: String,
+            ): RemoteNamedStackRef? {
+                val matchResult =
+                    "^$remoteNamedStackBranchPrefix/(.*?)/(.*)$".toRegex().matchEntire(remoteRef)
+                return matchResult?.let { result ->
+                    val values = result.groupValues
+                    RemoteNamedStackRef(
+                        stackName = values[2],
+                        targetRef = values[1],
+                        remoteNamedStackBranchPrefix,
+                    )
+                }
+            }
+        }
+    }
 }
+
+private fun listOfNotBlank(vararg strings: String?) =
+    strings.filterNotNull().filter(String::isNotBlank)

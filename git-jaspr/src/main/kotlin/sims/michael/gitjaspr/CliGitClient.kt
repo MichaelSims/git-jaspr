@@ -5,7 +5,7 @@ import org.eclipse.jgit.lib.Constants
 import org.slf4j.LoggerFactory
 import org.zeroturnaround.exec.ProcessExecutor
 import org.zeroturnaround.exec.ProcessResult
-import sims.michael.gitjaspr.RemoteRefEncoding.getRemoteRefParts
+import sims.michael.gitjaspr.RemoteRefEncoding.RemoteRef
 
 class CliGitClient(
     override val workingDirectory: File,
@@ -143,7 +143,7 @@ class CliGitClient(
         logger.trace("getRemoteBranchesById")
         return getRemoteBranches(remoteName)
             .mapNotNull { branch ->
-                getRemoteRefParts(branch.name, remoteBranchPrefix)
+                RemoteRef.parse(branch.name, remoteBranchPrefix)
                     ?.takeIf { parts -> parts.revisionNum == null } // Filter history branches
                     ?.let { it.commitId to branch }
             }

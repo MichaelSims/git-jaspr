@@ -28,7 +28,7 @@ import org.eclipse.jgit.transport.SshSessionFactory
 import org.eclipse.jgit.transport.URIish
 import org.eclipse.jgit.transport.ssh.jsch.JschConfigSessionFactory
 import org.slf4j.LoggerFactory
-import sims.michael.gitjaspr.RemoteRefEncoding.getRemoteRefParts
+import sims.michael.gitjaspr.RemoteRefEncoding.RemoteRef
 import sims.michael.gitjaspr.RetryWithBackoff.retryWithBackoff
 
 class JGitClient(
@@ -188,7 +188,7 @@ class JGitClient(
         logger.trace("getRemoteBranchesById")
         return getRemoteBranches(remoteName)
             .mapNotNull { branch ->
-                getRemoteRefParts(branch.name, remoteBranchPrefix)
+                RemoteRef.parse(branch.name, remoteBranchPrefix)
                     ?.takeIf { parts -> parts.revisionNum == null } // Filter history branches
                     ?.let { it.commitId to branch }
             }

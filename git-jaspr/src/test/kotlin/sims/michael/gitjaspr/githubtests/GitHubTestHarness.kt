@@ -14,7 +14,7 @@ import sims.michael.gitjaspr.Commit
 import sims.michael.gitjaspr.Ident
 import sims.michael.gitjaspr.PullRequest
 import sims.michael.gitjaspr.RemoteRefEncoding.DEFAULT_REMOTE_BRANCH_PREFIX
-import sims.michael.gitjaspr.RemoteRefEncoding.getRemoteRefParts
+import sims.michael.gitjaspr.RemoteRefEncoding.RemoteRef
 import sims.michael.gitjaspr.testing.DEFAULT_COMMITTER
 
 class GitHubTestHarness
@@ -248,7 +248,7 @@ private constructor(
                 val newPullRequest =
                     PullRequest(
                         id = null,
-                        commitId = getRemoteRefParts(pr.headRef, remoteBranchPrefix)?.commitId,
+                        commitId = RemoteRef.parse(pr.headRef, remoteBranchPrefix)?.commitId,
                         number = null,
                         headRefName = pr.headRef,
                         baseRefName = pr.baseRef,

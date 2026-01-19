@@ -12,7 +12,7 @@ import org.junit.jupiter.api.Assertions.assertTrue
 import org.slf4j.Logger
 import sims.michael.gitjaspr.GitJaspr.CleanPlan
 import sims.michael.gitjaspr.RemoteRefEncoding.DEFAULT_REMOTE_NAMED_STACK_BRANCH_PREFIX
-import sims.michael.gitjaspr.RemoteRefEncoding.buildRemoteNamedStackRef
+import sims.michael.gitjaspr.RemoteRefEncoding.RemoteNamedStackRef
 import sims.michael.gitjaspr.RemoteRefEncoding.buildRemoteRef
 import sims.michael.gitjaspr.githubtests.GitHubTestHarness
 import sims.michael.gitjaspr.githubtests.GitHubTestHarness.Companion.withTestSetup
@@ -1933,7 +1933,7 @@ interface GitJasprTest {
                 localGit
                     .getRemoteBranches(remoteName)
                     .single { branch ->
-                        RemoteRefEncoding.getRemoteNamedStackRefParts(
+                        RemoteNamedStackRef.parse(
                             branch.name,
                             DEFAULT_REMOTE_NAMED_STACK_BRANCH_PREFIX,
                         ) != null
@@ -1986,7 +1986,7 @@ interface GitJasprTest {
             gitJaspr.push()
 
             val remoteNamedStack =
-                "$remoteName/${buildRemoteNamedStackRef(stackName, DEFAULT_TARGET_REF)}"
+                RemoteNamedStackRef(stackName, DEFAULT_TARGET_REF, remoteName = remoteName).name()
             val remoteDiff = localGit.logRange("main", remoteNamedStack).map(Commit::shortMessage)
             val localDiff = localGit.logRange(remoteNamedStack, "main").map(Commit::shortMessage)
             assertEquals(
@@ -3759,8 +3759,8 @@ interface GitJasprTest {
                 CleanPlan(
                     emptyNamedStackBranches =
                         sortedSetOf(
-                            buildRemoteNamedStackRef("stack-one"),
-                            buildRemoteNamedStackRef("stack-two"),
+                            RemoteNamedStackRef("stack-one").name(),
+                            RemoteNamedStackRef("stack-two").name(),
                         )
                 ),
                 gitJaspr.getCleanPlan(),
@@ -3970,7 +3970,8 @@ interface GitJasprTest {
             assertEquals(
                 CleanPlan(
                     orphanedBranches = sortedSetOf(buildRemoteRef("will_orphan_a")),
-                    emptyNamedStackBranches = sortedSetOf(buildRemoteNamedStackRef("empty_stack")),
+                    emptyNamedStackBranches =
+                        sortedSetOf(RemoteNamedStackRef("empty_stack").name()),
                     abandonedBranches = sortedSetOf(buildRemoteRef("D")),
                 ),
                 gitJasprWithCleanAbandoned.getCleanPlan(),
@@ -4108,8 +4109,8 @@ interface GitJasprTest {
             gitJaspr.push(stackName = "my-stack")
             assertEquals(
                 listOf(
-                        buildRemoteNamedStackRef("empty_stack"),
-                        buildRemoteNamedStackRef("my-stack"),
+                        RemoteNamedStackRef("empty_stack").name(),
+                        RemoteNamedStackRef("my-stack").name(),
                         buildRemoteRef("A"),
                         buildRemoteRef("B"),
                         buildRemoteRef("C"),
@@ -4129,7 +4130,7 @@ interface GitJasprTest {
 
             assertEquals(
                 listOf(
-                        buildRemoteNamedStackRef("my-stack"),
+                        RemoteNamedStackRef("my-stack").name(),
                         buildRemoteRef("A"),
                         buildRemoteRef("B"),
                         buildRemoteRef("C"),
@@ -4145,7 +4146,7 @@ interface GitJasprTest {
             merge(RefSpec("dev", "main"))
 
             assertEquals(
-                listOf(buildRemoteNamedStackRef("my-stack"), "main").toSet(),
+                listOf(RemoteNamedStackRef("my-stack").name(), "main").toSet(),
                 localGit.getRemoteBranches(remoteName).map(RemoteBranch::name).toSet(),
             )
 

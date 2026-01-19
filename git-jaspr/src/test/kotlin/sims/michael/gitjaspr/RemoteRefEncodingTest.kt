@@ -2,84 +2,89 @@ package sims.michael.gitjaspr
 
 import org.junit.jupiter.api.Assertions.*
 import org.junit.jupiter.api.Test
-import sims.michael.gitjaspr.RemoteRefEncoding.RemoteNamedStackRefParts
-import sims.michael.gitjaspr.RemoteRefEncoding.RemoteRefParts
-import sims.michael.gitjaspr.RemoteRefEncoding.buildRemoteNamedStackRef
-import sims.michael.gitjaspr.RemoteRefEncoding.getRemoteNamedStackRefParts
-import sims.michael.gitjaspr.RemoteRefEncoding.getRemoteRefParts
+import sims.michael.gitjaspr.RemoteRefEncoding.RemoteNamedStackRef
+import sims.michael.gitjaspr.RemoteRefEncoding.RemoteRef
 
 class RemoteRefEncodingTest {
     @Test
-    fun `getRemoteRefParts - no revision number`() {
+    fun `ref parse - no revision number`() {
         assertEquals(
-            RemoteRefParts("main", "12345", null),
-            getRemoteRefParts("jaspr/main/12345", "jaspr"),
+            RemoteRef("12345", "main", "jaspr"),
+            RemoteRef.parse("jaspr/main/12345", "jaspr"),
         )
     }
 
     @Test
-    fun `getRemoteRefParts - with revision number`() {
+    fun `ref parse - with revision number`() {
         assertEquals(
-            RemoteRefParts("main", "12345", 1),
-            getRemoteRefParts("jaspr/main/12345_01", "jaspr"),
+            RemoteRef("12345", "main", "jaspr", 1),
+            RemoteRef.parse("jaspr/main/12345_01", "jaspr"),
         )
     }
 
     @Test
-    fun `buildRemoteNamedStackRef - default prefix and target`() {
-        assertEquals("jaspr-named/main/my-stack", buildRemoteNamedStackRef("my-stack"))
+    fun `named stack ref name - default prefix and target`() {
+        assertEquals(
+            "jaspr-named/main/my-stack",
+            RemoteNamedStackRef(stackName = "my-stack", targetRef = DEFAULT_TARGET_REF).name(),
+        )
     }
 
     @Test
-    fun `buildRemoteNamedStackRef - custom target`() {
+    fun `named stack ref name - custom target`() {
         assertEquals(
             "jaspr-named/develop/feature-stack",
-            buildRemoteNamedStackRef("feature-stack", "develop"),
+            RemoteNamedStackRef(stackName = "feature-stack", targetRef = "develop").name(),
         )
     }
 
     @Test
-    fun `buildRemoteNamedStackRef - custom prefix`() {
+    fun `named stack ref name - custom prefix`() {
         assertEquals(
             "custom-prefix/main/test-stack",
-            buildRemoteNamedStackRef("test-stack", prefix = "custom-prefix"),
+            RemoteNamedStackRef(
+                    stackName = "test-stack",
+                    targetRef = DEFAULT_TARGET_REF,
+                    prefix = "custom-prefix",
+                )
+                .name(),
         )
     }
 
     @Test
-    fun `getRemoteNamedStackRefParts - valid ref`() {
+    fun `named stack ref parse - valid ref`() {
         assertEquals(
-            RemoteNamedStackRefParts("main", "my-stack"),
-            getRemoteNamedStackRefParts("jaspr-named/main/my-stack", "jaspr-named"),
+            RemoteNamedStackRef("my-stack", "main", "jaspr-named"),
+            RemoteNamedStackRef.parse("jaspr-named/main/my-stack", "jaspr-named"),
         )
     }
 
     @Test
-    fun `getRemoteNamedStackRefParts - different target`() {
+    fun `named stack ref parse - different target`() {
         assertEquals(
-            RemoteNamedStackRefParts("develop", "feature-stack"),
-            getRemoteNamedStackRefParts("jaspr-named/develop/feature-stack", "jaspr-named"),
+            RemoteNamedStackRef("feature-stack", "develop", "jaspr-named"),
+            RemoteNamedStackRef.parse("jaspr-named/develop/feature-stack", "jaspr-named"),
         )
     }
 
     @Test
-    fun `getRemoteNamedStackRefParts - custom prefix`() {
+    fun `named stack ref parse - custom prefix`() {
         assertEquals(
-            RemoteNamedStackRefParts("main", "test-stack"),
-            getRemoteNamedStackRefParts("custom/main/test-stack", "custom"),
+            RemoteNamedStackRef("test-stack", "main", "custom"),
+            RemoteNamedStackRef.parse("custom/main/test-stack", "custom"),
         )
     }
 
     @Test
-    fun `getRemoteNamedStackRefParts - invalid ref returns null`() {
-        assertNull(getRemoteNamedStackRefParts("jaspr/main/12345", "jaspr-named"))
+    fun `named stack ref parse - invalid ref returns null`() {
+        assertNull(RemoteNamedStackRef.parse("jaspr/main/12345", "jaspr-named"))
     }
 
     @Test
-    fun `getRemoteNamedStackRefParts - stack name with slashes`() {
+    fun `named stack ref parse - stack name with slashes`() {
         assertEquals(
-            RemoteNamedStackRefParts("main", "my/nested/stack"),
-            getRemoteNamedStackRefParts("jaspr-named/main/my/nested/stack", "jaspr-named"),
+            RemoteNamedStackRef("my/nested/stack", "main", "jaspr-named"),
+            RemoteNamedStackRef.parse("jaspr-named/main/my/nested/stack", "jaspr-named"),
         )
     }
 }

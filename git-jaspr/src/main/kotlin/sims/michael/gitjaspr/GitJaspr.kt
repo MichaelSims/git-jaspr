@@ -20,10 +20,8 @@ import sims.michael.gitjaspr.GitJaspr.StatusBits.Status.PENDING
 import sims.michael.gitjaspr.GitJaspr.StatusBits.Status.SUCCESS
 import sims.michael.gitjaspr.GitJaspr.StatusBits.Status.WARNING
 import sims.michael.gitjaspr.RemoteRefEncoding.REV_NUM_DELIMITER
-import sims.michael.gitjaspr.RemoteRefEncoding.buildRemoteNamedStackRef
-import sims.michael.gitjaspr.RemoteRefEncoding.buildRemoteRef
-import sims.michael.gitjaspr.RemoteRefEncoding.getRemoteNamedStackRefParts
-import sims.michael.gitjaspr.RemoteRefEncoding.getRemoteRefParts
+import sims.michael.gitjaspr.RemoteRefEncoding.RemoteNamedStackRef
+import sims.michael.gitjaspr.RemoteRefEncoding.RemoteRef
 
 class GitJaspr(
     private val ghClient: GitHubClient,
@@ -129,7 +127,7 @@ class GitJaspr(
 
         val namedStackInfo =
             gitClient.getUpstreamBranch(config.remoteName)?.let { upstream ->
-                getRemoteNamedStackRefParts(upstream.name, config.remoteNamedStackBranchPrefix)
+                RemoteNamedStackRef.parse(upstream.name, config.remoteNamedStackBranchPrefix)
                     ?.stackName
                     ?.let { name ->
                         val trackingBranch = "${config.remoteName}/${upstream.name}"
@@ -252,11 +250,12 @@ class GitJaspr(
         }
 
         val prefixedStackName =
-            buildRemoteNamedStackRef(
-                effectiveStackName,
-                targetRef,
-                config.remoteNamedStackBranchPrefix,
-            )
+            RemoteNamedStackRef(
+                    stackName = effectiveStackName,
+                    targetRef = targetRef,
+                    prefix = config.remoteNamedStackBranchPrefix,
+                )
+                .name()
 
         val namedStackRefSpec = RefSpec(localRef, prefixedStackName)
         val outOfDateNamedStackBranch =
@@ -675,10 +674,9 @@ class GitJaspr(
         gitClient.fetch(config.remoteName, prune = true)
         val orphanedBranches =
             gitClient.getRemoteBranches(config.remoteName).map(RemoteBranch::name).filter { name ->
-                val remoteRefParts = getRemoteRefParts(name, config.remoteBranchPrefix)
-                if (remoteRefParts != null) {
-                    val (targetRef, commitId, _) = remoteRefParts
-                    buildRemoteRef(commitId, targetRef) !in pullRequests
+                val remoteRef = RemoteRef.parse(name, config.remoteBranchPrefix)
+                if (remoteRef != null) {
+                    remoteRef.copy(revisionNum = null).name() !in pullRequests
                 } else {
                     false
                 }
@@ -691,7 +689,7 @@ class GitJaspr(
         val remoteBranchNames =
             gitClient.getRemoteBranches(config.remoteName).map(RemoteBranch::name)
         return remoteBranchNames.filter { branchName ->
-            val parts = getRemoteNamedStackRefParts(branchName, config.remoteNamedStackBranchPrefix)
+            val parts = RemoteNamedStackRef.parse(branchName, config.remoteNamedStackBranchPrefix)
             if (parts != null) {
                 // Named stack branch - check if it has commits not in its target
                 val stack =
@@ -716,19 +714,18 @@ class GitJaspr(
         val remoteBranches = gitClient.getRemoteBranches(config.remoteName)
         val namedStackBranches =
             remoteBranches.filter { branch ->
-                getRemoteNamedStackRefParts(branch.name, config.remoteNamedStackBranchPrefix) !=
-                    null
+                RemoteNamedStackRef.parse(branch.name, config.remoteNamedStackBranchPrefix) != null
             }
         val remoteJasprBranches =
             remoteBranches.filter { branch ->
-                getRemoteRefParts(branch.name, config.remoteBranchPrefix) != null
+                RemoteRef.parse(branch.name, config.remoteBranchPrefix) != null
             }
 
         val unmergedAndReachableFromNamedStacks =
             namedStackBranches
                 .mapNotNull { branch ->
-                    getRemoteNamedStackRefParts(branch.name, config.remoteNamedStackBranchPrefix)
-                        ?.let { namedStackRefParts -> branch.name to namedStackRefParts.targetRef }
+                    RemoteNamedStackRef.parse(branch.name, config.remoteNamedStackBranchPrefix)
+                        ?.let { namedStackRef -> branch.name to namedStackRef.targetRef }
                 }
                 .flatMap { (branchName, targetRef) ->
                     gitClient
@@ -995,9 +992,9 @@ class GitJaspr(
             stackBeingMerged
                 .asSequence()
                 .map { commit -> checkNotNull(commit.id) }
-                .map { id -> buildRemoteRef(id, targetRef, config.remoteBranchPrefix) }
-                .mapNotNull { remoteRef -> getRemoteRefParts(remoteRef, config.remoteBranchPrefix) }
-                .map { (targetRef, commitId, _) -> TargetRefToCommitId(targetRef, commitId) }
+                .map { id -> RemoteRef(id, targetRef, config.remoteBranchPrefix).name() }
+                .mapNotNull { remoteRef -> RemoteRef.parse(remoteRef, config.remoteBranchPrefix) }
+                .map { ref -> TargetRefToCommitId(ref.targetRef, ref.commitId) }
                 .toList()
 
         logger.trace("Deletion candidates {}", deletionCandidates)
@@ -1007,9 +1004,8 @@ class GitJaspr(
                 .getRemoteBranches(config.remoteName)
                 .map(RemoteBranch::name)
                 .filter { branchName ->
-                    getRemoteRefParts(branchName, config.remoteBranchPrefix)?.let {
-                        (targetRef, commitId, _) ->
-                        TargetRefToCommitId(targetRef, commitId) in deletionCandidates
+                    RemoteRef.parse(branchName, config.remoteBranchPrefix)?.let { ref ->
+                        TargetRefToCommitId(ref.targetRef, ref.commitId) in deletionCandidates
                     } == true
                 }
                 .map { branchName -> RefSpec(FORCE_PUSH_PREFIX, branchName) }
@@ -1078,9 +1074,8 @@ class GitJaspr(
         val nextRevisionById =
             branchNames
                 .mapNotNull { branchName ->
-                    getRemoteRefParts(branchName, config.remoteBranchPrefix)?.let {
-                        (_, id, revisionNumber) ->
-                        id to (revisionNumber ?: 0) + 1
+                    RemoteRef.parse(branchName, config.remoteBranchPrefix)?.let { ref ->
+                        ref.commitId to (ref.revisionNum ?: 0) + 1
                     }
                 }
                 .sortedBy { (_, revisionNumber) -> revisionNumber }
@@ -1231,7 +1226,7 @@ class GitJaspr(
     private fun Commit.toRefSpec(): RefSpec = RefSpec(hash, toRemoteRefName())
 
     private fun Commit.toRemoteRefName(): String =
-        buildRemoteRef(checkNotNull(id), prefix = config.remoteBranchPrefix)
+        RemoteRef(commitId = checkNotNull(id), prefix = config.remoteBranchPrefix).name()
 
     private data class StatusBits(
         val commitIsPushed: Status,
@@ -1255,7 +1250,7 @@ class GitJaspr(
     }
 
     private fun RemoteBranch.extractStackNameFromBranch(): String? {
-        return getRemoteNamedStackRefParts(name, config.remoteNamedStackBranchPrefix)?.stackName
+        return RemoteNamedStackRef.parse(name, config.remoteNamedStackBranchPrefix)?.stackName
     }
 
     /** Get the current user's commit author identity that would be used for new commits. */
@@ -1285,7 +1280,8 @@ class GitJaspr(
         repeat(maxAttempts) { attempt ->
             val stackName = StackNameGenerator.generateName(random)
             val remoteBranch =
-                buildRemoteNamedStackRef(stackName, targetRef, config.remoteNamedStackBranchPrefix)
+                RemoteNamedStackRef(stackName, targetRef, config.remoteNamedStackBranchPrefix)
+                    .name()
 
             // Check if the branch already exists on remote
             gitClient.fetch(remoteName)
