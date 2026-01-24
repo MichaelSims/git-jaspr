@@ -88,7 +88,7 @@ class GitJaspr(
                 appendLine(status.localCommit.shortMessage)
             }
 
-            appendNamedStackInfo(headStackCommit = stack.last().hash)
+            appendNamedStackInfo(stack)
 
             if (numCommitsBehindBase > 0) {
                 appendLine()
@@ -117,30 +117,27 @@ class GitJaspr(
         }
     }
 
-    private fun StringBuilder.appendNamedStackInfo(headStackCommit: String) {
+    private fun StringBuilder.appendNamedStackInfo(stack: List<Commit>) {
         val remoteName = config.remoteName
         data class NamedStackInfo(
             val name: String,
             val numCommitsAhead: Int,
             val numCommitsBehind: Int,
         )
-
-        val namedStackInfo =
-            gitClient.getUpstreamBranch(config.remoteName)?.let { upstream ->
-                RemoteNamedStackRef.parse(upstream.name, config.remoteNamedStackBranchPrefix)
-                    ?.stackName
-                    ?.let { name ->
-                        val trackingBranch = "${config.remoteName}/${upstream.name}"
-                        NamedStackInfo(
-                            name,
-                            numCommitsAhead =
-                                gitClient.logRange(trackingBranch, headStackCommit).size,
-                            numCommitsBehind =
-                                gitClient.logRange(headStackCommit, trackingBranch).size,
-                        )
-                    }
-            }
-        if (namedStackInfo != null) {
+        val stackName = (getExistingStackName(stack) as? Found)?.name
+        if (stackName != null) {
+            val headStackCommit = stack.last().hash
+            val trackingBranch = "${config.remoteName}/$stackName"
+            val namedStackRef =
+                checkNotNull(
+                    RemoteNamedStackRef.parse(stackName, config.remoteNamedStackBranchPrefix)
+                )
+            val namedStackInfo =
+                NamedStackInfo(
+                    namedStackRef.stackName,
+                    numCommitsAhead = gitClient.logRange(trackingBranch, headStackCommit).size,
+                    numCommitsBehind = gitClient.logRange(headStackCommit, trackingBranch).size,
+                )
             with(namedStackInfo) {
                 appendLine()
                 appendLine("Stack name: $name")
@@ -160,6 +157,83 @@ class GitJaspr(
                     }
                 )
             }
+        }
+    }
+
+    private sealed class NamedStackSearchResult
+
+    private data class Found(val name: String) : NamedStackSearchResult()
+
+    private data class MultipleStacksContainCommit(val stackNames: List<String>) :
+        NamedStackSearchResult()
+
+    private data object NotFound : NamedStackSearchResult()
+
+    /**
+     * Returns the full name (including the named stack prefix) of an existing named stack that
+     * "owns" the given [stack], or null.
+     *
+     * Ownership is defined by a commit in the given [stack] being contained in exactly one named
+     * stack. A commit contained in multiple stacks has ambiguous ownership, and this returns null
+     * for such stacks.
+     */
+    private fun getExistingStackName(stack: List<Commit>): NamedStackSearchResult {
+        logger.trace("getExistingStackName")
+        require(stack.isNotEmpty())
+
+        val existingNamedStacks =
+            gitClient.getRemoteBranches(config.remoteName).filter { branch ->
+                RemoteNamedStackRef.parse(branch.name, config.remoteNamedStackBranchPrefix) != null
+            }
+
+        // Search the remote branches for named stack refs that point to stacks with unmerged
+        // commits. Find the first commit in our local stack that is contained in exactly one named
+        // stack and return its name.
+        val result =
+            stack
+                .reversed()
+                .filter { commit -> commit.id != null }
+                .firstNotNullOfOrNull { commit ->
+                    val stacksWithCommit =
+                        existingNamedStacks.mapNotNull { branch ->
+                            val namedStackRefParts =
+                                checkNotNull(
+                                    RemoteNamedStackRef.parse(
+                                        branch.name,
+                                        config.remoteNamedStackBranchPrefix,
+                                    )
+                                )
+                            branch.takeIf {
+                                val remoteName = config.remoteName
+                                val targetInRemote = "$remoteName/${namedStackRefParts.targetRef}"
+                                val namedStackInRemote = "$remoteName/${branch.name}"
+                                gitClient
+                                    .logRange(targetInRemote, namedStackInRemote)
+                                    .mapNotNull(Commit::id)
+                                    .contains(checkNotNull(commit.id))
+                            }
+                        }
+                    if (stacksWithCommit.size == 1) {
+                        Found(stacksWithCommit.single().name)
+                    } else if (stacksWithCommit.size > 1) {
+                        // Because of `firstNotNullOfOrNull`, hitting this will abort the search.
+                        // Any remaining commits are also contained in multiple named stacks
+                        MultipleStacksContainCommit(
+                            stacksWithCommit.mapNotNull { branch ->
+                                RemoteNamedStackRef.parse(
+                                        branch.name,
+                                        config.remoteNamedStackBranchPrefix,
+                                    )
+                                    ?.stackName
+                            }
+                        )
+                    } else {
+                        null // Continue searching
+                    }
+                }
+
+        return (result ?: NotFound).also { result ->
+            logger.trace("getExistingStackName: {}", result)
         }
     }
 
@@ -233,9 +307,18 @@ class GitJaspr(
         val localRef = gitClient.log(filteredRefSpec.localRef, 1).single().hash
 
         // Determine the effective stack name
-        val existingStackName =
-            gitClient.getUpstreamBranch(remoteName)?.extractStackNameFromBranch()
-        val isGeneratingNewName = stackName == null && existingStackName == null
+        val existingStackName = lazy {
+            (getExistingStackName(stack) as? Found)?.name?.let { existingBranchName ->
+                checkNotNull(
+                        RemoteNamedStackRef.parse(
+                            existingBranchName,
+                            config.remoteNamedStackBranchPrefix,
+                        )
+                    )
+                    .stackName
+            }
+        }
+        val isGeneratingNewName = stackName == null && existingStackName.value == null
 
         val effectiveStackName: String
         val namedStackAlreadyPushed: Boolean
@@ -245,7 +328,7 @@ class GitJaspr(
             namedStackAlreadyPushed = true
         } else {
             // Use existing or explicitly provided stack name
-            effectiveStackName = stackName ?: existingStackName!!
+            effectiveStackName = stackName ?: checkNotNull(existingStackName.value)
             namedStackAlreadyPushed = false
         }
 
@@ -279,13 +362,6 @@ class GitJaspr(
             revisionHistoryRefs.size,
             refOrRefs(revisionHistoryRefs.size),
         )
-
-        val upstream = namedStackRefSpec.remoteRef
-        if (gitClient.isHeadDetached()) {
-            logDetachedHeadWarning(upstream, remoteName)
-        } else {
-            gitClient.setUpstreamBranch(remoteName, upstream)
-        }
 
         val existingPrsByCommitId = pullRequestsRebased.associateBy(PullRequest::commitId)
 
@@ -1249,10 +1325,6 @@ class GitJaspr(
         }
     }
 
-    private fun RemoteBranch.extractStackNameFromBranch(): String? {
-        return RemoteNamedStackRef.parse(name, config.remoteNamedStackBranchPrefix)?.stackName
-    }
-
     /** Get the current user's commit author identity that would be used for new commits. */
     private fun getCurrentUserIdent(): Ident {
         val name = gitClient.getConfigValue("user.name") ?: System.getenv("USER") ?: "unknown"
@@ -1319,17 +1391,6 @@ class GitJaspr(
             "Failed to generate a unique stack name after $maxAttempts attempts. " +
                 "This is likely a bug, please report it."
         )
-    }
-
-    private fun logDetachedHeadWarning(upstream: String, remoteName: String) {
-        logger.warn(
-            "You are currently in detached HEAD which prevents me from setting the upstream branch to the named " +
-                "stack branch. "
-        )
-        logger.warn("You may want to do one of:")
-        logger.warn("git checkout {}", upstream)
-        logger.warn("git checkout -b <some-name> {}/{}", remoteName, upstream)
-        logger.warn("to do this manually.")
     }
 
     private fun refOrRefs(count: Int) = if (count == 1) "ref" else "refs"

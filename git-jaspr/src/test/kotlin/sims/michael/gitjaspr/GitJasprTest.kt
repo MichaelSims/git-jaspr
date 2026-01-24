@@ -6,7 +6,6 @@ import kotlin.test.assertContains
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertNotEquals
-import kotlin.test.assertNotNull
 import org.junit.jupiter.api.*
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.slf4j.Logger
@@ -648,7 +647,7 @@ interface GitJasprTest {
                 |[✅✅✅✅ㄧㄧ] %s : %s : one
                 """
                     .trimMargin()
-                    .toStatusString(actual),
+                    .toStatusString(actual, NamedStackInfo(stackName, 0, 0, remoteName)),
                 getActual = { actual },
             )
         }
@@ -708,7 +707,7 @@ interface GitJasprTest {
                 |[✅✅✅✅ㄧㄧ] %s : %s : one
                 """
                     .trimMargin()
-                    .toStatusString(actual),
+                    .toStatusString(actual, NamedStackInfo(stackName, 0, 0, remoteName)),
                 actual,
             )
         }
@@ -1900,9 +1899,13 @@ interface GitJasprTest {
 
             val stackName = "my-stack-name"
             gitJaspr.push(stackName = stackName)
-            assertEquals(
-                "$DEFAULT_REMOTE_NAMED_STACK_BRANCH_PREFIX/$DEFAULT_TARGET_REF/$stackName",
-                localGit.getUpstreamBranch(remoteName)?.name,
+
+            val fullStackName =
+                "$DEFAULT_REMOTE_NAMED_STACK_BRANCH_PREFIX/$DEFAULT_TARGET_REF/$stackName"
+            assertTrue(
+                localGit.getRemoteBranches(remoteName).any { branch ->
+                    branch.name == fullStackName
+                }
             )
         }
     }
@@ -1984,7 +1987,6 @@ interface GitJasprTest {
             )
 
             gitJaspr.push()
-
             val remoteNamedStack =
                 RemoteNamedStackRef(stackName, DEFAULT_TARGET_REF, remoteName = remoteName).name()
             val remoteDiff = localGit.logRange("main", remoteNamedStack).map(Commit::shortMessage)
@@ -1999,6 +2001,170 @@ interface GitJasprTest {
                 localDiff,
                 "main and $remoteNamedStack should be the same, but local diff isn't empty",
             )
+        }
+    }
+
+    @Test
+    fun `push existing named stack with new name`() {
+        withTestSetup(useFakeRemote, rollBackChanges = false) {
+            createCommitsFrom(
+                testCase {
+                    repository {
+                        commit {
+                            title = "one"
+                            willPassVerification = true
+                            remoteRefs += buildRemoteRef("one")
+                        }
+                        commit {
+                            title = "two"
+                            willPassVerification = true
+                            remoteRefs += buildRemoteRef("two")
+                            localRefs += "main"
+                        }
+                    }
+                    checkout = "main"
+                }
+            )
+
+            val stackName = "my-stack-name"
+            gitJaspr.push(stackName = stackName)
+
+            createCommitsFrom(
+                testCase {
+                    repository {
+                        commit {
+                            title = "one"
+                            willPassVerification = true
+                            remoteRefs += buildRemoteRef("one")
+                        }
+                        commit {
+                            title = "two"
+                            willPassVerification = true
+                            remoteRefs += buildRemoteRef("two")
+                        }
+                        commit {
+                            title = "three"
+                            willPassVerification = true
+                            remoteRefs += buildRemoteRef("three")
+                            localRefs += "main"
+                        }
+                    }
+                    pullRequest {
+                        headRef = buildRemoteRef("one")
+                        baseRef = "main"
+                        title = "one"
+                        willBeApprovedByUserKey = "michael"
+                    }
+                    pullRequest {
+                        headRef = buildRemoteRef("two")
+                        baseRef = buildRemoteRef("one")
+                        title = "two"
+                        willBeApprovedByUserKey = "michael"
+                    }
+                    pullRequest {
+                        headRef = buildRemoteRef("three")
+                        baseRef = buildRemoteRef("two")
+                        title = "three"
+                        willBeApprovedByUserKey = "michael"
+                    }
+                    checkout = "main"
+                }
+            )
+
+            val secondStackName = "my-second-stack-name"
+            gitJaspr.push(stackName = secondStackName)
+
+            waitForChecksToConclude("one", "two", "three")
+
+            // As of now, the best way to test the detected stack names is to assert on the
+            // status output
+            val actual = getAndPrintStatusString()
+            assertEquals(
+                """
+                |[✅✅✅✅✅✅] %s : %s : three
+                |[✅✅✅✅✅✅] %s : %s : two
+                |[✅✅✅✅✅✅] %s : %s : one
+                """
+                    .trimMargin()
+                    .toStatusString(actual, NamedStackInfo(secondStackName, 0, 0, remoteName)),
+                actual,
+            )
+
+            localGit.checkout(localGit.log("main", 2).last().hash)
+
+            // Now that our HEAD commit is reachable by two stacks, this should be considered
+            // ambiguous, which displays the same as not finding a stack
+            val detachedHeadActual = getAndPrintStatusString()
+            assertEquals(
+                """
+                |[✅✅✅✅✅✅] %s : %s : two
+                |[✅✅✅✅✅✅] %s : %s : one
+                """
+                    .trimMargin()
+                    .toStatusString(detachedHeadActual, null),
+                detachedHeadActual,
+            )
+        }
+    }
+
+    @Test
+    fun `push stack with commit contained in multiple named stacks`() {
+        withTestSetup(useFakeRemote) {
+            createCommitsFrom(
+                testCase {
+                    repository {
+                        commit { title = "one" }
+                        commit { title = "two" }
+                        commit {
+                            title = "three"
+                            localRefs += "main"
+                        }
+                    }
+                    checkout = "main"
+                }
+            )
+
+            gitJaspr.push(stackName = "stack-1")
+
+            createCommitsFrom(
+                testCase {
+                    repository {
+                        commit { title = "one" }
+                        commit { title = "two" }
+                        commit { title = "three" }
+                        commit {
+                            title = "four"
+                            localRefs += "main"
+                        }
+                    }
+                    checkout = "main"
+                }
+            )
+
+            gitJaspr.push(stackName = "stack-2")
+
+            localGit.checkout(localGit.log().reversed()[1].hash)
+
+            gitJaspr.push()
+
+            val namedStacks =
+                localGit
+                    .getRemoteBranches(remoteName)
+                    .mapNotNull { branch ->
+                        RemoteNamedStackRef.parse(
+                                branch.name,
+                                DEFAULT_REMOTE_NAMED_STACK_BRANCH_PREFIX,
+                            )
+                            ?.name()
+                    }
+                    .toSet()
+
+            val expected =
+                listOf("stack-1", "stack-2").map { RemoteNamedStackRef(it).name() }.toSet()
+            val difference = expected - namedStacks
+
+            assertEquals(3, namedStacks.size)
+            assertEquals(emptySet(), difference, "Expected named stacks were not found")
         }
     }
 
@@ -2036,23 +2202,23 @@ interface GitJasprTest {
             // Push without providing a stack name
             gitJaspr.push()
 
-            // Get the upstream branch name
-            val upstreamBranch = localGit.getUpstreamBranch(remoteName)
-            assertNotNull(upstreamBranch)
+            val namedStackBranches =
+                localGit.getRemoteBranches(remoteName).filter { branch ->
+                    branch.name.startsWith(
+                        "$DEFAULT_REMOTE_NAMED_STACK_BRANCH_PREFIX/$DEFAULT_TARGET_REF/"
+                    )
+                }
 
-            // Verify the branch name format: jaspr-named/<target>/<adjective>-<noun>
-            val branchName = upstreamBranch.name
-            assertTrue(
-                branchName.startsWith(
-                    "$DEFAULT_REMOTE_NAMED_STACK_BRANCH_PREFIX/$DEFAULT_TARGET_REF/"
-                )
-            )
+            assertEquals(1, namedStackBranches.size)
 
-            // Extract the generated name part
             val generatedName =
-                branchName.removePrefix(
-                    "$DEFAULT_REMOTE_NAMED_STACK_BRANCH_PREFIX/$DEFAULT_TARGET_REF/"
-                )
+                checkNotNull(
+                        RemoteNamedStackRef.parse(
+                            namedStackBranches.single().name,
+                            DEFAULT_REMOTE_NAMED_STACK_BRANCH_PREFIX,
+                        )
+                    )
+                    .name()
 
             logger.info("Generated stack name: $generatedName")
         }
