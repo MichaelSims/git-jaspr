@@ -284,8 +284,7 @@ class CliTest {
                         scratchDir,
                         "git@github.com:SomeOwner/some-repo-name.git",
                         DEFAULT_REMOTE_NAME,
-                        strings =
-                            listOf("no-op", "--remote-named-stack-branch-prefix", "jaspr-named/"),
+                        strings = listOf("no-op", "--remote-named-stack-branch-prefix", "jn/"),
                     )
                 }
                 .message

@@ -25,7 +25,7 @@ class RemoteRefEncodingTest {
     @Test
     fun `named stack ref name - default prefix and target`() {
         assertEquals(
-            "jaspr-named/main/my-stack",
+            "jn/main/my-stack",
             RemoteNamedStackRef(stackName = "my-stack", targetRef = DEFAULT_TARGET_REF).name(),
         )
     }
@@ -33,7 +33,7 @@ class RemoteRefEncodingTest {
     @Test
     fun `named stack ref name - custom target`() {
         assertEquals(
-            "jaspr-named/develop/feature-stack",
+            "jn/develop/feature-stack",
             RemoteNamedStackRef(stackName = "feature-stack", targetRef = "develop").name(),
         )
     }
@@ -54,16 +54,16 @@ class RemoteRefEncodingTest {
     @Test
     fun `named stack ref parse - valid ref`() {
         assertEquals(
-            RemoteNamedStackRef("my-stack", "main", "jaspr-named"),
-            RemoteNamedStackRef.parse("jaspr-named/main/my-stack", "jaspr-named"),
+            RemoteNamedStackRef("my-stack", "main", "jn"),
+            RemoteNamedStackRef.parse("jn/main/my-stack", "jn"),
         )
     }
 
     @Test
     fun `named stack ref parse - different target`() {
         assertEquals(
-            RemoteNamedStackRef("feature-stack", "develop", "jaspr-named"),
-            RemoteNamedStackRef.parse("jaspr-named/develop/feature-stack", "jaspr-named"),
+            RemoteNamedStackRef("feature-stack", "develop", "jn"),
+            RemoteNamedStackRef.parse("jn/develop/feature-stack", "jn"),
         )
     }
 
@@ -77,14 +77,14 @@ class RemoteRefEncodingTest {
 
     @Test
     fun `named stack ref parse - invalid ref returns null`() {
-        assertNull(RemoteNamedStackRef.parse("jaspr/main/12345", "jaspr-named"))
+        assertNull(RemoteNamedStackRef.parse("jaspr/main/12345", "jn"))
     }
 
     @Test
     fun `named stack ref parse - stack name with slashes`() {
         assertEquals(
-            RemoteNamedStackRef("my/nested/stack", "main", "jaspr-named"),
-            RemoteNamedStackRef.parse("jaspr-named/main/my/nested/stack", "jaspr-named"),
+            RemoteNamedStackRef("my/nested/stack", "main", "jn"),
+            RemoteNamedStackRef.parse("jn/main/my/nested/stack", "jn"),
         )
     }
 }
