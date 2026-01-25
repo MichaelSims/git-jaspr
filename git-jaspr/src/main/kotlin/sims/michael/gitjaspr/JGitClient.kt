@@ -115,8 +115,10 @@ class JGitClient(
     override fun logRange(since: String, until: String): List<Commit> = useGit { git ->
         logger.trace("logRange {}..{}", since, until)
         val r = git.repository
-        val sinceObjectId = checkNotNull(r.resolve(since)) { "$since doesn't exist" }
-        val untilObjectId = checkNotNull(r.resolve(until)) { "$until doesn't exist" }
+        val sinceObjectId =
+            checkNotNull(r.resolve(since)) { "logRange $since..$until: $since doesn't exist" }
+        val untilObjectId =
+            checkNotNull(r.resolve(until)) { "logRange $since..$until: $until doesn't exist" }
         val commits = git.log().addRange(sinceObjectId, untilObjectId).call().toList()
         commits.map { revCommit -> revCommit.toCommit(git) }.reversed()
     }
