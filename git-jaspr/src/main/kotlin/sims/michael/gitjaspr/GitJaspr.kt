@@ -1032,9 +1032,9 @@ class GitJaspr(
                 break
             } catch (e: Exception) {
                 tries++
-                logger.error("Failed to delete branches (attempt $tries of $maxTries)", e)
+                logger.debug("Failed to delete branches (attempt $tries of $maxTries)", e)
                 if (tries < maxTries) {
-                    logger.info("Retrying in {} ms...", delayBetweenTries)
+                    logger.debug("Retrying in {} ms...", delayBetweenTries)
                     delay(delayBetweenTries)
                 } else {
                     throw e
