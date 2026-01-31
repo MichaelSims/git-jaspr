@@ -17,7 +17,13 @@ import sims.michael.gitjaspr.githubtests.GitHubTestHarness
 import sims.michael.gitjaspr.githubtests.GitHubTestHarness.Companion.withTestSetup
 import sims.michael.gitjaspr.githubtests.TestCaseData
 import sims.michael.gitjaspr.githubtests.generatedtestdsl.testCase
+import sims.michael.gitjaspr.testing.Clean
 import sims.michael.gitjaspr.testing.DEFAULT_COMMITTER
+import sims.michael.gitjaspr.testing.DontPush
+import sims.michael.gitjaspr.testing.Merge
+import sims.michael.gitjaspr.testing.PrBody
+import sims.michael.gitjaspr.testing.Push
+import sims.michael.gitjaspr.testing.Status
 
 interface GitJasprTest {
 
@@ -103,6 +109,7 @@ interface GitJasprTest {
     }
 
     // region status tests
+    @Status
     @Test
     fun `status empty stack`() {
         withTestSetup(useFakeRemote) {
@@ -124,6 +131,7 @@ interface GitJasprTest {
         }
     }
 
+    @Status
     @Test
     fun `status stack not pushed`() {
         withTestSetup(useFakeRemote) {
@@ -154,6 +162,7 @@ interface GitJasprTest {
         }
     }
 
+    @Status
     @Test
     fun `status one commit pushed without PR`() {
         withTestSetup(useFakeRemote) {
@@ -187,6 +196,7 @@ interface GitJasprTest {
         }
     }
 
+    @Status
     @Test
     fun `status one PR`() {
         withTestSetup(useFakeRemote) {
@@ -225,6 +235,7 @@ interface GitJasprTest {
         }
     }
 
+    @Status
     @Test
     fun `status one PR passing checks`() {
         withTestSetup(useFakeRemote) {
@@ -266,6 +277,7 @@ interface GitJasprTest {
         }
     }
 
+    @Status
     @Test
     fun `status one PR approved`() {
         withTestSetup(useFakeRemote) {
@@ -324,6 +336,7 @@ interface GitJasprTest {
         }
     }
 
+    @Status
     @Test
     fun `status stack one commit behind target`() {
         withTestSetup(useFakeRemote) {
@@ -396,6 +409,7 @@ interface GitJasprTest {
         }
     }
 
+    @Status
     @Test
     fun `status stack two commits behind target`() {
         withTestSetup(useFakeRemote) {
@@ -469,6 +483,7 @@ interface GitJasprTest {
         }
     }
 
+    @Status
     @Test
     fun `status stack check all mergeable`() {
         withTestSetup(useFakeRemote) {
@@ -529,6 +544,7 @@ interface GitJasprTest {
         }
     }
 
+    @Status
     @Test
     fun `status stack check with draft PR`() {
         withTestSetup(useFakeRemote) {
@@ -592,6 +608,7 @@ interface GitJasprTest {
         }
     }
 
+    @Status
     @Test
     fun `status middle commit approved`() {
         withTestSetup(useFakeRemote) {
@@ -653,6 +670,7 @@ interface GitJasprTest {
         }
     }
 
+    @Status
     @Test
     fun `status middle commit fails`() {
         withTestSetup(useFakeRemote) {
@@ -713,6 +731,7 @@ interface GitJasprTest {
         }
     }
 
+    @Status
     @Test
     fun `status with non-main target branch`() {
         withTestSetup(useFakeRemote) {
@@ -758,6 +777,7 @@ interface GitJasprTest {
         }
     }
 
+    @Status
     @Test
     fun `status with out of date commit`() {
         withTestSetup(useFakeRemote, rollBackChanges = false) {
@@ -849,6 +869,7 @@ interface GitJasprTest {
         }
     }
 
+    @Status
     @Test
     fun `status with two commits sharing same commit id`() {
         withTestSetup(useFakeRemote, rollBackChanges = false) {
@@ -892,6 +913,7 @@ interface GitJasprTest {
     }
 
     // Test for a bug that was occurring when the stack had commits without ids
+    @Status
     @Test
     fun `status without commit IDs does not crash`() {
         withTestSetup(useFakeRemote) {
@@ -919,6 +941,7 @@ interface GitJasprTest {
         }
     }
 
+    @Status
     @Test
     fun `getPullRequests pagination works as expected`() {
         withTestSetup(useFakeRemote, getPullRequestsPageSize = 2) {
@@ -1015,6 +1038,7 @@ interface GitJasprTest {
         }
     }
 
+    @Status
     @Test
     fun `named stack up to date`() {
         withTestSetup(useFakeRemote) {
@@ -1068,6 +1092,7 @@ interface GitJasprTest {
         }
     }
 
+    @Status
     @Test
     fun `named stack behind`() {
         withTestSetup(useFakeRemote) {
@@ -1134,6 +1159,7 @@ interface GitJasprTest {
         }
     }
 
+    @Status
     @Test
     fun `named stack ahead`() {
         withTestSetup(useFakeRemote) {
@@ -1209,6 +1235,7 @@ interface GitJasprTest {
         }
     }
 
+    @Status
     @Test
     fun `named stack diverged`() {
         withTestSetup(useFakeRemote) {
@@ -1298,6 +1325,7 @@ interface GitJasprTest {
     // endregion
 
     // region push tests
+    @Push
     @Test
     fun `push fetches from remote`() {
         withTestSetup(useFakeRemote) {
@@ -1326,6 +1354,7 @@ interface GitJasprTest {
         }
     }
 
+    @Push
     @Test
     fun `adding commit ID does not indent subject line`() {
         // Assert the absence of a bug that used to occur with commits that had message bodies...
@@ -1366,6 +1395,7 @@ interface GitJasprTest {
         }
     }
 
+    @Push
     @Test
     fun `add footers does not consider a trailing URL a footer line`() {
         // assert the absence of a bug where a URL was being interpreted as a footer line
@@ -1406,6 +1436,7 @@ interface GitJasprTest {
         }
     }
 
+    @Push
     @Test
     fun `commit ID is added with a blank line before it`() {
         withTestSetup(useFakeRemote) {
@@ -1527,6 +1558,7 @@ interface GitJasprTest {
             }
     }
 
+    @Push
     @Test
     fun `push pushes to expected remote branch names`() {
         withTestSetup(useFakeRemote) {
@@ -1554,6 +1586,7 @@ interface GitJasprTest {
         }
     }
 
+    @Push
     @Test
     fun `push pushes revision history branches on update`(testInfo: TestInfo) {
         withTestSetup(useFakeRemote) {
@@ -1616,6 +1649,7 @@ interface GitJasprTest {
         }
     }
 
+    @Push
     @Test
     fun `push updates base refs for any reordered PRs`() {
         withTestSetup(useFakeRemote) {
@@ -1676,6 +1710,7 @@ interface GitJasprTest {
         }
     }
 
+    @Push
     @Test
     fun `push fails when multiple PRs for a given commit ID exist`() {
         withTestSetup(useFakeRemote) {
@@ -1710,6 +1745,7 @@ interface GitJasprTest {
         }
     }
 
+    @Push
     @Test
     fun `reorder, drop, add, and re-push`(testInfo: TestInfo) {
         withTestSetup(useFakeRemote) {
@@ -1773,6 +1809,7 @@ interface GitJasprTest {
         }
     }
 
+    @Push
     @Test
     fun `push creates draft PRs based on commit subject`() {
         withTestSetup(useFakeRemote) {
@@ -1803,6 +1840,7 @@ interface GitJasprTest {
         }
     }
 
+    @Push
     @Test
     fun `amend HEAD commit and re-push`(testInfo: TestInfo) {
         withTestSetup(useFakeRemote) {
@@ -1848,6 +1886,7 @@ interface GitJasprTest {
         }
     }
 
+    @Push
     @Test
     fun `push with two commits sharing same commit id`() {
         withTestSetup(useFakeRemote, rollBackChanges = false) {
@@ -1878,6 +1917,7 @@ interface GitJasprTest {
         }
     }
 
+    @Push
     @Test
     fun `push new named stack`() {
         withTestSetup(useFakeRemote) {
@@ -1910,6 +1950,7 @@ interface GitJasprTest {
         }
     }
 
+    @Push
     @Test
     fun `push from detached HEAD is supported`() {
         withTestSetup(useFakeRemote) {
@@ -1947,6 +1988,7 @@ interface GitJasprTest {
         }
     }
 
+    @Push
     @Test
     fun `push existing named stack`() {
         withTestSetup(useFakeRemote) {
@@ -2004,6 +2046,7 @@ interface GitJasprTest {
         }
     }
 
+    @Push
     @Test
     fun `push existing named stack with new name`() {
         withTestSetup(useFakeRemote, rollBackChanges = false) {
@@ -2107,6 +2150,7 @@ interface GitJasprTest {
         }
     }
 
+    @Push
     @Test
     fun `push stack with commit contained in multiple named stacks`() {
         withTestSetup(useFakeRemote) {
@@ -2168,6 +2212,7 @@ interface GitJasprTest {
         }
     }
 
+    @Push
     @Test
     fun `push empty stack`() {
         withTestSetup(useFakeRemote) {
@@ -2182,6 +2227,7 @@ interface GitJasprTest {
         }
     }
 
+    @Push
     @Test
     fun `push without explicit stack name generates unique name`() {
         withTestSetup(useFakeRemote) {
@@ -2224,6 +2270,7 @@ interface GitJasprTest {
         }
     }
 
+    @Push
     @Test
     fun `push without explicit stack name handles collision by retrying`() {
         withTestSetup(useFakeRemote) {
@@ -2282,6 +2329,7 @@ interface GitJasprTest {
         }
     }
 
+    @Push
     @Test
     fun `generateUniqueStackName throws exception after max attempts`() {
         withTestSetup(useFakeRemote) {
@@ -2332,6 +2380,7 @@ interface GitJasprTest {
     // endregion
 
     // region pr body tests
+    @PrBody
     @Test
     fun `pr descriptions basic stack`() {
         withTestSetup(useFakeRemote) {
@@ -2400,6 +2449,7 @@ interface GitJasprTest {
         }
     }
 
+    @PrBody
     @Test
     fun `pr descriptions reordered and with history links`() {
         withTestSetup(useFakeRemote) {
@@ -2576,6 +2626,7 @@ interface GitJasprTest {
         }
     }
 
+    @PrBody
     @Test
     fun `pr descriptions force pushed twice`() {
         withTestSetup(useFakeRemote) {
@@ -2697,11 +2748,13 @@ interface GitJasprTest {
     // endregion
 
     // region merge tests
+    @Merge
     @Test
     fun `merge empty stack`() {
         withTestSetup(useFakeRemote) { merge(RefSpec("main", "main")) }
     }
 
+    @Merge
     @Test
     fun `merge happy path`() {
         withTestSetup(useFakeRemote) {
@@ -2756,6 +2809,7 @@ interface GitJasprTest {
         }
     }
 
+    @Merge
     @Test
     fun `merge - push and merge`() {
         withTestSetup(useFakeRemote) {
@@ -2825,6 +2879,7 @@ interface GitJasprTest {
         }
     }
 
+    @Merge
     @Test
     fun `merge just one`() {
         withTestSetup(useFakeRemote, rollBackChanges = true) {
@@ -2857,6 +2912,7 @@ interface GitJasprTest {
         }
     }
 
+    @Merge
     @Test
     fun `autoMerge happy path`() {
         withTestSetup(useFakeRemote) {
@@ -2910,6 +2966,7 @@ interface GitJasprTest {
         }
     }
 
+    @Merge
     @Test
     fun `autoMerge with limited refSpec`() {
         withTestSetup(useFakeRemote) {
@@ -2987,6 +3044,7 @@ interface GitJasprTest {
         }
     }
 
+    @Merge
     @Test
     fun `merge fails when behind target branch`() {
         withTestSetup(useFakeRemote) {
@@ -3051,6 +3109,7 @@ interface GitJasprTest {
         }
     }
 
+    @Merge
     @Test
     fun `merge pushes latest commit that passes the stack check`() {
         withTestSetup(useFakeRemote) {
@@ -3130,6 +3189,7 @@ interface GitJasprTest {
         }
     }
 
+    @Merge
     @Test
     fun `merge sets baseRef to targetRef on the latest PR that is mergeable`() {
         withTestSetup(useFakeRemote) {
@@ -3208,6 +3268,7 @@ interface GitJasprTest {
         }
     }
 
+    @Merge
     @Test
     fun `merge closes PRs that were rolled up into the PR for the latest mergeable commit`() {
         withTestSetup(useFakeRemote) {
@@ -3283,6 +3344,7 @@ interface GitJasprTest {
         }
     }
 
+    @Merge
     @Test
     fun `merge - none are mergeable`() {
         withTestSetup(useFakeRemote) {
@@ -3332,6 +3394,7 @@ interface GitJasprTest {
         }
     }
 
+    @Merge
     @Test
     fun `merge with refspec`() {
         withTestSetup(useFakeRemote) {
@@ -3385,6 +3448,7 @@ interface GitJasprTest {
         }
     }
 
+    @Merge
     @Test
     fun `merge deletes relevant branches`() {
         withTestSetup(useFakeRemote) {
@@ -3474,6 +3538,7 @@ interface GitJasprTest {
         }
     }
 
+    @Merge
     @Test
     fun `merge rebases remaining PRs after merge`() {
         withTestSetup(useFakeRemote) {
@@ -3582,6 +3647,7 @@ interface GitJasprTest {
         }
     }
 
+    @Merge
     @Test
     fun `merge with out of date commit`() {
         withTestSetup(useFakeRemote, rollBackChanges = false) {
@@ -3672,6 +3738,7 @@ interface GitJasprTest {
     // endregion
 
     // region clean tests
+    @Clean
     @Test
     fun `clean deletes expected branches`() {
         withTestSetup(useFakeRemote) {
@@ -3748,6 +3815,7 @@ interface GitJasprTest {
         }
     }
 
+    @Clean
     @Test
     fun `getOrphanedBranches prunes stale tracking branches`() {
         withTestSetup(useFakeRemote, rollBackChanges = false) {
@@ -3833,6 +3901,7 @@ interface GitJasprTest {
         }
     }
 
+    @Clean
     @Test
     fun `clean dry run reports empty named stack branches`() {
         withTestSetup(useFakeRemote) {
@@ -3934,6 +4003,7 @@ interface GitJasprTest {
         }
     }
 
+    @Clean
     @Test
     fun `clean deletes empty named stack branches`() {
         withTestSetup(useFakeRemote) {
@@ -4055,6 +4125,7 @@ interface GitJasprTest {
         }
     }
 
+    @Clean
     @Test
     fun `clean with abandoned PRs dry run reports them`() {
         withTestSetup(useFakeRemote) {
@@ -4160,6 +4231,7 @@ interface GitJasprTest {
         }
     }
 
+    @Clean
     @Test
     fun `clean with abandoned PRs closes and deletes them`() {
         withTestSetup(useFakeRemote, rollBackChanges = false) {
@@ -4325,6 +4397,7 @@ interface GitJasprTest {
         }
     }
 
+    @Clean
     @Test
     fun `clean only considers jaspr branches as abandoned`() {
         withTestSetup(useFakeRemote) {
@@ -4415,6 +4488,7 @@ interface GitJasprTest {
         }
     }
 
+    @Clean
     @Test
     fun `clean respects commit ownership for orphaned branches`() {
         withTestSetup(useFakeRemote) {
@@ -4489,6 +4563,7 @@ interface GitJasprTest {
         }
     }
 
+    @Clean
     @Test
     fun `clean with cleanAllCommits true ignores commit ownership`() {
         withTestSetup(useFakeRemote) {
@@ -4692,6 +4767,7 @@ interface GitJasprTest {
     }
 
     // region dont-push tests
+    @DontPush
     @Test
     fun `push excludes commits matching dont-push pattern`() {
         withTestSetup(useFakeRemote) {
@@ -4724,6 +4800,7 @@ interface GitJasprTest {
         }
     }
 
+    @DontPush
     @Test
     fun `push excludes all commits when all match dont-push pattern`() {
         withTestSetup(useFakeRemote) {
@@ -4759,6 +4836,7 @@ interface GitJasprTest {
         }
     }
 
+    @DontPush
     @Test
     fun `push excludes all commits when base commit matches dont-push pattern`() {
         withTestSetup(useFakeRemote) {
@@ -4790,6 +4868,7 @@ interface GitJasprTest {
         }
     }
 
+    @DontPush
     @Test
     fun `push named stack points to topmost non-excluded commit`() {
         withTestSetup(useFakeRemote) {
@@ -4823,6 +4902,7 @@ interface GitJasprTest {
         }
     }
 
+    @DontPush
     @Test
     fun `merge excludes commits matching dont-push pattern`() {
         withTestSetup(useFakeRemote) {
@@ -4874,6 +4954,7 @@ interface GitJasprTest {
         }
     }
 
+    @DontPush
     @Test
     fun `merge with explicit refspec excludes commits matching dont-push pattern`() {
         withTestSetup(useFakeRemote) {
@@ -4910,6 +4991,7 @@ interface GitJasprTest {
         }
     }
 
+    @DontPush
     @Test
     fun `autoMerge with explicit refspec excludes commits matching dont-push pattern`() {
         withTestSetup(useFakeRemote) {
@@ -4957,6 +5039,7 @@ interface GitJasprTest {
         }
     }
 
+    @DontPush
     @Test
     fun `push respects custom dont-push regex pattern`() {
         withTestSetup(useFakeRemote) {
@@ -4988,6 +5071,7 @@ interface GitJasprTest {
         }
     }
 
+    @DontPush
     @Test
     fun `autoMerge merges mergeable commits and stops at draft commit in middle of stack`() {
         withTestSetup(useFakeRemote) {
@@ -5054,6 +5138,7 @@ interface GitJasprTest {
         }
     }
 
+    @DontPush
     @Test
     fun `autoMerge merges up to last mergeable commit when isDraft is true`() {
         withTestSetup(useFakeRemote) {

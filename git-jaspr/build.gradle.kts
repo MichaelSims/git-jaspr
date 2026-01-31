@@ -2,6 +2,7 @@
 
 import com.expediagroup.graphql.plugin.gradle.config.GraphQLSerializer
 import org.gradle.api.plugins.ApplicationPlugin.APPLICATION_GROUP
+import org.gradle.api.plugins.JavaBasePlugin.VERIFICATION_GROUP
 
 plugins {
     alias(libs.plugins.kotlin)
@@ -110,6 +111,20 @@ nonDefaultTestTags.forEach { (testTag, testDescription) ->
 
         testClassesDirs = files(defaultTestSuite.map { it.sources.output.classesDirs })
         classpath = files(defaultTestSuite.map { it.sources.runtimeClasspath })
+    }
+}
+
+// Allows running sub groups of tests in GitJasprTest.
+// The easiest way to run these test groups in IDEA is to go to, f.e., GitJasprDefaultTest and click
+// the run button in the gutter. When prompted to choose tasks, choose the `test*` task(s) you want
+// to run.
+val testGroups = listOf("status", "push", "prBody", "merge", "clean", "dontPush")
+
+for (testTag in testGroups) {
+    val taskName = "test" + testTag.replaceFirstChar { char -> char.uppercase() }
+    task<Test>(taskName) {
+        group = VERIFICATION_GROUP
+        useJUnitPlatform { includeTags(testTag) }
     }
 }
 
