@@ -4,50 +4,12 @@ query getPullRequestsByHeadRef(
     $head_ref_name: String!,
 ){
     rateLimit {
-        cost
-        used
-        limit
-        remaining
-        nodeCount
-        resetAt
+        ...RateLimitFields
     }
     repository(owner:$repo_owner, name:$repo_name) {
-        id
         pullRequests(headRefName:$head_ref_name, first:60) {
             nodes {
-                id
-                number
-                title
-                body
-                baseRefName
-                headRefName
-                mergeable
-                reviewDecision
-                permalink
-                isDraft
-                repository {
-                    id
-                }
-                mergeQueueEntry {
-                    id
-                }
-                commits(first:25) {
-                    nodes {
-                        commit {
-                            oid
-                            messageHeadline
-                            messageBody
-                            statusCheckRollup {
-                                state
-                            }
-                            checkSuites(first:5) {
-                                nodes {
-                                    conclusion
-                                }
-                            }
-                        }
-                    }
-                }
+                ...PullRequest
             }
         }
     }

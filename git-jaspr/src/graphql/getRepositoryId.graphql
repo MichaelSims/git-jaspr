@@ -3,12 +3,7 @@ query getRepositoryId(
     $name: String!,
 ) {
     rateLimit {
-        cost
-        used
-        limit
-        remaining
-        nodeCount
-        resetAt
+        ...RateLimitFields
     }
     repository(owner: $owner, name: $name) {
         id

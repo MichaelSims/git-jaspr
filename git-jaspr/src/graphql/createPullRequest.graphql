@@ -1,27 +1,7 @@
 mutation createPullRequest($input: CreatePullRequestInput!) {
     createPullRequest(input: $input) {
         pullRequest {
-            id
-            number
-            title
-            body
-            baseRefName
-            headRefName
-            reviewDecision
-            permalink
-            isDraft
-            commits(first:25) {
-                nodes {
-                    commit {
-                        oid
-                        messageHeadline
-                        messageBody
-                        statusCheckRollup {
-                            state
-                        }
-                    }
-                }
-            }
+            ...PullRequest
         }
     }
 }

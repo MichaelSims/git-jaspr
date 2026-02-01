@@ -1,6 +1,5 @@
 @file:Suppress("UnstableApiUsage")
 
-import com.expediagroup.graphql.plugin.gradle.config.GraphQLSerializer
 import org.gradle.api.plugins.ApplicationPlugin.APPLICATION_GROUP
 import org.gradle.api.plugins.JavaBasePlugin.VERIFICATION_GROUP
 
@@ -8,7 +7,7 @@ plugins {
     alias(libs.plugins.kotlin)
     alias(libs.plugins.kotlin.serialization)
     alias(libs.plugins.kotlin.kapt)
-    alias(libs.plugins.graphql)
+    alias(libs.plugins.apollo)
     alias(libs.plugins.spotless)
     alias(libs.plugins.graalvm)
     application
@@ -45,18 +44,44 @@ graalvmNative {
     toolchainDetection.set(true)
 }
 
-graphql {
-    client {
-        sdlEndpoint = "https://docs.github.com/public/fpt/schema.docs.graphql"
-        queryFileDirectory = "src/graphql"
-        packageName = "sims.michael.gitjaspr.generated"
-        serializer = GraphQLSerializer.KOTLINX
+val gitHubSchemaUrl = "https://docs.github.com/public/fpt/schema.docs.graphql"
+val gitHubSchemaFile = file("src/graphql/schema.graphqls")
+
+task("downloadGitHubSchema") {
+    group = "apollo"
+    description = "Downloads the GitHub GraphQL schema"
+    doLast { gitHubSchemaFile.writeText(uri(gitHubSchemaUrl).toURL().readText()) }
+}
+
+apollo {
+    service("github") {
+        srcDir("src/graphql")
+        packageName.set("sims.michael.gitjaspr.generated")
+        schemaFiles.from(gitHubSchemaFile)
+        codegenModels.set("responseBased")
+        introspection {
+            endpointUrl.set("https://docs.github.com/public/fpt/schema.docs.graphql")
+            schemaFile.set(file("src/graphql/schema.graphqls"))
+        }
+        // Map GitHub's custom scalars to String
+        mapScalar("URI", "kotlin.String")
+        mapScalar("DateTime", "kotlin.String")
+        mapScalar("GitObjectID", "kotlin.String")
+        mapScalar("HTML", "kotlin.String")
+        mapScalar("GitSSHRemote", "kotlin.String")
+        mapScalar("GitTimestamp", "kotlin.String")
+        mapScalar("Base64String", "kotlin.String")
+        mapScalar("PreciseDateTime", "kotlin.String")
+        mapScalar("X509Certificate", "kotlin.String")
+        mapScalar("BigInt", "kotlin.String")
     }
 }
 
 dependencies {
     implementation(libs.clikt)
-    implementation(libs.graphql.kotlin.ktor.client)
+    implementation(libs.apollo.runtime)
+    implementation(libs.apollo.engine.ktor)
+    implementation(libs.ktor.client.cio)
     implementation(libs.ktor.client.auth)
     implementation(libs.slf4j.api)
     implementation(libs.logback.classic)

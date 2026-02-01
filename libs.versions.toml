@@ -1,25 +1,28 @@
 [versions]
+apollo = "4.1.0"
 arrowkt = "1.2.4"
 kotlin = "2.3.0"
 kotlinpoet = "2.2.0"
 ksp = "2.3.4"
 jgit = "7.4.0.202509020913-r"
 ktfmt = "0.61"
+ktor = "3.0.0"
 
 [plugins]
 kotlin = { id = "org.jetbrains.kotlin.jvm", version.ref = "kotlin" }
 kotlin-kapt = { id = "org.jetbrains.kotlin.kapt", version.ref = "kotlin" }
 kotlin-serialization = { id = "org.jetbrains.kotlin.plugin.serialization", version.ref = "kotlin" }
-graphql = { id = "com.expediagroup.graphql", version = "6.5.7" }
+apollo = { id = "com.apollographql.apollo", version.ref = "apollo" }
 spotless = { id = "com.diffplug.spotless", version = "7.2.1" }
 graalvm = { id = "org.graalvm.buildtools.native", version = "0.11.1" }
 ksp = { id = "com.google.devtools.ksp", version.ref = "ksp"}
 
 [libraries]
+apollo-runtime = { module = "com.apollographql.apollo:apollo-runtime", version.ref = "apollo" }
+apollo-engine-ktor = { module = "com.apollographql.ktor:apollo-engine-ktor", version = "0.1.1" }
 arrowkt-core = { module = "io.arrow-kt:arrow-core", version.ref = "arrowkt"}
 auto-service = { module = "com.google.auto.service:auto-service", version = "1.0.1" }
 clikt = { module = "com.github.ajalt.clikt:clikt", version = "4.2.0" }
-graphql-kotlin-ktor-client = { module = "com.expediagroup:graphql-kotlin-ktor-client", version = "6.5.7" }
 jgit = { module = "org.eclipse.jgit:org.eclipse.jgit", version.ref = "jgit" }
 jgit-junit = { module = "org.eclipse.jgit:org.eclipse.jgit.junit", version.ref = "jgit" }
 jgit-ssh = { module = "org.eclipse.jgit:org.eclipse.jgit.ssh.jsch", version.ref = "jgit" }
@@ -32,7 +35,8 @@ kotlinx-serialization-json = { module = "org.jetbrains.kotlinx:kotlinx-serializa
 ksp-api = { module = "com.google.devtools.ksp:symbol-processing-api", version.ref = "ksp"}
 ksp-gradle-plugin = { module = "com.google.devtools.ksp:symbol-processing-gradle-plugin", version.ref = "ksp" }
 ksp-impl = { module = "com.google.devtools.ksp:symbol-processing", version.ref = "ksp"}
-ktor-client-auth = { module = "io.ktor:ktor-client-auth", version = "2.3.7" }
+ktor-client-auth = { module = "io.ktor:ktor-client-auth", version.ref = "ktor" }
+ktor-client-cio = { module = "io.ktor:ktor-client-cio", version.ref = "ktor" }
 logback-classic = { module = "ch.qos.logback:logback-classic", version = "1.4.6" }
 mockito-inline = { module = "org.mockito:mockito-inline", version = "2.23.0" }
 mockito-kotlin = { module = "com.nhaarman.mockitokotlin2:mockito-kotlin", version = "2.2.0" }

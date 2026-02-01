@@ -10,9 +10,7 @@ import kotlinx.serialization.Serializable
 import org.eclipse.jgit.lib.PersonIdent
 import sims.michael.gitjaspr.RemoteRefEncoding.DEFAULT_REMOTE_BRANCH_PREFIX
 import sims.michael.gitjaspr.RemoteRefEncoding.DEFAULT_REMOTE_NAMED_STACK_BRANCH_PREFIX
-import sims.michael.gitjaspr.generated.getpullrequests.RateLimit as GetPullRequestsRateLimit
-import sims.michael.gitjaspr.generated.getpullrequestsbyheadref.RateLimit as GetPullRequestsByHeadRefRateLimit
-import sims.michael.gitjaspr.generated.getrepositoryid.RateLimit as GetRepositoryIdRateLimit
+import sims.michael.gitjaspr.generated.fragment.RateLimitFields
 import sims.michael.gitjaspr.serde.FileSerializer
 import sims.michael.gitjaspr.serde.LevelSerializer
 
@@ -86,7 +84,6 @@ data class PullRequest(
     val body: String,
     val checksPass: Boolean? = null,
     val approved: Boolean? = null,
-    val checkConclusionStates: List<String> = emptyList(),
     val permalink: String? = null,
     val isDraft: Boolean = false,
 ) {
@@ -108,13 +105,7 @@ data class GitHubRateLimitInfo(
     val resetAt: LocalDateTime,
 )
 
-fun GetPullRequestsRateLimit.toCanonicalRateLimitInfo(): GitHubRateLimitInfo =
-    GitHubRateLimitInfo(cost, used, limit, remaining, nodeCount, resetAt.iso8601ToLocalDate())
-
-fun GetPullRequestsByHeadRefRateLimit.toCanonicalRateLimitInfo(): GitHubRateLimitInfo =
-    GitHubRateLimitInfo(cost, used, limit, remaining, nodeCount, resetAt.iso8601ToLocalDate())
-
-fun GetRepositoryIdRateLimit.toCanonicalRateLimitInfo(): GitHubRateLimitInfo =
+fun RateLimitFields.toRateLimitInfo(): GitHubRateLimitInfo =
     GitHubRateLimitInfo(cost, used, limit, remaining, nodeCount, resetAt.iso8601ToLocalDate())
 
 /** Convert an ISO-8601 encoded UTC date string to a [LocalDateTime] */

@@ -1,0 +1,30 @@
+# Define fragments for types shared across multiple queries or mutations
+fragment RateLimitFields on RateLimit {
+    cost
+    used
+    limit
+    remaining
+    nodeCount
+    resetAt
+}
+
+fragment PullRequest on PullRequest {
+    id
+    number
+    title
+    body
+    baseRefName
+    headRefName
+    reviewDecision
+    permalink
+    isDraft
+    commits(first: 1) {
+        nodes {
+            commit {
+                statusCheckRollup {
+                    state
+                }
+            }
+        }
+    }
+}

@@ -1,16 +1,17 @@
 package sims.michael.gitjaspr
 
-import com.expediagroup.graphql.client.GraphQLClient
-import com.expediagroup.graphql.client.ktor.GraphQLKtorClient
+import com.apollographql.apollo.ApolloClient
+import com.apollographql.ktor.http.KtorHttpEngine
 import io.ktor.client.*
 import io.ktor.client.engine.cio.*
 import io.ktor.client.plugins.auth.*
 import io.ktor.client.plugins.auth.providers.*
-import java.net.URI
+import java.io.Closeable
 import kotlinx.serialization.json.Json
-import sims.michael.gitjaspr.graphql.GitHubGraphQLClient
+import sims.michael.gitjaspr.graphql.ErrorMappingInterceptor
+import sims.michael.gitjaspr.graphql.RateLimitRetryInterceptor
 
-interface AppWiring {
+interface AppWiring : Closeable {
     val gitJaspr: GitJaspr
     val config: Config
     val json: Json
@@ -27,8 +28,8 @@ class DefaultAppWiring(
         GitHubClientWiring(githubToken, config.gitHubInfo, config.remoteBranchPrefix)
 
     @Suppress("unused")
-    val graphQLClient: GraphQLClient<*>
-        get() = gitHubClientWiring.graphQLClient
+    val apolloClient: ApolloClient
+        get() = gitHubClientWiring.apolloClient
 
     @Suppress("MemberVisibilityCanBePrivate")
     val gitHubClient: GitHubClient
@@ -37,6 +38,8 @@ class DefaultAppWiring(
     override val json: Json = Json { prettyPrint = true }
 
     override val gitJaspr: GitJaspr by lazy { GitJaspr(gitHubClient, gitClient, config) }
+
+    override fun close() = gitHubClientWiring.close()
 }
 
 class GitHubClientWiring(
@@ -44,7 +47,7 @@ class GitHubClientWiring(
     private val gitHubInfo: GitHubInfo,
     private val remoteBranchPrefix: String,
     private val getPullRequestsPageSize: Int = GitHubClient.GET_PULL_REQUESTS_DEFAULT_PAGE_SIZE,
-) {
+) : Closeable {
     private val bearerTokens by lazy { BearerTokens(githubToken, githubToken) }
 
     private val httpClient by lazy {
@@ -53,15 +56,21 @@ class GitHubClientWiring(
         }
     }
 
-    val graphQLClient: GraphQLClient<*> by lazy {
-        ErrorMappingGraphQLClient(
-            GitHubGraphQLClient(
-                GraphQLKtorClient(URI.create("https://api.github.com/graphql").toURL(), httpClient)
-            )
-        )
+    val apolloClient: ApolloClient by lazy {
+        ApolloClient.Builder()
+            .serverUrl("https://api.github.com/graphql")
+            .httpEngine(KtorHttpEngine(httpClient))
+            .addHttpInterceptor(ErrorMappingInterceptor())
+            .addInterceptor(RateLimitRetryInterceptor())
+            .build()
     }
 
     val gitHubClient: GitHubClient by lazy {
-        GitHubClientImpl(graphQLClient, gitHubInfo, remoteBranchPrefix, getPullRequestsPageSize)
+        GitHubClientImpl(apolloClient, gitHubInfo, remoteBranchPrefix, getPullRequestsPageSize)
+    }
+
+    override fun close() {
+        apolloClient.close()
+        httpClient.close()
     }
 }

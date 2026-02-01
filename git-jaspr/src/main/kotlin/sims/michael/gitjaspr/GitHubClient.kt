@@ -1,22 +1,27 @@
 package sims.michael.gitjaspr
 
-import com.expediagroup.graphql.client.GraphQLClient
-import com.expediagroup.graphql.client.types.GraphQLClientResponse
+import com.apollographql.apollo.ApolloClient
+import com.apollographql.apollo.api.ApolloResponse
+import com.apollographql.apollo.api.Operation
+import com.apollographql.apollo.api.Optional
 import java.util.concurrent.atomic.AtomicReference
 import org.slf4j.Logger
 import org.slf4j.LoggerFactory
 import sims.michael.gitjaspr.RemoteRefEncoding.getCommitIdFromRemoteRef
-import sims.michael.gitjaspr.generated.*
-import sims.michael.gitjaspr.generated.enums.PullRequestReviewDecision
-import sims.michael.gitjaspr.generated.enums.PullRequestReviewEvent
-import sims.michael.gitjaspr.generated.enums.StatusState
-import sims.michael.gitjaspr.generated.getpullrequests.PullRequest as GetPullRequestsPullRequest
-import sims.michael.gitjaspr.generated.getpullrequests.RateLimit
-import sims.michael.gitjaspr.generated.getpullrequestsbyheadref.PullRequest as GetPullRequestsByHeadRefPullRequest
-import sims.michael.gitjaspr.generated.inputs.AddPullRequestReviewInput
-import sims.michael.gitjaspr.generated.inputs.ClosePullRequestInput
-import sims.michael.gitjaspr.generated.inputs.CreatePullRequestInput
-import sims.michael.gitjaspr.generated.inputs.UpdatePullRequestInput
+import sims.michael.gitjaspr.generated.AddPullRequestReviewMutation
+import sims.michael.gitjaspr.generated.ClosePullRequestMutation
+import sims.michael.gitjaspr.generated.CreatePullRequestMutation
+import sims.michael.gitjaspr.generated.GetPullRequestsByHeadRefQuery
+import sims.michael.gitjaspr.generated.GetPullRequestsQuery
+import sims.michael.gitjaspr.generated.GetRepositoryIdQuery
+import sims.michael.gitjaspr.generated.UpdatePullRequestMutation
+import sims.michael.gitjaspr.generated.fragment.PullRequest as RawPullRequest
+import sims.michael.gitjaspr.generated.fragment.RateLimitFields
+import sims.michael.gitjaspr.generated.type.AddPullRequestReviewInput
+import sims.michael.gitjaspr.generated.type.ClosePullRequestInput
+import sims.michael.gitjaspr.generated.type.CreatePullRequestInput
+import sims.michael.gitjaspr.generated.type.PullRequestReviewEvent
+import sims.michael.gitjaspr.generated.type.UpdatePullRequestInput
 
 interface GitHubClient {
     suspend fun getPullRequests(commitFilter: List<Commit>? = null): List<PullRequest>
@@ -41,7 +46,7 @@ interface GitHubClient {
 }
 
 class GitHubClientImpl(
-    private val delegate: GraphQLClient<*>,
+    private val apolloClient: ApolloClient,
     private val gitHubInfo: GitHubInfo,
     private val remoteBranchPrefix: String,
     private val getPullRequestsPageSize: Int,
@@ -57,9 +62,6 @@ class GitHubClientImpl(
         )
     }
 
-    // This is not strictly duplicated since there are multiple model objects named PullRequest that
-    // look the same but are distinct types
-    @Suppress("DuplicatedCode")
     override suspend fun getPullRequestsById(commitFilter: List<String>?): List<PullRequest> {
         logger.trace("getPullRequestsById {}", commitFilter ?: "")
 
@@ -71,15 +73,15 @@ class GitHubClientImpl(
         // Recursively fetch all PR pages and concatenate them into a single list
         suspend fun getPullRequests(
             afterCursor: String? = null
-        ): Pair<List<GetPullRequestsPullRequest>, RateLimit?> {
-            val variables =
-                GetPullRequests.Variables(
+        ): Pair<List<RawPullRequest>, RateLimitFields?> {
+            val query =
+                GetPullRequestsQuery(
                     gitHubInfo.owner,
                     gitHubInfo.name,
-                    getPullRequestsPageSize,
-                    afterCursor,
+                    Optional.present(getPullRequestsPageSize),
+                    Optional.presentIfNotNull(afterCursor),
                 )
-            val resultData = delegate.execute(GetPullRequests(variables)).data
+            val resultData = apolloClient.query(query).execute().also(::checkNoErrors).data
             val pullRequests = resultData?.repository?.pullRequests
             val pageInfo = pullRequests?.pageInfo
             val nodes =
@@ -93,34 +95,11 @@ class GitHubClientImpl(
         }
         val (prs, rateLimit) = getPullRequests()
 
-        logger.logRateLimitInfo(rateLimit?.toCanonicalRateLimitInfo())
+        logger.logRateLimitInfo(rateLimit?.toRateLimitInfo())
         return prs.mapNotNull { pr ->
                 val commitId = getCommitIdFromRemoteRef(pr.headRefName, remoteBranchPrefix)
                 if (ids?.contains(commitId) != false) {
-                    val state = pr.commits.nodes?.singleOrNull()?.commit?.statusCheckRollup?.state
-                    PullRequest(
-                        pr.id,
-                        commitId,
-                        pr.number,
-                        pr.headRefName,
-                        pr.baseRefName,
-                        pr.title,
-                        pr.body,
-                        when (state) {
-                            StatusState.SUCCESS -> true
-                            StatusState.FAILURE,
-                            StatusState.ERROR -> false
-                            else -> null
-                        },
-                        when (pr.reviewDecision) {
-                            PullRequestReviewDecision.APPROVED -> true
-                            PullRequestReviewDecision.CHANGES_REQUESTED -> false
-                            else -> null
-                        },
-                        pr.conclusionStates,
-                        pr.permalink,
-                        pr.isDraft,
-                    )
+                    pr.toPullRequest(commitId)
                 } else {
                     null
                 }
@@ -130,57 +109,15 @@ class GitHubClientImpl(
             }
     }
 
-    // There's some duplicated logic here, although the creation of the pull request isn't
-    // technically duped since CreatePullRequest.Result is different from GetPullRequests.Result
-    // even though they both contain a PullRequest type
     @Suppress("DuplicatedCode")
     override suspend fun getPullRequestsByHeadRef(headRefName: String): List<PullRequest> {
         logger.trace("getPullRequestsByHeadRef {}", headRefName)
-        val response =
-            delegate
-                .execute(
-                    GetPullRequestsByHeadRef(
-                        GetPullRequestsByHeadRef.Variables(
-                            gitHubInfo.owner,
-                            gitHubInfo.name,
-                            headRefName,
-                        )
-                    )
-                )
-                .data
-        logger.logRateLimitInfo(response?.rateLimit?.toCanonicalRateLimitInfo())
-        return response
-            ?.repository
-            ?.pullRequests
-            ?.nodes
-            .orEmpty()
-            .filterNotNull()
-            .map { pr ->
-                val commitId = getCommitIdFromRemoteRef(pr.headRefName, remoteBranchPrefix)
-                val state = pr.commits.nodes?.singleOrNull()?.commit?.statusCheckRollup?.state
-                PullRequest(
-                    pr.id,
-                    commitId,
-                    pr.number,
-                    pr.headRefName,
-                    pr.baseRefName,
-                    pr.title,
-                    pr.body,
-                    when (state) {
-                        StatusState.SUCCESS -> true
-                        StatusState.FAILURE,
-                        StatusState.ERROR -> false
-                        else -> null
-                    },
-                    when (pr.reviewDecision) {
-                        PullRequestReviewDecision.APPROVED -> true
-                        PullRequestReviewDecision.CHANGES_REQUESTED -> false
-                        else -> null
-                    },
-                    pr.conclusionStates,
-                    pr.permalink,
-                    pr.isDraft,
-                )
+        val query = GetPullRequestsByHeadRefQuery(gitHubInfo.owner, gitHubInfo.name, headRefName)
+        val response = apolloClient.query(query).execute().also(::checkNoErrors).data
+        logger.logRateLimitInfo(response?.rateLimit?.toRateLimitInfo())
+        val prs = response?.repository?.pullRequests?.nodes.orEmpty().filterNotNull()
+        return prs.map { pr ->
+                pr.toPullRequest(getCommitIdFromRemoteRef(pr.headRefName, remoteBranchPrefix))
             }
             .also { pullRequests ->
                 logger.trace("getPullRequests {}: {}", pullRequests.size, pullRequests)
@@ -190,24 +127,23 @@ class GitHubClientImpl(
     override suspend fun createPullRequest(pullRequest: PullRequest): PullRequest {
         logger.trace("createPullRequest {}", pullRequest)
         check(pullRequest.id == null) { "Cannot create $pullRequest which already exists" }
-        val pr =
-            delegate
-                .execute(
-                    CreatePullRequest(
-                        CreatePullRequest.Variables(
-                            CreatePullRequestInput(
-                                baseRefName = pullRequest.baseRefName,
-                                headRefName = pullRequest.headRefName,
-                                repositoryId = repositoryId(),
-                                title = pullRequest.title,
-                                body = pullRequest.body,
-                                draft = pullRequest.isDraft,
-                            )
-                        )
-                    )
+        val mutation =
+            CreatePullRequestMutation(
+                CreatePullRequestInput(
+                    baseRefName = pullRequest.baseRefName,
+                    headRefName = pullRequest.headRefName,
+                    repositoryId = repositoryId(),
+                    title = pullRequest.title,
+                    body = Optional.present(pullRequest.body),
+                    draft = Optional.present(pullRequest.isDraft),
                 )
+            )
+        val pr =
+            apolloClient
+                .mutation(mutation)
+                .execute()
                 .also { response ->
-                    response.checkNoErrors { logger.error("Error creating {}", pullRequest) }
+                    checkNoErrors(response) { logger.error("Error creating {}", pullRequest) }
                 }
                 .data
                 ?.createPullRequest
@@ -215,88 +151,49 @@ class GitHubClientImpl(
 
         checkNotNull(pr) { "createPullRequest returned a null result" }
 
-        val commitId = getCommitIdFromRemoteRef(pr.headRefName, remoteBranchPrefix)
-        val state = pr.commits.nodes?.singleOrNull()?.commit?.statusCheckRollup?.state
-        return PullRequest(
-            pr.id,
-            commitId,
-            pr.number,
-            pr.headRefName,
-            pr.baseRefName,
-            pr.title,
-            pr.body,
-            when (state) {
-                StatusState.SUCCESS -> true
-                StatusState.FAILURE,
-                StatusState.ERROR -> false
-                else -> null
-            },
-            when (pr.reviewDecision) {
-                PullRequestReviewDecision.APPROVED -> true
-                PullRequestReviewDecision.CHANGES_REQUESTED -> false
-                else -> null
-            },
-            permalink = pr.permalink,
-            isDraft = pr.isDraft,
-        )
+        return pr.toPullRequest(getCommitIdFromRemoteRef(pr.headRefName, remoteBranchPrefix))
     }
 
     override suspend fun updatePullRequest(pullRequest: PullRequest) {
         logger.trace("updatePullRequest {}", pullRequest)
         checkNotNull(pullRequest.id) { "Cannot update $pullRequest without an ID" }
-        delegate
-            .execute(
-                UpdatePullRequest(
-                    UpdatePullRequest.Variables(
-                        UpdatePullRequestInput(
-                            pullRequestId = pullRequest.id,
-                            baseRefName = pullRequest.baseRefName,
-                            title = pullRequest.title,
-                            body = pullRequest.body,
-                        )
-                    )
+        val mutation =
+            UpdatePullRequestMutation(
+                UpdatePullRequestInput(
+                    pullRequestId = pullRequest.id,
+                    baseRefName = Optional.present(pullRequest.baseRefName),
+                    title = Optional.present(pullRequest.title),
+                    body = Optional.present(pullRequest.body),
                 )
             )
-            .also { response ->
-                response.checkNoErrors { logger.error("Error updating PR #{}", pullRequest.number) }
-            }
+        apolloClient.mutation(mutation).execute().also { response ->
+            checkNoErrors(response) { logger.error("Error updating PR #{}", pullRequest.number) }
+        }
     }
 
     override suspend fun closePullRequest(pullRequest: PullRequest) {
         logger.trace("closePullRequest {}", pullRequest)
         checkNotNull(pullRequest.id) { "Cannot close $pullRequest without an ID" }
-        delegate
-            .execute(
-                ClosePullRequest(
-                    ClosePullRequest.Variables(
-                        ClosePullRequestInput(pullRequestId = pullRequest.id)
-                    )
-                )
-            )
-            .also { response ->
-                response.checkNoErrors { logger.error("Error closing PR #{}", pullRequest.number) }
-            }
+        val mutation =
+            ClosePullRequestMutation(ClosePullRequestInput(pullRequestId = pullRequest.id))
+        apolloClient.mutation(mutation).execute().also { response ->
+            checkNoErrors(response) { logger.error("Error closing PR #{}", pullRequest.number) }
+        }
     }
 
     override suspend fun approvePullRequest(pullRequest: PullRequest) {
         logger.trace("approvePullRequest {}", pullRequest)
         checkNotNull(pullRequest.id) { "Cannot approve $pullRequest without an ID" }
-        delegate
-            .execute(
-                AddPullRequestReview(
-                    AddPullRequestReview.Variables(
-                        AddPullRequestReviewInput(
-                            pullRequestId = pullRequest.id,
-                            event = PullRequestReviewEvent.APPROVE,
-                        )
-                    )
+        val mutation =
+            AddPullRequestReviewMutation(
+                AddPullRequestReviewInput(
+                    pullRequestId = pullRequest.id,
+                    event = Optional.present(PullRequestReviewEvent.APPROVE),
                 )
             )
-            .also { response ->
-                response.checkNoErrors {
-                    logger.error("Error approving PR #{}", pullRequest.number)
-                }
-            }
+        apolloClient.mutation(mutation).execute().also { response ->
+            checkNoErrors(response) { logger.error("Error approving PR #{}", pullRequest.number) }
+        }
     }
 
     override fun autoClosePrs() {
@@ -305,18 +202,15 @@ class GitHubClientImpl(
 
     private suspend fun fetchRepositoryId(gitHubInfo: GitHubInfo): String {
         logger.trace("fetchRepositoryId {}", gitHubInfo)
+        val query = GetRepositoryIdQuery(owner = gitHubInfo.owner, name = gitHubInfo.name)
         val response =
-            delegate
-                .execute(
-                    GetRepositoryId(GetRepositoryId.Variables(gitHubInfo.owner, gitHubInfo.name))
-                )
-                .also { response ->
-                    response.checkNoErrors {
-                        logger.error("Error fetching repository ID for {}", gitHubInfo)
-                    }
+            apolloClient.query(query).execute().also { response ->
+                checkNoErrors(response) {
+                    logger.error("Error fetching repository ID for {}", gitHubInfo)
                 }
+            }
         val repositoryId = response.data?.repository?.id
-        logger.logRateLimitInfo(response.data?.rateLimit?.toCanonicalRateLimitInfo())
+        logger.logRateLimitInfo(response.data?.rateLimit?.toRateLimitInfo())
         return checkNotNull(repositoryId) { "Failed to fetch repository ID, response is null" }
     }
 
@@ -325,12 +219,15 @@ class GitHubClientImpl(
     private suspend fun repositoryId() =
         repositoryId.get() ?: fetchRepositoryId(gitHubInfo).also(repositoryId::set)
 
-    private fun GraphQLClientResponse<*>.checkNoErrors(onError: () -> Unit = {}) {
-        val list = errors?.takeUnless { list -> list.isEmpty() } ?: return
+    private fun <D : Operation.Data> checkNoErrors(
+        response: ApolloResponse<D>,
+        onError: () -> Unit = {},
+    ) {
+        val list = response.errors?.takeUnless { it.isEmpty() } ?: return
 
         onError()
-        for (graphQLClientError in list) {
-            logger.error(graphQLClientError.toString())
+        for (error in list) {
+            logger.error(error.toString())
         }
 
         throw GitJasprException(list.first().message)
@@ -344,21 +241,32 @@ class GitHubClientImpl(
         }
     }
 
-    private val GetPullRequestsPullRequest.conclusionStates: List<String>
-        get() =
-            commits.nodes.orEmpty().filterNotNull().flatMap { prCommit ->
-                prCommit.commit.checkSuites?.nodes.orEmpty().filterNotNull().mapNotNull { checkSuite
-                    ->
-                    checkSuite.conclusion?.toString()
-                }
-            }
-
-    private val GetPullRequestsByHeadRefPullRequest.conclusionStates: List<String>
-        get() =
-            commits.nodes.orEmpty().filterNotNull().flatMap { prCommit ->
-                prCommit.commit.checkSuites?.nodes.orEmpty().filterNotNull().mapNotNull { checkSuite
-                    ->
-                    checkSuite.conclusion?.toString()
-                }
-            }
+    /** Convert a RawPullRequest to our domain model PullRequest. */
+    private fun RawPullRequest.toPullRequest(commitId: String?): PullRequest {
+        val state = commits.nodes?.singleOrNull()?.commit?.statusCheckRollup?.state
+        return PullRequest(
+            id = id,
+            commitId = commitId,
+            number = number,
+            headRefName = headRefName,
+            baseRefName = baseRefName,
+            title = title,
+            body = body,
+            checksPass =
+                when (state?.rawValue) {
+                    "SUCCESS" -> true
+                    "FAILURE",
+                    "ERROR" -> false
+                    else -> null
+                },
+            approved =
+                when (reviewDecision?.rawValue) {
+                    "APPROVED" -> true
+                    "CHANGES_REQUESTED" -> false
+                    else -> null
+                },
+            permalink = permalink,
+            isDraft = isDraft,
+        )
+    }
 }

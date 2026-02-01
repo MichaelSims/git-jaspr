@@ -131,10 +131,12 @@ class GitJasprFunctionalExternalProcessTest : GitJasprTest {
         withTimeout(timeout) {
             launch {
                 while (true) {
-                    val prs = gitHub.getPullRequestsById(commitFilter.toList())
-                    val conclusionStates = prs.flatMap(PullRequest::checkConclusionStates)
-                    logger.trace("Conclusion states: {}", conclusionStates)
-                    if (conclusionStates.size == commitFilter.size) break
+                    val checksPass =
+                        gitHub.getPullRequestsById(commitFilter.toList()).associate {
+                            checkNotNull(it.id) to (it.checksPass == true)
+                        }
+                    logger.trace("Checks pass: {}", checksPass)
+                    if (checksPass.values.all { it }) break
                     delay(pollingDelay)
                 }
             }

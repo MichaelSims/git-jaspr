@@ -393,7 +393,6 @@ class GitJaspr(
                             ),
                         checksPass = existingPr?.checksPass,
                         approved = existingPr?.approved,
-                        checkConclusionStates = existingPr?.checkConclusionStates.orEmpty(),
                         permalink = existingPr?.permalink,
                         isDraft = isDraftRegex.matches(currentCommit.shortMessage),
                     )

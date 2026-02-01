@@ -446,6 +446,8 @@ you'll need to re-enable it again.
                 logger.logUnhandledException(e, logFile)
                 printError(e)
             } finally {
+                logger.trace("Closing appWiring")
+                appWiring.close()
                 logger.trace("Stopping logging context")
                 loggingContext.stop()
             }
