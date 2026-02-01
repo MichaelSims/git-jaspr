@@ -4,6 +4,7 @@ import java.io.File
 import java.lang.IllegalStateException
 import java.nio.file.Files
 import java.util.*
+import java.util.concurrent.TimeUnit
 import kotlin.test.assertContains
 import kotlin.test.assertEquals
 import kotlin.test.assertNotNull
@@ -401,6 +402,7 @@ object ExecuteCli { // Wrapper object so we can have a logger with a sensible na
                 .environment("HOME", homeDir.absolutePath)
                 .command(command)
                 .readOutput(true)
+                .timeout(60, TimeUnit.SECONDS)
                 .execute()
 
         val outputString = processResult.outputString()
