@@ -90,7 +90,7 @@ class CliTest {
     @Test
     fun `invoked from subdirectory finds repo`() {
         val scratchDir = createTempDir()
-        // This will come from the configuration, the rest will be inferred by the URI
+        // This will come from the configuration, the rest will be inferred from the URI
         val explicitlyConfiguredHost = "example.com"
         val expected =
             config(
@@ -118,7 +118,7 @@ class CliTest {
     @Test
     fun `fails on no git dir`() {
         val scratchDir = createTempDir()
-        // This will come from the configuration, the rest will be inferred by the URI
+        // This will come from the configuration, the rest will be inferred from the URI
         val explicitlyConfiguredHost = "example.com"
         val expected =
             config(
@@ -154,7 +154,7 @@ class CliTest {
     @Test
     fun `gitHubInfo can be partially explicit and partially implicit`() {
         val scratchDir = createTempDir()
-        // This will come from the configuration, the rest will be inferred by the URI
+        // This will come from the configuration, the rest will be inferred from the URI
         val explicitlyConfiguredHost = "example.com"
         val expected =
             config(
@@ -179,8 +179,8 @@ class CliTest {
 
     @Test
     fun `configuration priority is as expected`() {
-        // CLI takes precedence over repo dir config file which takes precedence over home dir
-        // config file
+        // CLI takes precedence over the repo dir config file which takes precedence over the home
+        // dir config file
         val scratchDir = createTempDir()
         val expected =
             config(

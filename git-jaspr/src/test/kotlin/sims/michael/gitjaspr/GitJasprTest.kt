@@ -146,8 +146,7 @@ interface GitJasprTest {
                 """
                 |[ㄧㄧㄧㄧㄧㄧ] %s : three
                 |[ㄧㄧㄧㄧㄧㄧ] %s : two
-                |[ㄧㄧㄧㄧㄧㄧ] %s : one
-                """
+                |[ㄧㄧㄧㄧㄧㄧ] %s : one"""
                     .trimMargin()
                     .toStatusString(actual),
                 actual,
@@ -179,8 +178,7 @@ interface GitJasprTest {
                 """
                 |[ㄧㄧㄧㄧㄧㄧ] %s : three
                 |[ㄧㄧㄧㄧㄧㄧ] %s : two
-                |[✅ㄧㄧㄧㄧㄧ] %s : one
-                """
+                |[✅ㄧㄧㄧㄧㄧ] %s : one"""
                     .trimMargin()
                     .toStatusString(actual),
                 actual,
@@ -217,8 +215,7 @@ interface GitJasprTest {
                 """
                 |[ㄧㄧㄧㄧㄧㄧ] %s : three
                 |[ㄧㄧㄧㄧㄧㄧ] %s : two
-                |[✅✅⌛✅ㄧㄧ] %s : %s : one
-                """
+                |[✅✅⌛✅ㄧㄧ] %s : %s : one"""
                     .trimMargin()
                     .toStatusString(actual),
                 actual,
@@ -258,8 +255,7 @@ interface GitJasprTest {
                 """
                 |[ㄧㄧㄧㄧㄧㄧ] %s : three
                 |[ㄧㄧㄧㄧㄧㄧ] %s : two
-                |[✅✅✅✅ㄧㄧ] %s : %s : one
-                """
+                |[✅✅✅✅ㄧㄧ] %s : %s : one"""
                     .trimMargin()
                     .toStatusString(actual),
                 actual,
@@ -316,8 +312,7 @@ interface GitJasprTest {
                 """
                 |[✅✅✅✅ㄧㄧ] %s : %s : three
                 |[✅✅✅✅ㄧㄧ] %s : %s : two
-                |[✅✅✅✅✅✅] %s : %s : one
-                """
+                |[✅✅✅✅✅✅] %s : %s : one"""
                     .trimMargin()
                     .toStatusString(actual),
                 actual,
@@ -521,8 +516,7 @@ interface GitJasprTest {
                 """
                 |[✅✅✅✅✅✅] %s : %s : three
                 |[✅✅✅✅✅✅] %s : %s : two
-                |[✅✅✅✅✅✅] %s : %s : one
-                """
+                |[✅✅✅✅✅✅] %s : %s : one"""
                     .trimMargin()
                     .toStatusString(actual),
                 actual,
@@ -584,8 +578,7 @@ interface GitJasprTest {
                 """
                 |[✅✅✅ㄧ✅ㄧ] %s : %s : draft: three
                 |[✅✅✅✅✅✅] %s : %s : two
-                |[✅✅✅✅✅✅] %s : %s : one
-                """
+                |[✅✅✅✅✅✅] %s : %s : one"""
                     .trimMargin()
                     .toStatusString(actual),
                 actual,
@@ -645,8 +638,7 @@ interface GitJasprTest {
                 """
                 |[✅✅✅✅ㄧㄧ] %s : %s : three
                 |[✅✅✅✅✅ㄧ] %s : %s : two
-                |[✅✅✅✅ㄧㄧ] %s : %s : one
-                """
+                |[✅✅✅✅ㄧㄧ] %s : %s : one"""
                     .trimMargin()
                     .toStatusString(actual),
                 getActual = { actual },
@@ -705,8 +697,7 @@ interface GitJasprTest {
                 """
                 |[✅✅✅✅ㄧㄧ] %s : %s : three
                 |[✅✅❌✅ㄧㄧ] %s : %s : two
-                |[✅✅✅✅ㄧㄧ] %s : %s : one
-                """
+                |[✅✅✅✅ㄧㄧ] %s : %s : one"""
                     .trimMargin()
                     .toStatusString(actual),
                 actual,
@@ -750,8 +741,7 @@ interface GitJasprTest {
             val actual = getAndPrintStatusString(RefSpec("development", "development"))
             assertEquals(
                 """
-                |[✅✅✅✅✅✅] %s : %s : three
-                """
+                |[✅✅✅✅✅✅] %s : %s : three"""
                     .trimMargin()
                     .toStatusString(actual),
                 actual,
@@ -841,8 +831,7 @@ interface GitJasprTest {
                 """
                 |[❗✅✅✅✅ㄧ] %s : %s : four
                 |[❗✅✅✅✅ㄧ] %s : %s : three
-                |[✅✅✅✅✅✅] %s : %s : one
-                """
+                |[✅✅✅✅✅✅] %s : %s : one"""
                     .trimMargin()
                     .toStatusString(actual),
                 actual,
@@ -883,8 +872,7 @@ interface GitJasprTest {
                 |Some commits in your local stack have duplicate IDs:
                 |- a: (one, two)
                 |This is likely because you've based new commit messages off of those from other commits.
-                |Please correct this by amending the commits and deleting the commit-id lines, then retry your operation.
-                """
+                |Please correct this by amending the commits and deleting the commit-id lines, then retry your operation."""
                     .trimMargin()
                     .toStatusString(actual),
                 actual,
@@ -1007,8 +995,7 @@ interface GitJasprTest {
                 |[✅✅✅✅✅✅] %s : %s : four
                 |[✅✅✅✅✅✅] %s : %s : three
                 |[✅✅✅✅✅✅] %s : %s : two
-                |[✅✅✅✅✅✅] %s : %s : one
-                """
+                |[✅✅✅✅✅✅] %s : %s : one"""
                     .trimMargin()
                     .toStatusString(actual),
                 actual,
@@ -1060,8 +1047,7 @@ interface GitJasprTest {
             assertEquals(
                 """
                 |[✅✅✅✅✅✅] %s : %s : two
-                |[✅✅✅✅✅✅] %s : %s : one
-                """
+                |[✅✅✅✅✅✅] %s : %s : one"""
                     .trimMargin()
                     .toStatusString(actual, NamedStackInfo(stackName, 0, 0, remoteName)),
                 actual,
@@ -1118,8 +1104,7 @@ interface GitJasprTest {
 
             assertEquals(
                 """
-                |[✅✅✅✅✅✅] %s : %s : one
-                """
+                |[✅✅✅✅✅✅] %s : %s : one"""
                     .trimMargin()
                     .toStatusString(
                         actual,
@@ -1193,8 +1178,7 @@ interface GitJasprTest {
             assertEquals(
                 """
                 |[✅ㄧㄧㄧㄧㄧ] %s : two
-                |[✅✅✅✅✅✅] %s : %s : one
-                """
+                |[✅✅✅✅✅✅] %s : %s : one"""
                     .trimMargin()
                     .toStatusString(
                         actual,
@@ -1279,8 +1263,7 @@ interface GitJasprTest {
             assertEquals(
                 """
                 |[✅ㄧㄧㄧㄧㄧ] %s : three
-                |[✅✅✅✅✅✅] %s : %s : one
-                """
+                |[✅✅✅✅✅✅] %s : %s : one"""
                     .trimMargin()
                     .toStatusString(
                         actual,
@@ -1354,8 +1337,7 @@ interface GitJasprTest {
                                 |  update-type: version-update:semver-minor
                                 |...
                                 |
-                                |Signed-off-by: dependabot[bot] <support@github.com>
-                                """
+                                |Signed-off-by: dependabot[bot] <support@github.com>"""
                                     .trimMargin()
                             id = ""
                             localRefs += "main"

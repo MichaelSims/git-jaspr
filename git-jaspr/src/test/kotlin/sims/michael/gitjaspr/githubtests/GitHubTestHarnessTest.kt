@@ -240,7 +240,7 @@ class GitHubTestHarnessTest {
     }
 
     @Test
-    fun `can rewrite history`(info: TestInfo) {
+    fun `can rewrite history`() {
         withTestSetup {
             createCommitsFrom(
                 testCase {

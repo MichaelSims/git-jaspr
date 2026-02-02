@@ -6,7 +6,7 @@ import io.ktor.client.*
 import io.ktor.client.engine.cio.*
 import io.ktor.client.plugins.auth.*
 import io.ktor.client.plugins.auth.providers.*
-import java.net.URL
+import java.net.URI
 import kotlinx.serialization.json.Json
 import sims.michael.gitjaspr.graphql.GitHubGraphQLClient
 
@@ -56,7 +56,7 @@ class GitHubClientWiring(
     val graphQLClient: GraphQLClient<*> by lazy {
         ErrorMappingGraphQLClient(
             GitHubGraphQLClient(
-                GraphQLKtorClient(URL("https://api.github.com/graphql"), httpClient)
+                GraphQLKtorClient(URI.create("https://api.github.com/graphql").toURL(), httpClient)
             )
         )
     }

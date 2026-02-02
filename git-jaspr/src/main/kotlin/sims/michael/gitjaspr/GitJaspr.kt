@@ -7,7 +7,9 @@ import kotlin.random.Random
 import kotlin.text.RegexOption.IGNORE_CASE
 import kotlin.time.Duration.Companion.seconds
 import kotlin.time.measureTime
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.withContext
 import org.slf4j.LoggerFactory
 import sims.michael.gitjaspr.CommitParsers.getSubjectAndBodyFromFullMessage
 import sims.michael.gitjaspr.CommitParsers.trimFooters
@@ -485,7 +487,10 @@ class GitJaspr(
         val tempRefSpec = refSpec.copy(localRef = adjustedLocalRef)
         logger.trace("autoMerge refSpec: {}", tempRefSpec)
 
-        val tempDir = Files.createTempDirectory("git-jaspr-automerge-").toFile()
+        val tempDir =
+            withContext(Dispatchers.IO) {
+                Files.createTempDirectory("git-jaspr-automerge-").toFile()
+            }
         logger.debug("Created temporary directory for auto-merge: {}", tempDir.absolutePath)
 
         val remoteUri =
@@ -978,8 +983,6 @@ class GitJaspr(
     ): List<RefSpec> {
         logger.trace("getBranchesToDeleteDuringMerge {} {}", stackBeingMerged, targetRef)
         data class TargetRefToCommitId(val targetRef: String, val commitId: String)
-
-        stackBeingMerged.map { c -> c.toRemoteRefName() }
 
         val deletionCandidates =
             stackBeingMerged

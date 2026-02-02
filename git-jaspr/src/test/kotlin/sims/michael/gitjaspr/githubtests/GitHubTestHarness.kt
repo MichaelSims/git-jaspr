@@ -117,6 +117,7 @@ private constructor(
         localGit.setConfigValue("user.email", DEFAULT_COMMITTER.email)
     }
 
+    @Suppress("HttpUrlsUsage")
     suspend fun createCommitsFrom(testCase: TestCaseData) {
         requireNoDuplicatedCommitTitles(testCase)
         requireNoDuplicatedPrTitles(testCase)
@@ -231,8 +232,7 @@ private constructor(
                 .walk()
                 .maxDepth(1)
                 .filter(File::isFile)
-                .filter { file -> file.name.endsWith(".txt") }
-                .first()
+                .first { file -> file.name.endsWith(".txt") }
                 .appendText("This is an uncommitted change.\n")
         }
 
@@ -244,6 +244,7 @@ private constructor(
                 testCase.repository.collectAllCommits().associateBy(CommitData::title)
             for (pr in prs) {
                 val gitHubClient = (ghClientsByUserKey[pr.userKey] ?: gitHub)
+                @Suppress("GrazieInspection")
                 val newPullRequest =
                     PullRequest(
                         id = null,

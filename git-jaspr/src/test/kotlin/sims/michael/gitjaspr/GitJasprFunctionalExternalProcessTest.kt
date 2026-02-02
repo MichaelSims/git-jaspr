@@ -116,11 +116,11 @@ class GitJasprFunctionalExternalProcessTest : GitJasprTest {
     override fun `push fails when multiple PRs for a given commit ID exist`() = Unit
 
     // Another test that we'll opt out of, since it pushes in one pass and merges in a second one.
-    // Since we don't currently have a mechanism to control which GitHub PAT is used for the push
-    // (it'll be whichever one is enabled in the main config file of the user running the test), we
-    // run into the "Can not approve your own pull request" error for this one. This could be fixed
-    // by making the PAT selection configurable for the external process test, but for now I'm
-    // opting out.
+    // We don't currently have a mechanism to control which GitHub PAT is used for the push. It will
+    // be whichever one is enabled in the main config file of the user running the test. Because of
+    // this, we run into the "Cannot approve your own pull request" error for this one. This could
+    // be fixed by implementing a configurable PAT selection process for the external process test,
+    // but for now I'm opting out.
     override fun `merge - push and merge`() = Unit
 
     override suspend fun GitHubTestHarness.waitForChecksToConclude(

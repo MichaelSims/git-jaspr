@@ -253,14 +253,14 @@ interface GitClientTest {
             val commit1 = git.commit("Commit 1")
             val commitDate1 = commit1.commitDate
 
-            // The delay is required to verify that the commitDate is bumped even when not changing
+            // The delay is required to verify that the commitDate is bumped, even when not changing
             // any content
             val delayInMillis = 1_500L
             Thread.sleep(delayInMillis)
             val commit2 = git.commit(amend = true)
             val commitDate2 = commit2.commitDate
 
-            // The delay is required to verify that the commitDate is bumped even when not changing
+            // The delay is required to verify that the commitDate is bumped, even when not changing
             // any content
             Thread.sleep(delayInMillis)
             val commit3 = git.commit(amend = true)
@@ -311,7 +311,7 @@ interface GitClientTest {
             assertEquals(null, CommitParsers.getFooters(commit4.fullMessage)["Key1"])
             assertEquals("value2", CommitParsers.getFooters(commit4.fullMessage)["Key2"])
 
-            // Test 4: Amend with a null message and new footers (should keep message, replace
+            // Test 4: Amend with a null message and new footers (should keep the message, replace
             // footers)
             val commit5 = git.commit(footerLines = mapOf("Key3" to "value3"), amend = true)
             assertEquals("New message", commit5.shortMessage)
