@@ -131,10 +131,8 @@ class GitHubClientImpl(
     }
 
     // There's some duplicated logic here, although the creation of the pull request isn't
-    // technically
-    // duped since CreatePullRequest.Result is different from GetPullRequests.Result even though
-    // they both
-    // contain a PullRequest type
+    // technically duped since CreatePullRequest.Result is different from GetPullRequests.Result
+    // even though they both contain a PullRequest type
     @Suppress("DuplicatedCode")
     override suspend fun getPullRequestsByHeadRef(headRefName: String): List<PullRequest> {
         logger.trace("getPullRequestsByHeadRef {}", headRefName)

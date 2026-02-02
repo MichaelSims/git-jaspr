@@ -363,15 +363,19 @@ class DataClassFragmentTestDataDslGenerator(private val environment: SymbolProce
         return with(ClassNames) {
             accept(
                 object : DataClassPropertyTypeSymbolVisitor<TypeName> {
-                    // Examples:
-                    //   PropertyWithNullability<String, NotNull> -> String
-                    //   PropertyWithNullability<String, Nullable> -> String?
+                    /*
+                    Examples:
+                    PropertyWithNullability<String, NotNull> -> String
+                    PropertyWithNullability<String, Nullable> -> String?
+                    */
                     override fun visitProperty(nestedType: KSType, nullable: Boolean): TypeName =
                         nestedType.toTypeName().copy(nullable = nullable)
 
-                    // Examples:
-                    //   NestedPropertyWithNullability<Egg, NotNull> -> EggDataBuilder<EggData>
-                    //   NestedPropertyWithNullability<Egg, Nullable> -> EggDataBuilder<EggData?>
+                    /*
+                    Examples:
+                    NestedPropertyWithNullability<Egg, NotNull> -> EggDataBuilder<EggData>
+                    NestedPropertyWithNullability<Egg, Nullable> -> EggDataBuilder<EggData?>
+                    */
                     override fun visitNestedProperty(
                         nestedType: KSType,
                         nullable: Boolean,
@@ -389,21 +393,13 @@ class DataClassFragmentTestDataDslGenerator(private val environment: SymbolProce
                         iterableType: KSType,
                     ): TypeName =
                         if (nestedType.isScalarProperty()) {
-                            // Examples:
-                            //   ArrayPropertyWithNullability<PropertyWithNullability<String,
-                            // NotNull>,
-                            // NotNull, List<*>> -> ScalarIterableBuilder<List<String>, String>
-                            //   ArrayPropertyWithNullability<PropertyWithNullability<String,
-                            // Nullable>,
-                            // NotNull, List<*>> -> ScalarIterableBuilder<List<String?>, String?>
-                            //   ArrayPropertyWithNullability<PropertyWithNullability<String,
-                            // NotNull>,
-                            // Nullable, List<*>> ->
-                            //     ScalarIterableBuilder<List<String>?, String>
-                            //   ArrayPropertyWithNullability<PropertyWithNullability<String,
-                            // Nullable>,
-                            // Nullable, List<*>> ->
-                            //     ScalarIterableBuilder<List<String?>?, String?>
+                            /*
+                            Examples:
+                            ArrayPropertyWithNullability<PropertyWithNullability<String, NotNull>, NotNull, List<*>> -> ScalarIterableBuilder<List<String>, String>
+                            ArrayPropertyWithNullability<PropertyWithNullability<String, Nullable>, NotNull, List<*>> -> ScalarIterableBuilder<List<String?>, String?>
+                            ArrayPropertyWithNullability<PropertyWithNullability<String, NotNull>, Nullable, List<*>> -> ScalarIterableBuilder<List<String>?, String>
+                            ArrayPropertyWithNullability<PropertyWithNullability<String, Nullable>, Nullable, List<*>> -> ScalarIterableBuilder<List<String?>?, String?>
+                             */
                             val builderType = nestedType.builderType()
                             scalarIterableBuilder.parameterizedBy(
                                 (iterableType.declaration as KSClassDeclaration)
@@ -413,19 +409,13 @@ class DataClassFragmentTestDataDslGenerator(private val environment: SymbolProce
                                 builderType,
                             )
                         } else {
-                            // Examples:
-                            //   ArrayPropertyWithNullability<NestedPropertyWithNullability<Egg,
-                            // NotNull>, NotNull, List<*>> -> IterableBuilder<List<EggData>,
-                            // EggData, EggDataBuilder<EggData>>
-                            //   ArrayPropertyWithNullability<NestedPropertyWithNullability<Egg,
-                            // Nullable>, NotNull, List<*>> -> IterableBuilder<List<EggData?>,
-                            // EggData?, EggDataBuilder<EggData?>>
-                            //   ArrayPropertyWithNullability<NestedPropertyWithNullability<Egg,
-                            // NotNull>, Nullable, List<*>> -> IterableBuilder<List<EggData>?,
-                            // EggData, EggDataBuilder<EggData>>
-                            //   ArrayPropertyWithNullability<NestedPropertyWithNullability<Egg,
-                            // Nullable>, Nullable, List<*>> -> IterableBuilder<List<EggData?>?,
-                            // EggData?, EggDataBuilder<EggData?>>
+                            /*
+                            Examples:
+                            ArrayPropertyWithNullability<NestedPropertyWithNullability<Egg, NotNull>, NotNull, List<*>> -> IterableBuilder<List<EggData>, EggData, EggDataBuilder<EggData>>
+                            ArrayPropertyWithNullability<NestedPropertyWithNullability<Egg, Nullable>, NotNull, List<*>> -> IterableBuilder<List<EggData?>, EggData?, EggDataBuilder<EggData?>>
+                            ArrayPropertyWithNullability<NestedPropertyWithNullability<Egg, NotNull>, Nullable, List<*>> -> IterableBuilder<List<EggData>?, EggData, EggDataBuilder<EggData>>
+                            ArrayPropertyWithNullability<NestedPropertyWithNullability<Egg, Nullable>, Nullable, List<*>> -> IterableBuilder<List<EggData?>?, EggData?, EggDataBuilder<EggData?>>
+                            */
                             val elementBuilderType =
                                 nestedType.builderType() as ParameterizedTypeName
                             val whatItBuilds = elementBuilderType.typeArguments.first()
@@ -441,48 +431,26 @@ class DataClassFragmentTestDataDslGenerator(private val environment: SymbolProce
 
                     override fun visitMapProperty(nestedType: KSType, nullable: Boolean): TypeName =
                         if (nestedType.isScalarProperty()) {
-                            // Examples:
-                            //   MapPropertyWithNullability<PropertyWithNullability<String,
-                            // NotNull>,
-                            // NotNull> ->
-                            //     ScalarMapBuilder<Map<String, String>, String>
-                            //   MapPropertyWithNullability<PropertyWithNullability<String,
-                            // Nullable>,
-                            // NotNull> ->
-                            //     ScalarMapBuilder<Map<String, String?>, String?>
-                            //   MapPropertyWithNullability<PropertyWithNullability<String,
-                            // NotNull>,
-                            // Nullable> ->
-                            //     ScalarMapBuilder<Map<String, String>?, String>
-                            //   MapPropertyWithNullability<PropertyWithNullability<String,
-                            // Nullable>,
-                            // Nullable> ->
-                            //     ScalarMapBuilder<Map<String, String?>?, String?>
+                            /*
+                            Examples:
+                            MapPropertyWithNullability<PropertyWithNullability<String, NotNull>, NotNull> -> ScalarMapBuilder<Map<String, String>, String>
+                            MapPropertyWithNullability<PropertyWithNullability<String, Nullable>, NotNull> -> ScalarMapBuilder<Map<String, String?>, String?>
+                            MapPropertyWithNullability<PropertyWithNullability<String, NotNull>, Nullable> -> ScalarMapBuilder<Map<String, String>?, String>
+                            MapPropertyWithNullability<PropertyWithNullability<String, Nullable>, Nullable> -> ScalarMapBuilder<Map<String, String?>?, String?>
+                             */
                             scalarMapBuilder.parameterizedBy(
                                 map.parameterizedBy(string, nestedType.builderType())
                                     .copy(nullable = nullable),
                                 nestedType.builderType(),
                             )
                         } else {
-                            // Examples:
-                            //   MapPropertyWithNullability<NestedPropertyWithNullability<Egg,
-                            // NotNull>,
-                            // NotNull> ->
-                            //     MapBuilder<Map<String, EggData>, EggData,
-                            // EggDataBuilder<EggData>>
-                            //   MapPropertyWithNullability<NestedPropertyWithNullability<Egg,
-                            // Nullable>, NotNull> ->
-                            //     MapBuilder<Map<String, EggData?>, EggData?,
-                            // EggDataBuilder<EggData?>>
-                            //   MapPropertyWithNullability<NestedPropertyWithNullability<Egg,
-                            // NotNull>,
-                            // Nullable> ->
-                            //     MapBuilder<Map<String, EggData>?, EggData,
-                            // EggDataBuilder<EggData>>
-                            //   MapPropertyWithNullability<NestedPropertyWithNullability<Egg,
-                            // Nullable>, Nullable> ->
-                            //     MapBuilder<Map<String, EggData?>?, EggData?,
-                            // EggDataBuilder<EggData?>>
+                            /*
+                            Examples:
+                            MapPropertyWithNullability<NestedPropertyWithNullability<Egg, NotNull>, NotNull> -> MapBuilder<Map<String, EggData>, EggData, EggDataBuilder<EggData>>
+                            MapPropertyWithNullability<NestedPropertyWithNullability<Egg, Nullable>, NotNull> -> MapBuilder<Map<String, EggData?>, EggData?, EggDataBuilder<EggData?>>
+                            MapPropertyWithNullability<NestedPropertyWithNullability<Egg, NotNull>, Nullable> -> MapBuilder<Map<String, EggData>?, EggData, EggDataBuilder<EggData>>
+                            MapPropertyWithNullability<NestedPropertyWithNullability<Egg, Nullable>, Nullable> -> MapBuilder<Map<String, EggData?>?, EggData?, EggDataBuilder<EggData?>>
+                            */
                             val mapValueBuilderType =
                                 nestedType.builderType() as ParameterizedTypeName
                             val whatItBuilds = mapValueBuilderType.typeArguments.first()

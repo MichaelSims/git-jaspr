@@ -1312,11 +1312,10 @@ interface GitJasprTest {
 
     @Test
     fun `adding commit ID does not indent subject line`() {
-        // assert the absence of a bug that used to occur with commits that had message bodies...
-        // the subject and footer
-        // lines would be indented, which was invalid and would cause the commit(s) to effectively
-        // have no ID
-        // if this test doesn't throw, then we're good
+        // Assert the absence of a bug that used to occur with commits that had message bodies...
+        // The subject and footer lines would be indented, which was invalid and would cause the
+        // commit(s) to effectively have no ID.
+        // If this test doesn't throw, then we're good.
         withTestSetup(useFakeRemote) {
             createCommitsFrom(
                 testCase {
@@ -2583,10 +2582,9 @@ interface GitJasprTest {
             createCommitsFrom(
                 testCase {
                     // Intentionally repeating the commits here... this is because GitHubTestHarness
-                    // will not "notice"
-                    // that the commits should pass verification unless they are defined again as
-                    // part of this pass.
-                    // I should fix that, but this works for now.
+                    // will not "notice" that the commits should pass verification unless they are
+                    // defined again as part of this pass. I should fix that, but this works for
+                    // now.
                     repository {
                         commit {
                             title = "one"
@@ -4402,8 +4400,7 @@ interface GitJasprTest {
         namedStackInfo: NamedStackInfo? = null,
     ): String {
         // Extract commit hashes and URLs from the actual string and put them into the expected. I
-        // can't predict what
-        // they will be, so I only want to validate that they are present.
+        // can't predict what they will be, so I only want to validate that they are present.
         val extracts =
             "] (.*?) : (?:(http.*?) : )?.*?\n"
                 .toRegex()
@@ -4424,8 +4421,7 @@ interface GitJasprTest {
             }
         val namedStackInfoString = buildString {
             // As above, this duplicates the string building logic defined in GitJaspr, but this is
-            // so any changes
-            // to the rendering is done very deliberately.
+            // so any changes to the rendering is done very deliberately.
             if (namedStackInfo != null) {
                 appendLine()
                 appendLine("Stack name: ${namedStackInfo.name}")
