@@ -4,7 +4,7 @@ kotlin = "2.3.0"
 kotlinpoet = "2.2.0"
 ksp = "2.3.4"
 jgit = "7.4.0.202509020913-r"
-ktfmt = "0.60"
+ktfmt = "0.61"
 
 [plugins]
 kotlin = { id = "org.jetbrains.kotlin.jvm", version.ref = "kotlin" }
