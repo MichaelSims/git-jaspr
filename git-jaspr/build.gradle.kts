@@ -1,6 +1,7 @@
 @file:Suppress("UnstableApiUsage")
 
 import com.expediagroup.graphql.plugin.gradle.config.GraphQLSerializer
+import org.gradle.api.plugins.ApplicationPlugin.APPLICATION_GROUP
 
 plugins {
     alias(libs.plugins.kotlin)
@@ -121,5 +122,28 @@ spotless {
     kotlinGradle {
         toggleOffOn()
         ktfmt(libs.versions.ktfmt.get()).kotlinlangStyle()
+    }
+}
+
+// Create Gradle tasks to run each Jaspr sub-command.
+// The most straightforward way to run the main class in IDEA creates a run configuration that uses
+// a Gradle task that will be marked up to date unless code changes have been made since the last
+// run. This is inconvenient when developing, so the following tasks avoid this by never being up to
+// date. To run in IDEA, use CTRL-CTRL to Run Anything, then run (for example):
+// `./gradlew :git-jaspr:jaspr-status`
+// Configure the various `jasprRun*` properties in `~/.gradle/gradle.properties` to control the
+// working directory, log level, etc.
+val subCommands = listOf("status", "push", "merge", "auto-merge", "clean", "install-commit-id-hook")
+
+for (subCommand in subCommands) {
+    val taskName = "jaspr-$subCommand"
+    task<JavaExec>(taskName) {
+        group = APPLICATION_GROUP
+        mainClass.set("sims.michael.gitjaspr.Cli")
+        classpath = sourceSets.main.get().runtimeClasspath
+        outputs.upToDateWhen { false }
+        args(subCommand, "--log-level=${properties["jasprRunLogLevel"] as? String ?: "INFO"}")
+        workingDir =
+            file(properties["jasprRunWorkingDir"] as? String ?: project.rootDir.absolutePath)
     }
 }
