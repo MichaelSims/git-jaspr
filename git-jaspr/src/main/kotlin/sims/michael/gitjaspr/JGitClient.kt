@@ -516,6 +516,26 @@ class JGitClient(
         return useGit { git -> !git.repository.exactRef(Constants.HEAD).isSymbolic }
     }
 
+    override fun getShortMessages(refs: List<String>): Map<String, String?> {
+        logger.trace("getShortMessages {}", refs)
+        return useGit { git ->
+            val repo = git.repository
+            refs.associateWith { ref ->
+                repo.resolve(ref)?.let { objectId -> repo.parseCommit(objectId).shortMessage }
+            }
+        }
+    }
+
+    override fun getCommits(refs: List<String>): Map<String, Commit?> {
+        logger.trace("getCommits {}", refs)
+        return useGit { git ->
+            val repo = git.repository
+            refs.associateWith { ref ->
+                repo.resolve(ref)?.let { objectId -> repo.parseCommit(objectId).toCommit(git) }
+            }
+        }
+    }
+
     private inline fun <T> useGit(block: (Git) -> T): T = Git.open(workingDirectory).use(block)
 
     companion object {

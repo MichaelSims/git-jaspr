@@ -128,14 +128,24 @@ class CliGitClient(
                 "-l",
                 "--format=%(refname:lstrip=2)${GIT_FORMAT_SEPARATOR}%(objectname:short)",
             )
-        return executeCommand(command).output.lines.mapNotNull { line ->
-            val (nameWithRemote, hash) = line.split(GIT_FORMAT_SEPARATOR)
-            val (thisRemoteName, name) = nameWithRemote.split("/", limit = 2)
-            if (thisRemoteName == remoteName && name != Constants.HEAD) {
-                RemoteBranch(name, log(hash, 1).single())
-            } else {
-                null
+        // Collect branch names and hashes first
+        data class BranchWithHash(val name: String, val hash: String)
+        val branchesWithHashes =
+            executeCommand(command).output.lines.mapNotNull { line ->
+                val (nameWithRemote, hash) = line.split(GIT_FORMAT_SEPARATOR)
+                val (thisRemoteName, name) = nameWithRemote.split("/", limit = 2)
+                if (thisRemoteName == remoteName && name != Constants.HEAD) {
+                    BranchWithHash(name, hash)
+                } else {
+                    null
+                }
             }
+        // Batch fetch all commits
+        val hashes = branchesWithHashes.map(BranchWithHash::hash)
+        val commits = getCommits(hashes)
+        // Build the result
+        return branchesWithHashes.mapNotNull { (name, hash) ->
+            commits[hash]?.let { commit -> RemoteBranch(name, commit) }
         }
     }
 
@@ -429,6 +439,70 @@ class CliGitClient(
     override fun isHeadDetached(): Boolean {
         logger.trace("isHeadDetached")
         return getCurrentBranchName().isEmpty()
+    }
+
+    override fun getShortMessages(refs: List<String>): Map<String, String?> {
+        logger.trace("getShortMessages {}", refs)
+        if (refs.isEmpty()) return emptyMap()
+        // Get all full hashes in one call
+        val fullHashes =
+            executeCommand(listOf("git", "rev-parse") + refs)
+                .output
+                .lines
+                .filter(String::isNotBlank)
+        val refToFullHash = refs.zip(fullHashes).toMap()
+        // Get all subjects in one call
+        val format = "%H${GIT_FORMAT_SEPARATOR}%s"
+        val hashToSubject =
+            executeCommand(listOf("git", "log", "--no-walk", "--format=$format") + refs)
+                .output
+                .lines
+                .filter(String::isNotBlank)
+                .associate { line ->
+                    val (fullHash, subject) = line.split(GIT_FORMAT_SEPARATOR, limit = 2)
+                    fullHash to subject
+                }
+        return refs.associateWith { ref -> refToFullHash[ref]?.let { hashToSubject[it] } }
+    }
+
+    override fun getCommits(refs: List<String>): Map<String, Commit?> {
+        logger.trace("getCommits {}", refs)
+        if (refs.isEmpty()) return emptyMap()
+        // Get all full hashes in one call
+        val fullHashes =
+            executeCommand(listOf("git", "rev-parse") + refs)
+                .output
+                .lines
+                .filter(String::isNotBlank)
+        val refToFullHash = refs.zip(fullHashes).toMap()
+        // Get all commits in one call, prepending full hash for mapping
+        val prettyFormat =
+            listOf(
+                    "--pretty=format:%H", // full hash for mapping
+                    "%h", // short hash for Commit
+                    "%s", // subject
+                    "%aN", // author name
+                    "%aE", // author email
+                    "%cN", // committer name
+                    "%cE", // committer email
+                    "%(trailers:key=commit-id,separator=$GIT_LOG_TRAILER_SEPARATOR,valueonly=true)",
+                    "%ct", // commit timestamp
+                    "%at", // author timestamp
+                    "%B", // raw body
+                )
+                .joinToString(GIT_FORMAT_SEPARATOR)
+        val hashToCommit =
+            executeCommand(listOf("git", "log", "--no-walk", "-z", prettyFormat) + refs)
+                .output
+                .string
+                .split('\u0000')
+                .filter(String::isNotBlank)
+                .associate { entry ->
+                    val fullHash = entry.substringBefore(GIT_FORMAT_SEPARATOR)
+                    val commitEntry = entry.substringAfter(GIT_FORMAT_SEPARATOR)
+                    fullHash to CommitParsers.parseCommitLogEntry(commitEntry)
+                }
+        return refs.associateWith { ref -> refToFullHash[ref]?.let { hashToCommit[it] } }
     }
 
     private fun getIdentEnvironmentMap(committer: Ident?, author: Ident?) = buildMap {

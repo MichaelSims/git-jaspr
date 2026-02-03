@@ -102,6 +102,12 @@ interface GitClient {
 
     fun isHeadDetached(): Boolean
 
+    /** Returns short messages for multiple refs in a single operation. */
+    fun getShortMessages(refs: List<String>): Map<String, String?>
+
+    /** Returns full Commit objects for multiple refs in a single operation. */
+    fun getCommits(refs: List<String>): Map<String, Commit?>
+
     companion object {
         const val HEAD = Constants.HEAD
         const val R_HEADS = Constants.R_HEADS

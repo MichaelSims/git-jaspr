@@ -9,6 +9,7 @@ import kotlin.time.Duration.Companion.seconds
 import kotlin.time.measureTime
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import org.slf4j.LoggerFactory
 import sims.michael.gitjaspr.CommitParsers.getSubjectAndBodyFromFullMessage
@@ -36,6 +37,14 @@ class GitJaspr(
     suspend fun getStatusString(
         refSpec: RefSpec = RefSpec(DEFAULT_LOCAL_OBJECT, DEFAULT_TARGET_REF)
     ): String {
+        gitClient.fetch(config.remoteName)
+        return getStatusString(refSpec, gitClient.getRemoteBranches(config.remoteName))
+    }
+
+    suspend fun getStatusString(
+        refSpec: RefSpec = RefSpec(DEFAULT_LOCAL_OBJECT, DEFAULT_TARGET_REF),
+        remoteBranches: List<RemoteBranch>,
+    ): String {
         logger.trace("getStatusString {}", refSpec)
         val remoteName = config.remoteName
         gitClient.fetch(remoteName)
@@ -43,7 +52,7 @@ class GitJaspr(
         val stack = gitClient.getLocalCommitStack(remoteName, refSpec.localRef, refSpec.remoteRef)
         if (stack.isEmpty()) return "Stack is empty.\n"
 
-        val statuses = getRemoteCommitStatuses(stack)
+        val statuses = getRemoteCommitStatuses(stack, remoteBranches)
         val commitsWithDuplicateIds =
             statuses
                 .filter { status -> status.localCommit.id != null }
@@ -88,7 +97,7 @@ class GitJaspr(
                 appendLine(status.localCommit.shortMessage)
             }
 
-            appendNamedStackInfo(stack)
+            appendNamedStackInfo(stack, remoteBranches)
 
             if (numCommitsBehindBase > 0) {
                 appendLine()
@@ -117,14 +126,17 @@ class GitJaspr(
         }
     }
 
-    private fun StringBuilder.appendNamedStackInfo(stack: List<Commit>) {
+    private fun StringBuilder.appendNamedStackInfo(
+        stack: List<Commit>,
+        remoteBranches: List<RemoteBranch>,
+    ) {
         val remoteName = config.remoteName
         data class NamedStackInfo(
             val name: String,
             val numCommitsAhead: Int,
             val numCommitsBehind: Int,
         )
-        val stackName = (getExistingStackName(stack) as? Found)?.name
+        val stackName = (getExistingStackName(stack, remoteBranches) as? Found)?.name
         if (stackName != null) {
             val headStackCommit = stack.last().hash
             val trackingBranch = "${config.remoteName}/$stackName"
@@ -177,12 +189,18 @@ class GitJaspr(
      * stack. A commit contained in multiple stacks has ambiguous ownership, and this returns null
      * for such stacks.
      */
-    private fun getExistingStackName(stack: List<Commit>): NamedStackSearchResult {
+    private fun getExistingStackName(stack: List<Commit>): NamedStackSearchResult =
+        getExistingStackName(stack, gitClient.getRemoteBranches(config.remoteName))
+
+    private fun getExistingStackName(
+        stack: List<Commit>,
+        remoteBranches: List<RemoteBranch>,
+    ): NamedStackSearchResult {
         logger.trace("getExistingStackName")
         require(stack.isNotEmpty())
 
         val existingNamedStacks =
-            gitClient.getRemoteBranches(config.remoteName).filter { branch ->
+            remoteBranches.filter { branch ->
                 RemoteNamedStackRef.parse(branch.name, config.remoteNamedStackBranchPrefix) != null
             }
 
@@ -369,8 +387,8 @@ class GitJaspr(
         val existingPrsByCommitId = pullRequestsRebased.associateBy(PullRequest::commitId)
 
         val isDraftRegex = "^(draft|wip)\\b.*$".toRegex(IGNORE_CASE)
-        val remoteBranchNames =
-            gitClient.getRemoteBranches(config.remoteName).map(RemoteBranch::name)
+        val remoteBranchesAfterPush = gitClient.getRemoteBranches(config.remoteName)
+        val remoteBranchNames = remoteBranchesAfterPush.map(RemoteBranch::name)
         val prsToMutate =
             stack
                 .windowedPairs()
@@ -420,8 +438,10 @@ class GitJaspr(
         logger.trace("updateDescriptions second pass {} {}", stack, prsToMutate)
         val prs = ghClient.getPullRequests(stack).filterByMatchingTargetRef()
         val prsNeedingBodyUpdate = prs.updateDescriptionsWithStackInfo(stack)
-        for (pr in prsNeedingBodyUpdate) {
-            ghClient.updatePullRequest(pr)
+        withContext(Dispatchers.IO) {
+            for (pr in prsNeedingBodyUpdate) {
+                launch { ghClient.updatePullRequest(pr) }
+            }
         }
         logger.info(
             "Updated descriptions for {} pull {}",
@@ -429,7 +449,7 @@ class GitJaspr(
             requestOrRequests(prsToMutate.size),
         )
 
-        print(getStatusString(refSpec))
+        print(getStatusString(refSpec, remoteBranchesAfterPush))
     }
 
     suspend fun merge(refSpec: RefSpec) {
@@ -710,9 +730,11 @@ class GitJaspr(
             }
 
         val (orphanedBranches, emptyNamedStackBranches, abandonedBranches) = updatedPlan
+        val branchesNeedingMessages = orphanedBranches + abandonedBranches
+        val shortMessages =
+            gitClient.getShortMessages(branchesNeedingMessages.map { "${config.remoteName}/$it" })
         for (branch in orphanedBranches) {
-            val shortMessage =
-                gitClient.log("${config.remoteName}/$branch", 1).singleOrNull()?.shortMessage
+            val shortMessage = shortMessages["${config.remoteName}/$branch"]
             logger.info(
                 "{}{} is orphaned",
                 branch,
@@ -723,8 +745,7 @@ class GitJaspr(
             logger.info("{} is empty (fully merged)", branch)
         }
         for (branch in abandonedBranches) {
-            val shortMessage =
-                gitClient.log("${config.remoteName}/$branch", 1).singleOrNull()?.shortMessage
+            val shortMessage = shortMessages["${config.remoteName}/$branch"]
             logger.info(
                 "{}{} is abandoned (open PR not reachable by any named stack)",
                 branch,
@@ -747,31 +768,35 @@ class GitJaspr(
     }
 
     internal suspend fun getOrphanedBranches(): List<String> {
-        logger.trace("getOrphanedBranches")
-        val pullRequests =
+        gitClient.fetch(config.remoteName, prune = true)
+        val remoteBranches = gitClient.getRemoteBranches(config.remoteName)
+        val pullRequestHeadRefs =
             ghClient
                 .getPullRequests()
                 .filterByMatchingTargetRef()
                 .map(PullRequest::headRefName)
                 .toSet()
-        gitClient.fetch(config.remoteName, prune = true)
-        val orphanedBranches =
-            gitClient.getRemoteBranches(config.remoteName).map(RemoteBranch::name).filter { name ->
-                val remoteRef = RemoteRef.parse(name, config.remoteBranchPrefix)
-                if (remoteRef != null) {
-                    remoteRef.copy(revisionNum = null).name() !in pullRequests
-                } else {
-                    false
-                }
-            }
-        return orphanedBranches
+        return getOrphanedBranches(remoteBranches, pullRequestHeadRefs)
     }
 
-    internal fun getEmptyNamedStackBranches(): List<String> {
+    internal fun getOrphanedBranches(
+        remoteBranches: List<RemoteBranch>,
+        pullRequestHeadRefs: Set<String>,
+    ): List<String> {
+        logger.trace("getOrphanedBranches")
+        return remoteBranches.map(RemoteBranch::name).filter { name ->
+            val remoteRef = RemoteRef.parse(name, config.remoteBranchPrefix)
+            if (remoteRef != null) {
+                remoteRef.copy(revisionNum = null).name() !in pullRequestHeadRefs
+            } else {
+                false
+            }
+        }
+    }
+
+    internal fun getEmptyNamedStackBranches(remoteBranches: List<RemoteBranch>): List<String> {
         logger.trace("getEmptyNamedStackBranches")
-        val remoteBranchNames =
-            gitClient.getRemoteBranches(config.remoteName).map(RemoteBranch::name)
-        return remoteBranchNames.filter { branchName ->
+        return remoteBranches.map(RemoteBranch::name).filter { branchName ->
             val parts = RemoteNamedStackRef.parse(branchName, config.remoteNamedStackBranchPrefix)
             if (parts != null) {
                 // Named stack branch - check if it has commits not in its target
@@ -792,9 +817,11 @@ class GitJaspr(
     }
 
     /** Returns a list of jaspr branches with open PRs that are not reachable by any named stack. */
-    internal suspend fun getAbandonedBranches(): List<String> {
+    internal fun getAbandonedBranches(
+        remoteBranches: List<RemoteBranch>,
+        pullRequestHeadRefs: Set<String>,
+    ): List<String> {
         logger.trace("getAbandonedBranches")
-        val remoteBranches = gitClient.getRemoteBranches(config.remoteName)
         val namedStackBranches =
             remoteBranches.filter { branch ->
                 RemoteNamedStackRef.parse(branch.name, config.remoteNamedStackBranchPrefix) != null
@@ -821,16 +848,14 @@ class GitJaspr(
                 .toSet()
 
         // Return abandoned branches (those with open PRs not reachable by any of our named stacks)
-        val allPrs = ghClient.getPullRequests().filterByMatchingTargetRef()
-        return remoteJasprBranches
+        val branchesWithPrs =
+            remoteJasprBranches.filter { branch -> branch.name in pullRequestHeadRefs }
+        val refsToCheck = branchesWithPrs.map { "${config.remoteName}/${it.name}" }
+        val commits = gitClient.getCommits(refsToCheck)
+        return branchesWithPrs
             .filter { branch ->
-                val headRefName = branch.name
-                if (headRefName in allPrs.map(PullRequest::headRefName)) {
-                    gitClient.log("${config.remoteName}/${headRefName}", 1).single().hash !in
-                        unmergedAndReachableFromNamedStacks
-                } else {
-                    false
-                }
+                val ref = "${config.remoteName}/${branch.name}"
+                commits[ref]?.hash !in unmergedAndReachableFromNamedStacks
             }
             .map(RemoteBranch::name)
     }
@@ -853,27 +878,36 @@ class GitJaspr(
     }
 
     internal suspend fun getCleanPlan(): CleanPlan {
-        gitClient.fetch(config.remoteName)
-        val allOrphanedBranches = getOrphanedBranches()
-        val emptyNamedStackBranches = getEmptyNamedStackBranches()
+        logger.trace("getCleanPlan")
+        gitClient.fetch(config.remoteName, prune = true)
+        val remoteBranches = gitClient.getRemoteBranches(config.remoteName)
+        val pullRequestHeadRefs =
+            ghClient
+                .getPullRequests()
+                .filterByMatchingTargetRef()
+                .map(PullRequest::headRefName)
+                .toSet()
+
+        val allOrphanedBranches = getOrphanedBranches(remoteBranches, pullRequestHeadRefs)
+        val emptyNamedStackBranches = getEmptyNamedStackBranches(remoteBranches)
         val allAbandonedBranches =
             if (config.cleanAbandonedPrs) {
-                getAbandonedBranches()
+                getAbandonedBranches(remoteBranches, pullRequestHeadRefs)
             } else {
                 emptyList()
             }
 
         // Filter orphaned and abandoned branches by ownership unless cleanAllCommits is true
-        val remoteBranches = gitClient.getRemoteBranches(config.remoteName)
         val remoteBranchesById = remoteBranches.associateBy(RemoteBranch::name)
+
+        val userIdent = getCurrentUserIdent()
 
         val orphanedBranches =
             if (config.cleanAllCommits) {
                 allOrphanedBranches
             } else {
                 allOrphanedBranches.filter { branchName ->
-                    remoteBranchesById[branchName]?.let { branch -> ownsCommit(branch.commit) }
-                        ?: false
+                    userIdent == remoteBranchesById[branchName]?.commit?.author
                 }
             }
 
@@ -882,8 +916,7 @@ class GitJaspr(
                 allAbandonedBranches
             } else {
                 allAbandonedBranches.filter { branchName ->
-                    remoteBranchesById[branchName]?.let { branch -> ownsCommit(branch.commit) }
-                        ?: false
+                    userIdent == remoteBranchesById[branchName]?.commit?.author
                 }
             }
 
@@ -1041,9 +1074,22 @@ class GitJaspr(
         }
     }
 
-    internal suspend fun getRemoteCommitStatuses(stack: List<Commit>): List<RemoteCommitStatus> {
+    internal suspend fun getRemoteCommitStatuses(stack: List<Commit>): List<RemoteCommitStatus> =
+        getRemoteCommitStatuses(stack, gitClient.getRemoteBranches(config.remoteName))
+
+    internal suspend fun getRemoteCommitStatuses(
+        stack: List<Commit>,
+        remoteBranches: List<RemoteBranch>,
+    ): List<RemoteCommitStatus> {
         logger.trace("getRemoteCommitStatuses")
-        val remoteBranchesById = gitClient.getRemoteBranchesById(config.remoteName)
+        val remoteBranchesById =
+            remoteBranches
+                .mapNotNull { branch ->
+                    RemoteRef.parse(branch.name, config.remoteBranchPrefix)
+                        ?.takeIf { parts -> parts.revisionNum == null }
+                        ?.let { it.commitId to branch }
+                }
+                .toMap()
         val prsById =
             if (stack.isNotEmpty()) {
                 ghClient
@@ -1376,11 +1422,6 @@ class GitJaspr(
         val email = gitClient.getConfigValue("user.email") ?: "unknown@unknown.com"
         return Ident(name, email)
     }
-
-    /**
-     * Check if the current user owns a commit (i.e., the commit's author matches the current user).
-     */
-    private fun ownsCommit(commit: Commit) = commit.author == getCurrentUserIdent()
 
     /**
      * Generate a unique stack name by trying random names and checking for collisions. Uses

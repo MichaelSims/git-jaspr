@@ -7,7 +7,7 @@ query getPullRequestsByHeadRef(
         ...RateLimitFields
     }
     repository(owner:$repo_owner, name:$repo_name) {
-        pullRequests(headRefName:$head_ref_name, first:60) {
+        pullRequests(headRefName: $head_ref_name, states:[OPEN], first:60) {
             nodes {
                 ...PullRequest
             }

@@ -5,18 +5,21 @@ import com.apollographql.apollo.api.ApolloResponse
 import com.apollographql.apollo.api.Operation
 import com.apollographql.apollo.api.Optional
 import java.util.concurrent.atomic.AtomicReference
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
+import kotlinx.coroutines.withContext
 import org.slf4j.Logger
 import org.slf4j.LoggerFactory
+import sims.michael.gitjaspr.RemoteRefEncoding.RemoteRef
 import sims.michael.gitjaspr.RemoteRefEncoding.getCommitIdFromRemoteRef
 import sims.michael.gitjaspr.generated.AddPullRequestReviewMutation
 import sims.michael.gitjaspr.generated.ClosePullRequestMutation
 import sims.michael.gitjaspr.generated.CreatePullRequestMutation
 import sims.michael.gitjaspr.generated.GetPullRequestsByHeadRefQuery
-import sims.michael.gitjaspr.generated.GetPullRequestsQuery
 import sims.michael.gitjaspr.generated.GetRepositoryIdQuery
 import sims.michael.gitjaspr.generated.UpdatePullRequestMutation
 import sims.michael.gitjaspr.generated.fragment.PullRequest as RawPullRequest
-import sims.michael.gitjaspr.generated.fragment.RateLimitFields
 import sims.michael.gitjaspr.generated.type.AddPullRequestReviewInput
 import sims.michael.gitjaspr.generated.type.ClosePullRequestInput
 import sims.michael.gitjaspr.generated.type.CreatePullRequestInput
@@ -39,17 +42,13 @@ interface GitHubClient {
     suspend fun approvePullRequest(pullRequest: PullRequest)
 
     fun autoClosePrs()
-
-    companion object {
-        const val GET_PULL_REQUESTS_DEFAULT_PAGE_SIZE = 100
-    }
 }
 
 class GitHubClientImpl(
     private val apolloClient: ApolloClient,
-    private val gitHubInfo: GitHubInfo,
+    private val gitClient: GitClient,
+    private val config: Config,
     private val remoteBranchPrefix: String,
-    private val getPullRequestsPageSize: Int,
 ) : GitHubClient {
     private val logger = LoggerFactory.getLogger(GitHubClient::class.java)
 
@@ -69,50 +68,30 @@ class GitHubClientImpl(
         // list. It'd be nice if the server could filter this for us, but there doesn't seem to be a
         // good way to do that.
         val ids = commitFilter?.requireNoNulls()?.toSet()
-
-        // Recursively fetch all PR pages and concatenate them into a single list
-        suspend fun getPullRequests(
-            afterCursor: String? = null
-        ): Pair<List<RawPullRequest>, RateLimitFields?> {
-            val query =
-                GetPullRequestsQuery(
-                    gitHubInfo.owner,
-                    gitHubInfo.name,
-                    Optional.present(getPullRequestsPageSize),
-                    Optional.presentIfNotNull(afterCursor),
-                )
-            val resultData = apolloClient.query(query).execute().also(::checkNoErrors).data
-            val pullRequests = resultData?.repository?.pullRequests
-            val pageInfo = pullRequests?.pageInfo
-            val nodes =
-                pullRequests?.nodes.orEmpty().filterNotNull() +
-                    if (pageInfo?.hasNextPage == true) {
-                        getPullRequests(pageInfo.endCursor).first
-                    } else {
-                        emptyList()
-                    }
-            return nodes to resultData?.rateLimit
-        }
-        val (prs, rateLimit) = getPullRequests()
-
-        logger.logRateLimitInfo(rateLimit?.toRateLimitInfo())
-        return prs.mapNotNull { pr ->
-                val commitId = getCommitIdFromRemoteRef(pr.headRefName, remoteBranchPrefix)
-                if (ids?.contains(commitId) != false) {
-                    pr.toPullRequest(commitId)
-                } else {
-                    null
+        return withContext(Dispatchers.IO) {
+            gitClient
+                .getRemoteBranches(config.remoteName)
+                .mapNotNull { branch ->
+                    RemoteRef.parse(branch.name, config.remoteBranchPrefix)
+                        ?.copy(revisionNum = null)
                 }
-            }
-            .also { pullRequests ->
-                logger.trace("getPullRequestsById {}: {}", pullRequests.size, pullRequests)
-            }
+                .distinct()
+                .filter { ids?.contains(it.commitId) != false }
+                .map { ref -> async { getPullRequestsByHeadRef(ref.name()) } }
+                .awaitAll()
+                .flatten()
+        }
     }
 
     @Suppress("DuplicatedCode")
     override suspend fun getPullRequestsByHeadRef(headRefName: String): List<PullRequest> {
         logger.trace("getPullRequestsByHeadRef {}", headRefName)
-        val query = GetPullRequestsByHeadRefQuery(gitHubInfo.owner, gitHubInfo.name, headRefName)
+        val query =
+            GetPullRequestsByHeadRefQuery(
+                config.gitHubInfo.owner,
+                config.gitHubInfo.name,
+                headRefName,
+            )
         val response = apolloClient.query(query).execute().also(::checkNoErrors).data
         logger.logRateLimitInfo(response?.rateLimit?.toRateLimitInfo())
         val prs = response?.repository?.pullRequests?.nodes.orEmpty().filterNotNull()
@@ -217,7 +196,7 @@ class GitHubClientImpl(
     private val repositoryId = AtomicReference<String?>(null)
 
     private suspend fun repositoryId() =
-        repositoryId.get() ?: fetchRepositoryId(gitHubInfo).also(repositoryId::set)
+        repositoryId.get() ?: fetchRepositoryId(config.gitHubInfo).also(repositoryId::set)
 
     private fun <D : Operation.Data> checkNoErrors(
         response: ApolloResponse<D>,

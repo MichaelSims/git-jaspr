@@ -28,7 +28,6 @@ private constructor(
     private val remoteBranchPrefix: String = DEFAULT_REMOTE_BRANCH_PREFIX,
     private val configByUserKey: Map<String, UserConfig>,
     private val useFakeRemote: Boolean = true,
-    private val getPullRequestsPageSize: Int,
     createLocalGitClient: (File) -> GitClient = ::createDefaultGitClient,
     createRemoteGitClient: (File) -> GitClient = ::createDefaultGitClient,
 ) {
@@ -43,9 +42,9 @@ private constructor(
                     val wiring =
                         GitHubClientWiring(
                             v.githubToken,
-                            gitHubInfo,
+                            Config(localRepo, remoteName, gitHubInfo),
                             remoteBranchPrefix,
-                            getPullRequestsPageSize,
+                            localGit,
                         )
                     k to wiring.gitHubClient
                 }
@@ -469,7 +468,6 @@ private constructor(
             configPropertiesFile: File = File(System.getenv("HOME")).resolve(CONFIG_FILE_NAME),
             remoteBranchPrefix: String = DEFAULT_REMOTE_BRANCH_PREFIX,
             remoteName: String = DEFAULT_REMOTE_NAME,
-            getPullRequestsPageSize: Int = GitHubClient.GET_PULL_REQUESTS_DEFAULT_PAGE_SIZE,
             createLocalGitClient: (File) -> GitClient = ::createDefaultGitClient,
             createRemoteGitClient: (File) -> GitClient = ::createDefaultGitClient,
             block: suspend GitHubTestHarness.() -> Unit,
@@ -513,7 +511,6 @@ private constructor(
                         remoteBranchPrefix,
                         configByUserKey,
                         useFakeRemote,
-                        getPullRequestsPageSize,
                         createLocalGitClient,
                         createRemoteGitClient,
                     )

@@ -25,7 +25,7 @@ class DefaultAppWiring(
 ) : AppWiring {
 
     private val gitHubClientWiring =
-        GitHubClientWiring(githubToken, config.gitHubInfo, config.remoteBranchPrefix)
+        GitHubClientWiring(githubToken, config, config.remoteBranchPrefix, gitClient)
 
     @Suppress("unused")
     val apolloClient: ApolloClient
@@ -44,9 +44,9 @@ class DefaultAppWiring(
 
 class GitHubClientWiring(
     private val githubToken: String,
-    private val gitHubInfo: GitHubInfo,
+    private val config: Config,
     private val remoteBranchPrefix: String,
-    private val getPullRequestsPageSize: Int = GitHubClient.GET_PULL_REQUESTS_DEFAULT_PAGE_SIZE,
+    private val gitClient: GitClient,
 ) : Closeable {
     private val bearerTokens by lazy { BearerTokens(githubToken, githubToken) }
 
@@ -66,7 +66,7 @@ class GitHubClientWiring(
     }
 
     val gitHubClient: GitHubClient by lazy {
-        GitHubClientImpl(apolloClient, gitHubInfo, remoteBranchPrefix, getPullRequestsPageSize)
+        GitHubClientImpl(apolloClient, gitClient, config, remoteBranchPrefix)
     }
 
     override fun close() {
