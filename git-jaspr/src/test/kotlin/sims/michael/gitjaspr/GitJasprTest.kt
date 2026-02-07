@@ -5195,6 +5195,240 @@ interface GitJasprTest {
 
     // endregion
 
+    // region multiple prs tests
+    // These tests verify that jaspr ignores PRs with base refs that don't match the target ref
+    // encoded in the jaspr branch name. This can happen when someone manually creates a PR
+    // outside jaspr using the same jaspr branch as the head ref.
+
+    // Note that each test in this region has a different test tag. This is intentional.
+
+    @Status
+    @Test
+    fun `status ignores PR with non-matching base ref`() {
+        withTestSetup(useFakeRemote) {
+            createCommitsFrom(
+                testCase {
+                    repository {
+                        commit {
+                            title = "one"
+                            remoteRefs += buildRemoteRef("one")
+                            willPassVerification = true
+                        }
+                        commit {
+                            title = "two"
+                            remoteRefs += buildRemoteRef("two")
+                            willPassVerification = true
+                            localRefs += "development"
+                        }
+                    }
+                    // Normal jaspr PR targeting main
+                    pullRequest {
+                        headRef = buildRemoteRef("one")
+                        baseRef = "main"
+                        title = "one"
+                        willBeApprovedByUserKey = "michael"
+                    }
+                    pullRequest {
+                        headRef = buildRemoteRef("two")
+                        baseRef = buildRemoteRef("one")
+                        title = "two"
+                        willBeApprovedByUserKey = "michael"
+                    }
+                    // Extra PR created outside jaspr with different base ref
+                    // This simulates someone manually creating a PR from the jaspr branch
+                    // to a different target branch
+                    pullRequest {
+                        headRef = buildRemoteRef("two")
+                        baseRef = "some-other-branch"
+                        title = "two - manual PR to other branch"
+                    }
+                }
+            )
+
+            waitForChecksToConclude("one", "two")
+
+            // Status should succeed without throwing SinglePullRequestPerCommitConstraintViolation
+            val actual = getAndPrintStatusString()
+            assertEquals(
+                """
+                |[✅✅✅✅✅✅] %s : %s : two
+                |[✅✅✅✅✅✅] %s : %s : one
+                """
+                    .trimMargin()
+                    .toStatusString(actual),
+                actual,
+            )
+        }
+    }
+
+    @Push
+    @Test
+    fun `push ignores PR with non-matching base ref`() {
+        withTestSetup(useFakeRemote) {
+            createCommitsFrom(
+                testCase {
+                    repository {
+                        commit {
+                            title = "one"
+                            remoteRefs += buildRemoteRef("one")
+                        }
+                        commit {
+                            title = "two"
+                            remoteRefs += buildRemoteRef("two")
+                            localRefs += "development"
+                        }
+                    }
+                    // Normal jaspr PR
+                    pullRequest {
+                        headRef = buildRemoteRef("one")
+                        baseRef = "main"
+                        title = "one"
+                    }
+                    pullRequest {
+                        headRef = buildRemoteRef("two")
+                        baseRef = buildRemoteRef("one")
+                        title = "two"
+                    }
+                    // Extra PR created outside jaspr with different base ref
+                    pullRequest {
+                        headRef = buildRemoteRef("two")
+                        baseRef = "some-other-branch"
+                        title = "two - manual PR to other branch"
+                    }
+                }
+            )
+
+            // Push should succeed without throwing SinglePullRequestPerCommitConstraintViolation
+            push()
+
+            // Verify the stack was pushed correctly
+            assertEquals(
+                setOf("jaspr/main/one -> main", "jaspr/main/two -> jaspr/main/one"),
+                gitHub
+                    .getPullRequests()
+                    .filter { it.baseRefName == "main" || it.baseRefName.startsWith("jaspr/main/") }
+                    .map(PullRequest::headToBaseString)
+                    .toSet(),
+            )
+        }
+    }
+
+    @Merge
+    @Test
+    fun `merge ignores PR with non-matching base ref`() {
+        withTestSetup(useFakeRemote) {
+            createCommitsFrom(
+                testCase {
+                    repository {
+                        commit {
+                            title = "one"
+                            remoteRefs += buildRemoteRef("one")
+                            willPassVerification = true
+                        }
+                        commit {
+                            title = "two"
+                            remoteRefs += buildRemoteRef("two")
+                            willPassVerification = true
+                            localRefs += "development"
+                        }
+                    }
+                    // Normal jaspr PRs
+                    pullRequest {
+                        headRef = buildRemoteRef("one")
+                        baseRef = "main"
+                        title = "one"
+                        willBeApprovedByUserKey = "michael"
+                    }
+                    pullRequest {
+                        headRef = buildRemoteRef("two")
+                        baseRef = buildRemoteRef("one")
+                        title = "two"
+                        willBeApprovedByUserKey = "michael"
+                    }
+                    // Extra PR created outside jaspr with different base ref
+                    pullRequest {
+                        headRef = buildRemoteRef("two")
+                        baseRef = "some-other-branch"
+                        title = "two - manual PR to other branch"
+                    }
+                }
+            )
+
+            waitForChecksToConclude("one", "two")
+
+            // Merge should succeed without throwing SinglePullRequestPerCommitConstraintViolation
+            merge(RefSpec("development", "main"))
+
+            // Verify the commits were merged
+            val stack = localGit.getLocalCommitStack(remoteName, "development", DEFAULT_TARGET_REF)
+            assertEquals(0, stack.size)
+        }
+    }
+
+    @Clean
+    @Test
+    fun `clean ignores PR with non-matching base ref`() {
+        withTestSetup(useFakeRemote) {
+            createCommitsFrom(
+                testCase {
+                    repository {
+                        commit {
+                            title = "one"
+                            remoteRefs += buildRemoteRef("one")
+                            willPassVerification = true
+                        }
+                        commit {
+                            title = "two"
+                            remoteRefs += buildRemoteRef("two")
+                            willPassVerification = true
+                            localRefs += "development"
+                        }
+                    }
+                    // Normal jaspr PRs
+                    pullRequest {
+                        headRef = buildRemoteRef("one")
+                        baseRef = "main"
+                        title = "one"
+                        willBeApprovedByUserKey = "michael"
+                    }
+                    pullRequest {
+                        headRef = buildRemoteRef("two")
+                        baseRef = buildRemoteRef("one")
+                        title = "two"
+                        willBeApprovedByUserKey = "michael"
+                    }
+                    // Extra PR created outside jaspr with different base ref
+                    pullRequest {
+                        headRef = buildRemoteRef("two")
+                        baseRef = "some-other-branch"
+                        title = "two - manual PR to other branch"
+                    }
+                }
+            )
+
+            // Push to create named stack
+            gitJaspr.push(stackName = "my-stack")
+
+            waitForChecksToConclude("one", "two")
+
+            // Merge to make the stack empty
+            merge(RefSpec("development", "main"))
+
+            // Clean should succeed without errors
+            // The PR with non-matching base ref should be ignored (not closed)
+            val cleanPlan = gitJaspr.getCleanPlan()
+
+            // The clean plan should only include the empty named stack branch
+            // and the orphaned jaspr branches, but NOT consider the foreign PR as abandoned
+            assertEquals(
+                sortedSetOf(RemoteNamedStackRef("my-stack").name()),
+                cleanPlan.emptyNamedStackBranches,
+            )
+        }
+    }
+
+    // endregion
+
     private fun isNamedStackBranch(branch: RemoteBranch): Boolean {
         return branch.name.startsWith(DEFAULT_REMOTE_NAMED_STACK_BRANCH_PREFIX)
     }

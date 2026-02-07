@@ -289,7 +289,10 @@ class GitJaspr(
             return
         }
 
-        val pullRequests = checkSinglePullRequestPerCommit(ghClient.getPullRequests(stack))
+        val pullRequests =
+            checkSinglePullRequestPerCommit(
+                ghClient.getPullRequests(stack).filterByMatchingTargetRef()
+            )
         val pullRequestsRebased =
             pullRequests.updateBaseRefForReorderedPrsIfAny(stack, filteredRefSpec.remoteRef)
 
@@ -415,7 +418,7 @@ class GitJaspr(
         // Update pull request descriptions second pass. This is necessary because we don't have the
         // GH-assigned PR numbers for new PRs until after we create them.
         logger.trace("updateDescriptions second pass {} {}", stack, prsToMutate)
-        val prs = ghClient.getPullRequests(stack)
+        val prs = ghClient.getPullRequests(stack).filterByMatchingTargetRef()
         val prsNeedingBodyUpdate = prs.updateDescriptionsWithStackInfo(stack)
         for (pr in prsNeedingBodyUpdate) {
             ghClient.updatePullRequest(pr)
@@ -478,7 +481,7 @@ class GitJaspr(
             return
         }
 
-        val prs = ghClient.getPullRequests()
+        val prs = ghClient.getPullRequests().filterByMatchingTargetRef()
         val branchesToDelete =
             getBranchesToDeleteDuringMerge(stack.slice(0..indexLastMergeable), refSpec.remoteRef)
 
@@ -690,7 +693,7 @@ class GitJaspr(
             if (!dryRun && initialPlan.abandonedBranches.isNotEmpty()) {
                 // Close abandoned PRs, then recalculate the plan again (closing PRs may orphan more
                 // branches)
-                val allPrs = ghClient.getPullRequests()
+                val allPrs = ghClient.getPullRequests().filterByMatchingTargetRef()
                 val prsToClose = allPrs.filter { it.headRefName in initialPlan.abandonedBranches }
                 for (pr in prsToClose) {
                     ghClient.closePullRequest(pr)
@@ -745,7 +748,12 @@ class GitJaspr(
 
     internal suspend fun getOrphanedBranches(): List<String> {
         logger.trace("getOrphanedBranches")
-        val pullRequests = ghClient.getPullRequests().map(PullRequest::headRefName).toSet()
+        val pullRequests =
+            ghClient
+                .getPullRequests()
+                .filterByMatchingTargetRef()
+                .map(PullRequest::headRefName)
+                .toSet()
         gitClient.fetch(config.remoteName, prune = true)
         val orphanedBranches =
             gitClient.getRemoteBranches(config.remoteName).map(RemoteBranch::name).filter { name ->
@@ -813,7 +821,7 @@ class GitJaspr(
                 .toSet()
 
         // Return abandoned branches (those with open PRs not reachable by any of our named stacks)
-        val allPrs = ghClient.getPullRequests()
+        val allPrs = ghClient.getPullRequests().filterByMatchingTargetRef()
         return remoteJasprBranches
             .filter { branch ->
                 val headRefName = branch.name
@@ -1040,6 +1048,7 @@ class GitJaspr(
             if (stack.isNotEmpty()) {
                 ghClient
                     .getPullRequests(stack.filter { commit -> commit.id != null })
+                    .filterByMatchingTargetRef()
                     .associateBy(PullRequest::commitId)
             } else {
                 emptyMap()
@@ -1136,6 +1145,43 @@ class GitJaspr(
             )
         }
         return pullRequests
+    }
+
+    /**
+     * Filters PRs to only include those where the base ref matches the target ref encoded in the
+     * head ref. This handles the case where someone manually creates a PR from a jaspr branch to a
+     * different target branch outside jaspr.
+     *
+     * For a PR with head ref `jaspr/main/<commit-id>`, valid base refs are:
+     * - `main` (the target ref itself)
+     * - Any `jaspr/main/` branch (another jaspr branch for the same target)
+     */
+    private fun List<PullRequest>.filterByMatchingTargetRef(): List<PullRequest> {
+        logger.trace("filterByMatchingTargetRef")
+        return filter { pr ->
+            val headRef = RemoteRef.parse(pr.headRefName, config.remoteBranchPrefix)
+            if (headRef == null) {
+                // Not a jaspr branch, include it
+                true
+            } else {
+                val targetRef = headRef.targetRef
+                val baseRef = pr.baseRefName
+                // Base ref must be either the target ref itself or another jaspr branch for the
+                // same target
+                val baseRefMatches =
+                    baseRef == targetRef ||
+                        RemoteRef.parse(baseRef, config.remoteBranchPrefix)?.targetRef == targetRef
+                if (!baseRefMatches) {
+                    logger.trace(
+                        "Ignoring PR {} because base ref {} doesn't match target ref {}",
+                        pr.headRefName,
+                        baseRef,
+                        targetRef,
+                    )
+                }
+                baseRefMatches
+            }
+        }
     }
 
     private fun getRevisionHistoryRefs(
