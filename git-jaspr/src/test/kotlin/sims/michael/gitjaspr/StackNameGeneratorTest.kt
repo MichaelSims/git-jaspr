@@ -45,18 +45,18 @@ class StackNameGeneratorTest {
     }
 
     @Test
-    fun `empty subject returns fallback`() {
-        assertEquals("stack", StackNameGenerator.generateName(""))
+    fun `empty subject returns empty string`() {
+        assertEquals("", StackNameGenerator.generateName(""))
     }
 
     @Test
-    fun `blank subject returns fallback`() {
-        assertEquals("stack", StackNameGenerator.generateName("   "))
+    fun `blank subject returns empty string`() {
+        assertEquals("", StackNameGenerator.generateName("   "))
     }
 
     @Test
-    fun `subject with only special characters returns fallback`() {
-        assertEquals("stack", StackNameGenerator.generateName("!@#$%^&*()"))
+    fun `subject with only special characters returns empty string`() {
+        assertEquals("", StackNameGenerator.generateName("!@#$%^&*()"))
     }
 
     @Test

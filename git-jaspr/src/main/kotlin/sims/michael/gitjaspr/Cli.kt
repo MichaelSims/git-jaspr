@@ -80,8 +80,12 @@ class Push : GitJasprCommand(help = "Push local commits to the remote and open P
                     "where <prefix> is determined by ${remoteNamedStackBranchPrefixDelegate.names.single()} and the " +
                     "current branch's upstream will be set to this ref."
             }
-            .convert { value -> value.trim() }
-            .validate { value -> value.isNotBlank() }
+            .convert { value -> StackNameGenerator.generateName(value.trim()) }
+            .validate { value ->
+                if (value.isEmpty()) {
+                    fail("Stack name must contain at least one alphanumeric character")
+                }
+            }
 
     private val refSpec by
         argument()
@@ -98,7 +102,36 @@ class Push : GitJasprCommand(help = "Push local commits to the remote and open P
             }
             .defaultLazy { RefSpec(DEFAULT_LOCAL_OBJECT, defaultTargetRef) }
 
-    override suspend fun doRun() = appWiring.gitJaspr.push(refSpec, stackName = name)
+    override suspend fun doRun() {
+        val jaspr = appWiring.gitJaspr
+        val effectiveName =
+            name
+                ?: jaspr.suggestStackName(refSpec)?.let { suggested ->
+                    promptForStackName(suggested)
+                }
+        jaspr.push(refSpec, stackName = effectiveName)
+    }
+
+    private fun promptForStackName(suggested: String): String {
+        echo(
+            "Please provide a name for your stack or press enter to accept the generated one " +
+                "(in the future you can use the --name option if you prefer)."
+        )
+        val terminal = currentContext.terminal
+        var default = suggested
+        while (true) {
+            val input = terminal.prompt("Stack name", default = default.ifEmpty { null }) ?: default
+            val normalized = StackNameGenerator.generateName(input)
+            if (normalized.isEmpty()) {
+                echo("Stack name must contain at least one alphanumeric character.")
+                default = ""
+                continue
+            }
+            if (normalized == input) return input
+            echo("Normalized to: $normalized")
+            default = normalized
+        }
+    }
 }
 
 class Merge : GitJasprCommand(help = "Merge all local commits that are mergeable") {

@@ -1432,6 +1432,42 @@ class GitJaspr(
     }
 
     /**
+     * Returns a suggested stack name for the given [refSpec] if the stack needs a new name, or null
+     * if the stack already has an existing name on the remote. The suggestion is derived from the
+     * first commit's subject.
+     */
+    fun suggestStackName(
+        refSpec: RefSpec = RefSpec(DEFAULT_LOCAL_OBJECT, DEFAULT_TARGET_REF)
+    ): String? {
+        val remoteName = config.remoteName
+        gitClient.fetch(remoteName)
+
+        val targetRef = refSpec.remoteRef
+        val stack =
+            gitClient.getLocalCommitStack(remoteName, refSpec.localRef, targetRef).let { original ->
+                filterStackByDontPushPattern(
+                        if (addCommitIdsToLocalStack(original)) {
+                            gitClient.getLocalCommitStack(remoteName, refSpec.localRef, targetRef)
+                        } else {
+                            original
+                        }
+                    )
+                    .included
+            }
+
+        if (stack.isEmpty()) return null
+
+        val existingName =
+            (getExistingStackName(stack) as? Found)?.name?.let { existingBranchName ->
+                RemoteNamedStackRef.parse(existingBranchName, config.remoteNamedStackBranchPrefix)
+                    ?.stackName
+            }
+        if (existingName != null) return null
+
+        return StackNameGenerator.generateName(stack.first().shortMessage)
+    }
+
+    /**
      * Generate a unique stack name derived from a commit subject. On collision, appends a random
      * suffix. Uses force-with-lease to atomically ensure the branch doesn't exist when creating it.
      */
