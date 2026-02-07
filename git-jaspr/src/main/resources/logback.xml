@@ -5,7 +5,7 @@ based on options provided by the user.
 <configuration>
     <appender name="STDOUT" class="ch.qos.logback.core.ConsoleAppender">
         <encoder>
-            <pattern>%r %.-1level [%logger{0}] %msg%n</pattern>
+            <pattern>%r %.-1level [%logger{0}] %msg%n%nopex</pattern>
         </encoder>
         <filter class="ch.qos.logback.classic.filter.ThresholdFilter">
             <level>INFO</level> <!-- This can be overridden via the log-level command line option -->
