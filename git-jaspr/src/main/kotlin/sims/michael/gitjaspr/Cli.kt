@@ -451,25 +451,41 @@ you'll need to re-enable it again.
         } else {
             val remoteUri =
                 requireNotNull(gitClient.getRemoteUriOrNull(remoteName)) {
-                    "Couldn't determine URI for remote named $remoteName"
+                    buildString {
+                        appendLine("Couldn't find remote $remoteName.")
+                        if (remoteName == DEFAULT_REMOTE_NAME) {
+                            append(
+                                "Please specify which remote to use with the proper argument (see --help)."
+                            )
+                        } else {
+                            append("The name you specified doesn't seem to exist.")
+                        }
+                    }
                 }
             val fromUri =
                 requireNotNull(extractGitHubInfoFromUri(remoteUri)) {
-                    "Couldn't infer github info from $remoteName URI: $remoteUri. " +
-                        "You can specify these manually with --github-host, --repo-owner, and --repo-name."
+                    "Couldn't infer github info from $remoteName URI: $remoteUri. \n" +
+                        "You can specify the information I need manually with --github-host, --repo-owner, " +
+                        "and --repo-name."
                 }
             GitHubInfo(host ?: fromUri.host, owner ?: fromUri.owner, name ?: fromUri.name)
         }
     }
 
     override fun run() {
-        val config = appWiring.config
+        val logger = Cli.logger
+        val config =
+            try {
+                appWiring.config
+            } catch (e: Exception) {
+                logger.debug("Initialization failed", e)
+                printError(e)
+            }
         if (showConfig) {
             throw PrintMessage(appWiring.json.encodeToString(config))
         }
         val (loggingContext, logFile) = initLogging(config.logLevel, config.logsDirectory)
         runBlocking {
-            val logger = Cli.logger
             logger.debug("{} version {}", GitJaspr::class.java.simpleName, VERSION)
             try {
                 doRun()
