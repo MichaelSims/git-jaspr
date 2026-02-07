@@ -525,7 +525,13 @@ class GitJaspr(
         val prsToRebase =
             prs.filter { it.baseRefName == lastMergedRef }
                 .map { it.copy(baseRefName = refSpec.remoteRef) }
-        logger.trace("Rebasing {} prs to {}", prsToRebase.size, refSpec.remoteRef)
+        logger.trace(
+            "Rebasing {} {} to {}: {}",
+            prsToRebase.size,
+            prOrPrs(prsToRebase.size),
+            refSpec.remoteRef,
+            prsToRebase.map(PullRequest::title),
+        )
         for (pr in prsToRebase) {
             ghClient.updatePullRequest(pr)
         }
@@ -1486,6 +1492,8 @@ class GitJaspr(
     private fun branchOrBranches(count: Int) = if (count == 1) "branch" else "branches"
 
     private fun commitOrCommits(count: Int) = if (count == 1) "commit" else "commits"
+
+    private fun prOrPrs(count: Int) = if (count == 1) "pr" else "prs"
 
     /** Intended for tests */
     internal fun clone(transformConfig: (Config) -> Config) =
