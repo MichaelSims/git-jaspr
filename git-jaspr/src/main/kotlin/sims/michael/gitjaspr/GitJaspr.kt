@@ -525,7 +525,13 @@ class GitJaspr(
         val prsToRebase =
             prs.filter { it.baseRefName == lastMergedRef }
                 .map { it.copy(baseRefName = refSpec.remoteRef) }
-        logger.trace("Rebasing {} prs to {}", prsToRebase.size, refSpec.remoteRef)
+        logger.trace(
+            "Rebasing {} {} to {}: {}",
+            prsToRebase.size,
+            prOrPrs(prsToRebase.size),
+            refSpec.remoteRef,
+            prsToRebase.map(PullRequest::title),
+        )
         for (pr in prsToRebase) {
             ghClient.updatePullRequest(pr)
         }
