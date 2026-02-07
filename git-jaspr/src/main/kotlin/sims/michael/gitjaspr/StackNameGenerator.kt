@@ -8,18 +8,16 @@ object StackNameGenerator {
 
     /**
      * Generates a stack name from the given commit subject. The result is a lowercase,
-     * hyphen-separated string suitable for use as a branch name component.
+     * hyphen-separated string suitable for use as a branch name component, or an empty string if
+     * the subject contains no alphanumeric characters.
      */
-    fun generateName(subject: String): String {
-        val name =
-            subject
-                .lowercase()
-                .replace(Regex("[^a-z0-9]"), "-")
-                .replace(Regex("-{2,}"), "-")
-                .trim('-')
-                .let { string -> truncateAtWordBoundary(string, MAX_LENGTH) }
-        return name.ifEmpty { "stack" }
-    }
+    fun generateName(subject: String): String =
+        subject
+            .lowercase()
+            .replace(Regex("[^a-z0-9]"), "-")
+            .replace(Regex("-{2,}"), "-")
+            .trim('-')
+            .let { string -> truncateAtWordBoundary(string, MAX_LENGTH) }
 
     /** Generates a random 4-letter suffix for use in collision resolution. */
     fun generateSuffix(random: Random = Random.Default): String {

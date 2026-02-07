@@ -2175,6 +2175,54 @@ interface GitJasprTest {
 
     @Push
     @Test
+    fun `suggestStackName returns suggested name for new stack`() {
+        withTestSetup(useFakeRemote) {
+            createCommitsFrom(
+                testCase {
+                    repository {
+                        commit { title = "one" }
+                        commit {
+                            title = "two"
+                            localRefs += "main"
+                        }
+                    }
+                    checkout = "main"
+                }
+            )
+
+            val suggested = gitJaspr.suggestStackName()
+            assertEquals("one", suggested)
+        }
+    }
+
+    @Push
+    @Test
+    fun `suggestStackName returns null for existing stack`() {
+        withTestSetup(useFakeRemote) {
+            createCommitsFrom(
+                testCase {
+                    repository {
+                        commit { title = "A" }
+                        commit {
+                            title = "B"
+                            localRefs += "main"
+                        }
+                    }
+                    checkout = "main"
+                }
+            )
+
+            // Push with an explicit name to create an existing stack
+            gitJaspr.push(stackName = "my-stack")
+
+            // suggestStackName should return null since the stack already has a name
+            val suggested = gitJaspr.suggestStackName()
+            assertEquals(null, suggested)
+        }
+    }
+
+    @Push
+    @Test
     fun `push without explicit stack name handles collision by retrying`() {
         withTestSetup(useFakeRemote) {
             createCommitsFrom(
