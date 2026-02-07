@@ -3552,6 +3552,107 @@ interface GitJasprTest {
 
     @Merge
     @Test
+    fun `merge rebases PRs targeting any merged branch not just the last`() {
+        withTestSetup(useFakeRemote) {
+            createCommitsFrom(
+                testCase {
+                    repository {
+                        commit {
+                            title = "a"
+                            remoteRefs += buildRemoteRef("a")
+                            willPassVerification = true
+                        }
+                        commit {
+                            title = "b"
+                            remoteRefs += buildRemoteRef("b")
+                            willPassVerification = true
+                        }
+                        commit {
+                            title = "c"
+                            localRefs += "development"
+                            remoteRefs += buildRemoteRef("c")
+                            willPassVerification = false
+                        }
+                    }
+                    pullRequest {
+                        headRef = buildRemoteRef("a")
+                        baseRef = "main"
+                        title = "a"
+                        willBeApprovedByUserKey = "michael"
+                    }
+                    pullRequest {
+                        headRef = buildRemoteRef("b")
+                        baseRef = buildRemoteRef("a")
+                        title = "b"
+                        willBeApprovedByUserKey = "michael"
+                    }
+                    pullRequest {
+                        headRef = buildRemoteRef("c")
+                        baseRef = buildRemoteRef("b")
+                        title = "c"
+                        willBeApprovedByUserKey = "michael"
+                    }
+                }
+            )
+
+            push()
+
+            // Create a second stack with a single PR "d" whose base is commit "a"'s branch
+            createCommitsFrom(
+                testCase {
+                    repository {
+                        commit {
+                            title = "a"
+                            remoteRefs += buildRemoteRef("a")
+                            willPassVerification = true
+                        }
+                        commit {
+                            title = "d"
+                            remoteRefs += buildRemoteRef("d")
+                            willPassVerification = true
+                        }
+                        commit {
+                            title = "d_HEAD"
+                            localRefs += "dev2"
+                            remoteRefs += buildRemoteRef("d_HEAD")
+                            willPassVerification = true
+                        }
+                    }
+                    pullRequest {
+                        headRef = buildRemoteRef("d")
+                        baseRef = buildRemoteRef("a")
+                        title = "d"
+                        willBeApprovedByUserKey = "michael"
+                    }
+                    pullRequest {
+                        headRef = buildRemoteRef("d_HEAD")
+                        baseRef = buildRemoteRef("d")
+                        title = "d_HEAD"
+                        willBeApprovedByUserKey = "michael"
+                    }
+                }
+            )
+
+            localGit.checkout("dev2")
+            push()
+
+            waitForChecksToConclude("a", "b", "d", "d^1", timeout = Long.MAX_VALUE)
+            merge(RefSpec("development", "main"))
+
+            // PR "d" targeted commit "a"'s branch (not "b" which is the last merged ref).
+            // After merging a and b, PR "d" should be rebased to "main".
+            assertEquals(
+                "main",
+                gitHub
+                    .getPullRequests()
+                    .single { it.headRefName == buildRemoteRef("d") }
+                    .baseRefName,
+            )
+        }
+    }
+
+    @Merge
+    @Test
     fun `merge with out of date commit`() {
         withTestSetup(useFakeRemote) {
             createCommitsFrom(

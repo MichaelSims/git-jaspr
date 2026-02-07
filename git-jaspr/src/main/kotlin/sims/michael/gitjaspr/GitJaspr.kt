@@ -521,9 +521,10 @@ class GitJaspr(
             refSpec.remoteRef,
         )
 
-        val lastMergedRef = stack[indexLastMergeable].toRemoteRefName()
+        val mergedRefs =
+            stack.slice(0..indexLastMergeable).map { commit -> commit.toRemoteRefName() }.toSet()
         val prsToRebase =
-            prs.filter { it.baseRefName == lastMergedRef }
+            prs.filter { it.baseRefName in mergedRefs }
                 .map { it.copy(baseRefName = refSpec.remoteRef) }
         logger.trace(
             "Rebasing {} {} to {}: {}",
