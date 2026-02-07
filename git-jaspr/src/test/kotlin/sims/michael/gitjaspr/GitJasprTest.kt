@@ -2191,15 +2191,13 @@ interface GitJasprTest {
                 }
             )
 
-            // Use a fixed random seed to generate predictable names
-            val random = Random(42)
-            val firstStackName = StackNameGenerator.generateName(random)
+            // The derived name for commit subject "X" is "x"
+            val derivedName = StackNameGenerator.generateName("X")
 
-            // Pre-create a named stack with the first generated name to simulate collision
-            gitJaspr.push(stackName = firstStackName)
+            // Pre-create a named stack with the derived name to simulate collision
+            gitJaspr.push(stackName = derivedName)
 
-            // Now push without an explicit name using the same random seed
-            // It should detect the collision and retry with the next random name
+            // Now create a new stack whose first commit subject also derives to the same name
             createCommitsFrom(
                 testCase {
                     repository {
@@ -2214,14 +2212,13 @@ interface GitJasprTest {
                 }
             )
 
-            // Generate the stack name with the same random instance
-            // The first name will collide, so it should use the second name
+            // Generate a unique name: "x" will collide, so it should append a suffix
             val localRef = localGit.log("dev", 1).single().hash
-            val generatedName =
-                gitJaspr.generateUniqueStackName(DEFAULT_TARGET_REF, localRef, random = random)
+            val generatedName = gitJaspr.generateUniqueStackName(DEFAULT_TARGET_REF, localRef, "X")
 
-            // Verify that a different name was generated (not the first one)
-            assertNotEquals(firstStackName, generatedName)
+            // Verify that a suffixed name was generated (not the bare derived name)
+            assertNotEquals(derivedName, generatedName)
+            assertTrue(generatedName.startsWith("$derivedName-"))
 
             // Verify both named stacks exist
             val namedStackBranches =
@@ -2249,27 +2246,35 @@ interface GitJasprTest {
                 }
             )
 
-            // Create a custom Random that always returns the same indices
+            val commitSubject = "Collision test"
+            val derivedName = StackNameGenerator.generateName(commitSubject)
+
+            // Pre-create a branch with the derived name
+            gitJaspr.push(stackName = derivedName)
+
+            // Use a constant random that always produces the same suffix, causing repeated
+            // collisions
             val constantRandom =
                 object : Random() {
                     override fun nextBits(bitCount: Int): Int = 0
                 }
 
-            val collisionName = StackNameGenerator.generateName(constantRandom)
+            // Also pre-create the suffixed variant so every attempt collides
+            val suffix = StackNameGenerator.generateSuffix(constantRandom)
+            gitJaspr.push(stackName = "$derivedName-$suffix")
 
-            // Pre-create a branch with this name
-            gitJaspr.push(stackName = collisionName)
-
-            // Try to generate a unique name with the constant random
-            // Since it always generates the same name, it should fail after maxAttempts
             val localRef = localGit.log("main", 1).single().hash
             val exception =
                 assertThrows<GitJasprException> {
                     gitJaspr.generateUniqueStackName(
                         DEFAULT_TARGET_REF,
                         localRef,
+                        commitSubject,
                         maxAttempts = 3,
-                        random = constantRandom,
+                        random =
+                            object : Random() {
+                                override fun nextBits(bitCount: Int): Int = 0
+                            },
                     )
                 }
 

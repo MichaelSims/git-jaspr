@@ -345,7 +345,8 @@ class GitJaspr(
         val namedStackAlreadyPushed: Boolean
         if (isGeneratingNewName) {
             // Generate unique name and push named stack branch atomically
-            effectiveStackName = generateUniqueStackName(targetRef, localRef)
+            effectiveStackName =
+                generateUniqueStackName(targetRef, localRef, stack.first().shortMessage)
             namedStackAlreadyPushed = true
         } else {
             // Use existing or explicitly provided stack name
@@ -1431,19 +1432,23 @@ class GitJaspr(
     }
 
     /**
-     * Generate a unique stack name by trying random names and checking for collisions. Uses
-     * force-with-lease to atomically ensure the branch doesn't exist when creating it.
+     * Generate a unique stack name derived from a commit subject. On collision, appends a random
+     * suffix. Uses force-with-lease to atomically ensure the branch doesn't exist when creating it.
      */
     internal fun generateUniqueStackName(
         targetRef: String,
         localRef: String,
+        commitSubject: String,
         maxAttempts: Int = 10,
         random: Random = Random.Default,
     ): String {
         val remoteName = config.remoteName
+        val baseName = StackNameGenerator.generateName(commitSubject)
 
         repeat(maxAttempts) { attempt ->
-            val stackName = StackNameGenerator.generateName(random)
+            val stackName =
+                if (attempt == 0) baseName
+                else "$baseName-${StackNameGenerator.generateSuffix(random)}"
             val remoteBranch =
                 RemoteNamedStackRef(stackName, targetRef, config.remoteNamedStackBranchPrefix)
                     .name()
