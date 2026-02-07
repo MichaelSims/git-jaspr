@@ -422,7 +422,8 @@ you'll need to re-enable it again.
                 }
             val fromUri =
                 requireNotNull(extractGitHubInfoFromUri(remoteUri)) {
-                    "Couldn't infer github info from $remoteName URI: $remoteUri"
+                    "Couldn't infer github info from $remoteName URI: $remoteUri. " +
+                        "You can specify these manually with --github-host, --repo-owner, and --repo-name."
                 }
             GitHubInfo(host ?: fromUri.host, owner ?: fromUri.owner, name ?: fromUri.name)
         }
