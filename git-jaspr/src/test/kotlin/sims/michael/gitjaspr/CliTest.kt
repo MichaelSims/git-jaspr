@@ -358,7 +358,7 @@ private fun getEffectiveConfigFromCli(
                 extraCliArgs,
                 homeDirConfig,
                 repoDirConfig,
-                listOf("status", "--show-config", remoteName),
+                listOf("status", "--show-config", "--remote-name", remoteName),
                 invokeLocation,
             )
             .also { println(it) }
