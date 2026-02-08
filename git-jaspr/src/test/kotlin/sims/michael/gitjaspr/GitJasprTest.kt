@@ -31,16 +31,20 @@ interface GitJasprTest {
     val useFakeRemote: Boolean
         get() = true
 
-    suspend fun GitHubTestHarness.push() = gitJaspr.push()
+    suspend fun GitHubTestHarness.push(count: Int? = null) = gitJaspr.push(count = count)
 
     suspend fun GitHubTestHarness.getAndPrintStatusString(
         refSpec: RefSpec = RefSpec(DEFAULT_LOCAL_OBJECT, DEFAULT_TARGET_REF)
     ) = gitJaspr.getStatusString(refSpec).also(::print)
 
-    suspend fun GitHubTestHarness.merge(refSpec: RefSpec) = gitJaspr.merge(refSpec)
+    suspend fun GitHubTestHarness.merge(refSpec: RefSpec, count: Int? = null) =
+        gitJaspr.merge(refSpec, count = count)
 
-    suspend fun GitHubTestHarness.autoMerge(refSpec: RefSpec, pollingIntervalSeconds: Int = 10) =
-        gitJaspr.autoMerge(refSpec, pollingIntervalSeconds = 1, maxAttempts = 5)
+    suspend fun GitHubTestHarness.autoMerge(
+        refSpec: RefSpec,
+        pollingIntervalSeconds: Int = 10,
+        count: Int? = null,
+    ) = gitJaspr.autoMerge(refSpec, pollingIntervalSeconds = 1, maxAttempts = 5, count = count)
 
     suspend fun GitHubTestHarness.getRemoteCommitStatuses(stack: List<Commit>) =
         gitJaspr.getRemoteCommitStatuses(stack)
@@ -5367,6 +5371,123 @@ interface GitJasprTest {
                     .map(PullRequest::headToBaseString)
                     .toSet(),
             )
+        }
+    }
+
+    @Push
+    @Test
+    fun `push with positive count limits commits pushed`() {
+        withTestSetup(useFakeRemote) {
+            createCommitsFrom(
+                testCase {
+                    repository {
+                        commit { title = "one" }
+                        commit { title = "two" }
+                        commit { title = "three" }
+                        commit {
+                            title = "four"
+                            localRefs += "main"
+                        }
+                    }
+                }
+            )
+            push(count = 2)
+
+            assertEquals(
+                setOf(buildRemoteRef("one"), buildRemoteRef("two")),
+                (localGit
+                        .getRemoteBranches(remoteName)
+                        .filterNot(::isNamedStackBranch)
+                        .map(RemoteBranch::name) - DEFAULT_TARGET_REF)
+                    .toSet(),
+            )
+        }
+    }
+
+    @Push
+    @Test
+    fun `push with negative count excludes commits from top`() {
+        withTestSetup(useFakeRemote) {
+            createCommitsFrom(
+                testCase {
+                    repository {
+                        commit { title = "one" }
+                        commit { title = "two" }
+                        commit { title = "three" }
+                        commit {
+                            title = "four"
+                            localRefs += "main"
+                        }
+                    }
+                }
+            )
+            push(count = -1)
+
+            assertEquals(
+                setOf(buildRemoteRef("one"), buildRemoteRef("two"), buildRemoteRef("three")),
+                (localGit
+                        .getRemoteBranches(remoteName)
+                        .filterNot(::isNamedStackBranch)
+                        .map(RemoteBranch::name) - DEFAULT_TARGET_REF)
+                    .toSet(),
+            )
+        }
+    }
+
+    @Push
+    @Test
+    fun `push with count exceeding stack size fails`() {
+        withTestSetup(useFakeRemote) {
+            createCommitsFrom(
+                testCase {
+                    repository {
+                        commit { title = "one" }
+                        commit {
+                            title = "two"
+                            localRefs += "main"
+                        }
+                    }
+                }
+            )
+            assertThrows<IllegalArgumentException> { push(count = 5) }
+        }
+    }
+
+    @Push
+    @Test
+    fun `push with negative count resulting in zero fails`() {
+        withTestSetup(useFakeRemote) {
+            createCommitsFrom(
+                testCase {
+                    repository {
+                        commit { title = "one" }
+                        commit {
+                            title = "two"
+                            localRefs += "main"
+                        }
+                    }
+                }
+            )
+            assertThrows<IllegalArgumentException> { push(count = -2) }
+        }
+    }
+
+    @Push
+    @Test
+    fun `push with zero count fails`() {
+        withTestSetup(useFakeRemote) {
+            createCommitsFrom(
+                testCase {
+                    repository {
+                        commit { title = "one" }
+                        commit {
+                            title = "two"
+                            localRefs += "main"
+                        }
+                    }
+                }
+            )
+            assertThrows<IllegalArgumentException> { push(count = 0) }
         }
     }
 

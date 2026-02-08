@@ -70,14 +70,23 @@ class Push : GitJasprCommand(help = "Push local commits to the remote and open P
                 }
             }
 
+    private val count by
+        option("-c", "--count").int().help {
+            "Limit the number of commits to push from the bottom of the stack. " +
+                "A positive value pushes that many commits. " +
+                "A negative value excludes that many commits from the top. " +
+                "Mutually exclusive with ${localDelegate.names.joinToString("/")}."
+        }
+
     override suspend fun doRun() {
+        requireCountLocalExclusive(count, local)
         val jaspr = appWiring.gitJaspr
         val effectiveName =
             name
                 ?: jaspr.suggestStackName(refSpec)?.let { suggested ->
                     promptForStackName(suggested)
                 }
-        jaspr.push(refSpec, stackName = effectiveName)
+        jaspr.push(refSpec, stackName = effectiveName, count = count)
     }
 
     private fun promptForStackName(suggested: String): String {
@@ -103,17 +112,39 @@ class Push : GitJasprCommand(help = "Push local commits to the remote and open P
 }
 
 class Merge : GitJasprCommand(help = "Merge all local commits that are mergeable") {
-    override suspend fun doRun() = appWiring.gitJaspr.merge(refSpec)
+    private val count by
+        option("-c", "--count").int().help {
+            "Limit the number of commits to merge from the bottom of the stack. " +
+                "A positive value includes that many commits. " +
+                "A negative value excludes that many commits from the top. " +
+                "Mutually exclusive with ${localDelegate.names.joinToString("/")}."
+        }
+
+    override suspend fun doRun() {
+        requireCountLocalExclusive(count, local)
+        appWiring.gitJaspr.merge(refSpec, count = count)
+    }
 }
 
 class AutoMerge :
     GitJasprCommand(help = "Poll GitHub until all local commits are mergeable, then merge them") {
+    private val count by
+        option("-c", "--count").int().help {
+            "Limit the number of commits to auto-merge from the bottom of the stack. " +
+                "A positive value includes that many commits. " +
+                "A negative value excludes that many commits from the top. " +
+                "Mutually exclusive with ${localDelegate.names.joinToString("/")}."
+        }
+
     private val interval by
         option("--interval", "-i").int().default(10).help {
             "Polling interval in seconds. Setting this too low may exhaust GitHub rate limiting"
         }
 
-    override suspend fun doRun() = appWiring.gitJaspr.autoMerge(refSpec, interval)
+    override suspend fun doRun() {
+        requireCountLocalExclusive(count, local)
+        appWiring.gitJaspr.autoMerge(refSpec, interval, count = count)
+    }
 }
 
 class Clean : GitJasprCommand(help = "Clean up orphaned jaspr branches") {
@@ -516,6 +547,12 @@ you'll need to re-enable it again.
                         "with the log file attached."
                 }
         )
+    }
+
+    protected fun requireCountLocalExclusive(count: Int?, local: String) {
+        require(count == null || local == DEFAULT_LOCAL_OBJECT) {
+            "The --count and --local options are mutually exclusive."
+        }
     }
 
     abstract suspend fun doRun()
