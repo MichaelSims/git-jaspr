@@ -1559,6 +1559,58 @@ class GitJaspr(
 
     private fun prOrPrs(count: Int) = if (count == 1) "pr" else "prs"
 
+    /**
+     * Returns the list of named stacks on the remote that target [targetRef], sorted by stack name.
+     */
+    fun getNamedStacks(targetRef: String) = getAllNamedStacks().filter { it.targetRef == targetRef }
+
+    /** Returns all named stacks on the remote, sorted by stack name. */
+    fun getAllNamedStacks(): List<RemoteNamedStackRef> {
+        gitClient.fetch(config.remoteName, prune = true)
+        return gitClient
+            .getRemoteBranches(config.remoteName)
+            .mapNotNull { branch ->
+                RemoteNamedStackRef.parse(branch.name, config.remoteNamedStackBranchPrefix)
+            }
+            .sortedBy(RemoteNamedStackRef::stackName)
+    }
+
+    /**
+     * Checks out a named stack by creating or switching to a local branch that tracks the remote
+     * named stack ref.
+     */
+    fun checkoutNamedStack(namedStackRef: RemoteNamedStackRef) {
+        val localBranchName = namedStackRef.stackName
+        val remoteName = config.remoteName
+        val remoteTrackingRef = "$remoteName/${namedStackRef.name()}"
+        val branchExists = localBranchName in gitClient.getBranchNames()
+
+        if (!branchExists) {
+            gitClient.branch(localBranchName, startPoint = remoteTrackingRef)
+            gitClient.checkout(localBranchName)
+            gitClient.setUpstreamBranch(remoteName, namedStackRef.name())
+            logger.info("Checked out named stack '{}' on new local branch", localBranchName)
+        } else {
+            // Branch exists - checkout and verify upstream matches
+            val previousRef = gitClient.log(GitClient.HEAD, 1).single().hash
+            gitClient.checkout(localBranchName)
+            val upstream = gitClient.getUpstreamBranch(remoteName)
+            if (upstream != null && upstream.name == namedStackRef.name()) {
+                logger.info("Switched to existing local branch '{}'", localBranchName)
+            } else {
+                // Restore previous branch before throwing
+                gitClient.checkout(previousRef)
+                val upstreamDesc = upstream?.name ?: "none"
+                throw GitJasprException(
+                    "A local branch '$localBranchName' already exists but its upstream " +
+                        "($upstreamDesc) does not match the expected named stack ref " +
+                        "(${namedStackRef.name()}). It may be an unrelated branch. " +
+                        "Please rename or delete it first."
+                )
+            }
+        }
+    }
+
     /** Intended for tests */
     internal fun clone(transformConfig: (Config) -> Config) =
         GitJaspr(ghClient, gitClient, transformConfig(config), newUuid, commitIdentOverride)
