@@ -54,7 +54,7 @@ class GitJasprFunctionalExternalProcessTest : GitJasprTest {
             extraCliArgs = emptyList(),
             homeDirConfig = buildHomeDirConfig(),
             repoDirConfig = emptyMap(),
-            strings = listOf("push", remoteName),
+            strings = listOf("push", "--remote-name", remoteName),
             invokeLocation = localRepo,
             javaOptions = javaOptions,
         )
@@ -68,7 +68,16 @@ class GitJasprFunctionalExternalProcessTest : GitJasprTest {
             extraCliArgs = emptyList(),
             homeDirConfig = buildHomeDirConfig(),
             repoDirConfig = emptyMap(),
-            strings = listOf("status", remoteName, refSpec.toString()),
+            strings =
+                listOf(
+                    "status",
+                    "--remote-name",
+                    remoteName,
+                    "--target",
+                    refSpec.remoteRef,
+                    "--local",
+                    refSpec.localRef,
+                ),
             invokeLocation = localRepo,
             javaOptions = javaOptions,
         )
@@ -82,7 +91,16 @@ class GitJasprFunctionalExternalProcessTest : GitJasprTest {
             extraCliArgs = emptyList(),
             homeDirConfig = buildHomeDirConfig(),
             repoDirConfig = emptyMap(),
-            strings = listOf("merge", remoteName, refSpec.toString()),
+            strings =
+                listOf(
+                    "merge",
+                    "--remote-name",
+                    remoteName,
+                    "--target",
+                    refSpec.remoteRef,
+                    "--local",
+                    refSpec.localRef,
+                ),
             invokeLocation = localRepo,
             javaOptions = javaOptions,
         )
@@ -102,8 +120,12 @@ class GitJasprFunctionalExternalProcessTest : GitJasprTest {
             strings =
                 listOf(
                     "auto-merge",
+                    "--remote-name",
                     remoteName,
-                    refSpec.toString(),
+                    "--target",
+                    refSpec.remoteRef,
+                    "--local",
+                    refSpec.localRef,
                     "--interval",
                     pollingIntervalSeconds.toString(),
                 ),
