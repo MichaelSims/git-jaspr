@@ -135,6 +135,29 @@ class GitJasprFunctionalExternalProcessTest : GitJasprTest {
         )
     }
 
+    override suspend fun GitHubTestHarness.checkout(stackName: String) {
+        executeCli(
+            scratchDir = scratchDir,
+            remoteUri = remoteUri,
+            remoteName = remoteName,
+            extraCliArgs = emptyList(),
+            homeDirConfig = buildHomeDirConfig(),
+            repoDirConfig = emptyMap(),
+            strings =
+                listOf(
+                    "checkout",
+                    "--name",
+                    stackName,
+                    "--remote-name",
+                    remoteName,
+                    "--target",
+                    DEFAULT_TARGET_REF,
+                ),
+            invokeLocation = localRepo,
+            javaOptions = javaOptions,
+        )
+    }
+
     // Too painful to try to get this type of test to work with external processes, so we'll opt out
     override fun `push fails when multiple PRs for a given commit ID exist`() = Unit
 

@@ -32,6 +32,11 @@ annotation class Clean
 @Tag("dontPush")
 annotation class DontPush
 
+@Target(AnnotationTarget.FUNCTION)
+@Retention(AnnotationRetention.RUNTIME)
+@Tag("checkout")
+annotation class Checkout
+
 @Target(AnnotationTarget.CLASS)
 @Retention(AnnotationRetention.RUNTIME)
 @Tag("functional")

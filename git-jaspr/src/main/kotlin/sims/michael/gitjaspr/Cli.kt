@@ -21,6 +21,7 @@ import com.github.ajalt.clikt.sources.ChainedValueSource
 import com.github.ajalt.clikt.sources.PropertiesValueSource
 import com.github.ajalt.clikt.sources.ValueSource.Companion.getKey
 import com.github.ajalt.mordant.rendering.TextColors
+import com.github.ajalt.mordant.terminal.Terminal
 import java.io.File
 import kotlinx.coroutines.runBlocking
 import kotlinx.serialization.encodeToString
@@ -29,6 +30,7 @@ import org.slf4j.Logger
 import org.slf4j.LoggerFactory
 import sims.michael.gitjaspr.RemoteRefEncoding.DEFAULT_REMOTE_BRANCH_PREFIX
 import sims.michael.gitjaspr.RemoteRefEncoding.DEFAULT_REMOTE_NAMED_STACK_BRANCH_PREFIX
+import sims.michael.gitjaspr.RemoteRefEncoding.RemoteNamedStackRef
 
 // region Commands
 class Status :
@@ -161,6 +163,80 @@ class Clean : GitJasprCommand(help = "Clean up orphaned jaspr branches") {
             )
         }
         appWiring.gitJaspr.clean(dryRun = !force)
+    }
+}
+
+class Checkout : GitJasprCommand(help = "Check out an existing named stack") {
+    private val name by
+        option("-n", "--name").help {
+            "The name of the stack to check out (skips interactive selection)"
+        }
+
+    override suspend fun doRun() {
+        val gitJaspr = appWiring.gitJaspr
+        val config = appWiring.config
+        val allStacks = gitJaspr.getAllNamedStacks()
+        val stacks = allStacks.filter { it.targetRef == target }
+        if (stacks.isEmpty()) {
+            val message = buildString {
+                append(
+                    "No named stacks found targeting '%s' (searching %s/%s/*)."
+                        .format(target, config.remoteNamedStackBranchPrefix, target)
+                )
+                val otherStacks = allStacks.filter { it.targetRef != target }
+                if (otherStacks.isNotEmpty()) {
+                    appendLine()
+                    appendLine("Named stacks exist for other targets:")
+                    for (stack in otherStacks.take(5)) {
+                        appendLine("  [${stack.targetRef}] ${stack.stackName}")
+                    }
+                    if (otherStacks.size > 5) {
+                        appendLine("  ... and ${otherStacks.size - 5} more")
+                    }
+                    append(
+                        "Use ${targetDelegate.names.joinToString("/")} to specify a different target."
+                    )
+                }
+            }
+            throw GitJasprException(message)
+        }
+
+        val selected =
+            if (name != null) {
+                stacks.find { it.stackName == name }
+                    ?: throw GitJasprException(
+                        "No named stack '$name' found targeting '$target'. " +
+                            "Available stacks: ${stacks.joinToString(", ") { it.stackName }}"
+                    )
+            } else {
+                val remoteName = config.remoteName
+                val refs = stacks.map { "${remoteName}/${it.name()}" }
+                val shortMessages = appWiring.gitClient.getShortMessages(refs)
+                echo("Named stacks targeting $target:")
+                for ((index, stack) in stacks.withIndex()) {
+                    val ref = "${remoteName}/${stack.name()}"
+                    val message = shortMessages[ref]?.let { " $it" }.orEmpty()
+                    echo("  ${index + 1}. [${stack.stackName}]$message")
+                }
+                val terminal = currentContext.terminal
+                promptForSelection(terminal, stacks)
+            }
+
+        gitJaspr.checkoutNamedStack(selected)
+    }
+
+    private fun promptForSelection(
+        terminal: Terminal,
+        stacks: List<RemoteNamedStackRef>,
+    ): RemoteNamedStackRef {
+        while (true) {
+            val input = terminal.prompt("Select a stack (1-${stacks.size})")
+            val selection = input?.toIntOrNull()
+            if (selection != null && selection in 1..stacks.size) {
+                return stacks[selection - 1]
+            }
+            echo("Invalid selection. Please enter a number between 1 and ${stacks.size}.")
+        }
     }
 }
 
@@ -581,6 +657,7 @@ object Cli {
                 listOf(
                     Status(),
                     Push(),
+                    Checkout(),
                     Merge(),
                     AutoMerge(),
                     Clean(),

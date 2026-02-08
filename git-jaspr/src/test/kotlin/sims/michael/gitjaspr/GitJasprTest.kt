@@ -17,6 +17,7 @@ import sims.michael.gitjaspr.githubtests.GitHubTestHarness
 import sims.michael.gitjaspr.githubtests.GitHubTestHarness.Companion.withTestSetup
 import sims.michael.gitjaspr.githubtests.TestCaseData
 import sims.michael.gitjaspr.githubtests.generatedtestdsl.testCase
+import sims.michael.gitjaspr.testing.Checkout
 import sims.michael.gitjaspr.testing.Clean
 import sims.michael.gitjaspr.testing.DEFAULT_COMMITTER
 import sims.michael.gitjaspr.testing.DontPush
@@ -48,6 +49,15 @@ interface GitJasprTest {
 
     suspend fun GitHubTestHarness.getRemoteCommitStatuses(stack: List<Commit>) =
         gitJaspr.getRemoteCommitStatuses(stack)
+
+    suspend fun GitHubTestHarness.checkout(stackName: String) {
+        val stacks = gitJaspr.getNamedStacks(DEFAULT_TARGET_REF)
+        val stack =
+            checkNotNull(stacks.find { it.stackName == stackName }) {
+                "No named stack '$stackName' found"
+            }
+        gitJaspr.checkoutNamedStack(stack)
+    }
 
     suspend fun GitHubTestHarness.waitForChecksToConclude(
         vararg commitFilter: String,
@@ -5549,6 +5559,93 @@ interface GitJasprTest {
                 sortedSetOf(RemoteNamedStackRef("my-stack").name()),
                 cleanPlan.emptyNamedStackBranches,
             )
+        }
+    }
+
+    // endregion
+
+    // region checkout tests
+
+    @Checkout
+    @Test
+    fun `checkout - push then checkout by name`() {
+        withTestSetup(useFakeRemote) {
+            createCommitsFrom(
+                testCase {
+                    repository {
+                        commit { title = "one" }
+                        commit { title = "two" }
+                        commit {
+                            title = "three"
+                            localRefs += "main"
+                        }
+                    }
+                    checkout = "main"
+                }
+            )
+
+            val stackName = "my-stack"
+            gitJaspr.push(stackName = stackName)
+
+            // Switch to a different branch
+            localGit.checkout("main")
+
+            // Checkout the named stack
+            checkout(stackName)
+
+            assertEquals(stackName, localGit.getCurrentBranchName())
+            val upstream = localGit.getUpstreamBranch(remoteName)
+            assertEquals(RemoteNamedStackRef(stackName).name(), upstream?.name)
+        }
+    }
+
+    @Checkout
+    @Test
+    fun `checkout - checkout non-existent stack fails`() {
+        withTestSetup(useFakeRemote) {
+            createCommitsFrom(
+                testCase {
+                    repository {
+                        commit { title = "one" }
+                        commit {
+                            title = "two"
+                            localRefs += "main"
+                        }
+                    }
+                    checkout = "main"
+                }
+            )
+
+            gitJaspr.push(stackName = "real-stack")
+
+            assertThrows<IllegalStateException> { checkout("nonexistent") }
+        }
+    }
+
+    @Checkout
+    @Test
+    fun `checkout - checkout with conflicting local branch fails`() {
+        withTestSetup(useFakeRemote) {
+            createCommitsFrom(
+                testCase {
+                    repository {
+                        commit { title = "one" }
+                        commit {
+                            title = "two"
+                            localRefs += "main"
+                        }
+                    }
+                    checkout = "main"
+                }
+            )
+
+            val stackName = "my-stack"
+            gitJaspr.push(stackName = stackName)
+
+            // Create a local branch with the same name but no upstream
+            localGit.branch(stackName)
+
+            assertThrows<GitJasprException> { checkout(stackName) }
         }
     }
 
