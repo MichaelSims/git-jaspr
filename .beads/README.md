@@ -1,6 +1,6 @@
 # Beads - AI-Native Issue Tracking
 
-Welcome to Beads! This repository uses **Beads** for issue tracking - a modern, AI-native tool designed to live directly in your codebase alongside your code. The `.beads/` directory is not checked into version control; issues are tracked locally.
+Welcome to Beads! This repository uses **Beads** for issue tracking - a modern, AI-native tool designed to live directly in your codebase alongside your code. Issues are versioned on the `beads-sync` orphan branch, separate from code history. Run `beads-sync` to export and commit.
 
 ## What is Beads?
 
@@ -26,8 +26,8 @@ br show <issue-id>
 br update <issue-id> --status in_progress
 br update <issue-id> --status done
 
-# Sync issues to JSONL
-br sync --flush-only
+# Sync issues and commit to beads-sync branch
+beads-sync
 ```
 
 ### Working with Issues
@@ -35,7 +35,7 @@ br sync --flush-only
 Issues in Beads are:
 - **Local-first**: Stored in `.beads/issues.jsonl`
 - **AI-friendly**: CLI-first design works perfectly with AI coding agents
-- **Always in sync**: Run `br sync --flush-only` to export the latest state to JSONL
+- **Always in sync**: Run `beads-sync` to export and commit to the `beads-sync` branch
 
 ## Why Beads?
 
@@ -50,8 +50,8 @@ Issues in Beads are:
 - Fast, lightweight, and stays out of your way
 
 🔧 **Simple Sync**
-- Export issues to JSONL with `br sync --flush-only`
-- Intelligent JSONL format for easy tooling integration
+- Run `beads-sync` to export and commit to the `beads-sync` orphan branch
+- Issues versioned separately from code history
 
 ## Get Started with Beads
 

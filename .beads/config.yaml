@@ -36,8 +36,8 @@
 # Use 'br export --events' to trigger manually regardless of this setting.
 # events-export: false
 
-# Git branch for beads sync (not used when .beads/ is not version controlled)
-# sync-branch: "beads-sync"
+# Git branch for beads sync (orphan branch, separate from code history)
+sync-branch: "beads-sync"
 
 # Multi-repo configuration (experimental - br-307)
 # Allows hydrating from multiple repositories and routing writes to the correct JSONL
