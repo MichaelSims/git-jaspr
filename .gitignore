@@ -3,3 +3,9 @@ build
 .idea
 .spr.yml
 kotlin-compiler-*
+
+# bv (beads viewer) local config and caches
+.bv/
+
+# abacus, another beads viewer
+.abacus/
