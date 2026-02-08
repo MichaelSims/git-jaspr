@@ -258,6 +258,7 @@ class GitJaspr(
     suspend fun push(
         refSpec: RefSpec = RefSpec(DEFAULT_LOCAL_OBJECT, DEFAULT_TARGET_REF),
         stackName: String? = null,
+        count: Int? = null,
     ) {
         logger.trace("push {}", refSpec)
 
@@ -273,9 +274,13 @@ class GitJaspr(
         val targetRef = refSpec.remoteRef
         fun getLocalCommitStack() =
             gitClient.getLocalCommitStack(remoteName, refSpec.localRef, targetRef)
-        val originalStack = getLocalCommitStack()
+        val originalStack = resolveCount(getLocalCommitStack(), count)
         val stackWithIds =
-            if (addCommitIdsToLocalStack(originalStack)) getLocalCommitStack() else originalStack
+            if (addCommitIdsToLocalStack(originalStack)) {
+                resolveCount(getLocalCommitStack(), count)
+            } else {
+                originalStack
+            }
 
         // Filter stack based on the dont-push pattern
         val (stack, excludedCommits) = filterStackByDontPushPattern(stackWithIds)
@@ -453,7 +458,7 @@ class GitJaspr(
         print(getStatusString(refSpec, remoteBranchesAfterPush))
     }
 
-    suspend fun merge(refSpec: RefSpec) {
+    suspend fun merge(refSpec: RefSpec, count: Int? = null) {
         logger.trace("merge {}", refSpec)
         val remoteName = config.remoteName
         gitClient.fetch(remoteName)
@@ -470,7 +475,10 @@ class GitJaspr(
         }
 
         val fullStack =
-            gitClient.getLocalCommitStack(remoteName, refSpec.localRef, refSpec.remoteRef)
+            resolveCount(
+                gitClient.getLocalCommitStack(remoteName, refSpec.localRef, refSpec.remoteRef),
+                count,
+            )
         if (fullStack.isEmpty()) {
             logStackIsEmptyWarning()
             return
@@ -553,6 +561,27 @@ class GitJaspr(
         cleanUpBranches(branchesToDelete)
     }
 
+    /**
+     * Resolves a count parameter to a sublist of the stack. Positive values take that many commits
+     * from the bottom of the stack. Negative values exclude that many commits from the top.
+     */
+    private fun resolveCount(stack: List<Commit>, count: Int?): List<Commit> {
+        if (count == null) return stack
+        require(count != 0) { "Count must not be zero." }
+        val effective =
+            if (count > 0) {
+                require(count <= stack.size) { "Count $count exceeds stack size of ${stack.size}." }
+                count
+            } else {
+                val result = stack.size + count
+                require(result >= 1) {
+                    "Count $count results in $result commits, which is less than 1."
+                }
+                result
+            }
+        return stack.subList(0, effective)
+    }
+
     private fun logExcludedCommits(excludedCommits: List<Commit>) {
         if (excludedCommits.isNotEmpty()) {
             val firstExcluded = excludedCommits.first()
@@ -571,6 +600,7 @@ class GitJaspr(
         refSpec: RefSpec,
         pollingIntervalSeconds: Int = 10,
         maxAttempts: Int = Int.MAX_VALUE,
+        count: Int? = null,
     ) {
         logger.trace("autoMerge {} {}", refSpec, pollingIntervalSeconds)
 
@@ -578,7 +608,10 @@ class GitJaspr(
         val remoteName = config.remoteName
         gitClient.fetch(remoteName)
         val fullStack =
-            gitClient.getLocalCommitStack(remoteName, refSpec.localRef, refSpec.remoteRef)
+            resolveCount(
+                gitClient.getLocalCommitStack(remoteName, refSpec.localRef, refSpec.remoteRef),
+                count,
+            )
         val (filteredStack, excludedCommits) = filterStackByDontPushOrDraft(fullStack)
         logExcludedCommits(excludedCommits)
 

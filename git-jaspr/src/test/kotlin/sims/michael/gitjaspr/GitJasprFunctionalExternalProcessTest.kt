@@ -46,7 +46,7 @@ class GitJasprFunctionalExternalProcessTest : GitJasprTest {
             .map { (k, v) -> k.toString() to v.toString() }
             .toMap()
 
-    override suspend fun GitHubTestHarness.push() {
+    override suspend fun GitHubTestHarness.push(count: Int?) {
         executeCli(
             scratchDir = scratchDir,
             remoteUri = remoteUri,
@@ -54,7 +54,7 @@ class GitJasprFunctionalExternalProcessTest : GitJasprTest {
             extraCliArgs = emptyList(),
             homeDirConfig = buildHomeDirConfig(),
             repoDirConfig = emptyMap(),
-            strings = listOf("push", "--remote-name", remoteName),
+            strings = listOf("push", "--remote-name", remoteName) + count.toCountArgs(),
             invokeLocation = localRepo,
             javaOptions = javaOptions,
         )
@@ -83,7 +83,7 @@ class GitJasprFunctionalExternalProcessTest : GitJasprTest {
         )
     }
 
-    override suspend fun GitHubTestHarness.merge(refSpec: RefSpec) {
+    override suspend fun GitHubTestHarness.merge(refSpec: RefSpec, count: Int?) {
         executeCli(
             scratchDir = scratchDir,
             remoteUri = remoteUri,
@@ -100,7 +100,7 @@ class GitJasprFunctionalExternalProcessTest : GitJasprTest {
                     refSpec.remoteRef,
                     "--local",
                     refSpec.localRef,
-                ),
+                ) + count.toCountArgs(),
             invokeLocation = localRepo,
             javaOptions = javaOptions,
         )
@@ -109,6 +109,7 @@ class GitJasprFunctionalExternalProcessTest : GitJasprTest {
     override suspend fun GitHubTestHarness.autoMerge(
         refSpec: RefSpec,
         pollingIntervalSeconds: Int,
+        count: Int?,
     ) {
         executeCli(
             scratchDir = scratchDir,
@@ -128,7 +129,7 @@ class GitJasprFunctionalExternalProcessTest : GitJasprTest {
                     refSpec.localRef,
                     "--interval",
                     pollingIntervalSeconds.toString(),
-                ),
+                ) + count.toCountArgs(),
             invokeLocation = localRepo,
             javaOptions = javaOptions,
         )
@@ -184,3 +185,6 @@ class GitJasprFunctionalExternalProcessTest : GitJasprTest {
         )
     }
 }
+
+private fun Int?.toCountArgs(): List<String> =
+    if (this != null) listOf("--count", toString()) else emptyList()
