@@ -495,43 +495,29 @@ class GitJaspr(
 
         val statuses = getRemoteCommitStatuses(stack)
 
-        // Do a "stack check"
-        // Find the first commit that isn't mergeable, and the one before it is the last mergeable
-        // commit
-        val firstIndexNotMergeable = statuses.indexOfFirst { status -> !status.isMergeable }
-        val indexLastMergeable =
-            if (firstIndexNotMergeable == -1) {
-                statuses.lastIndex
-            } else {
-                firstIndexNotMergeable - 1
-            }
-        if (indexLastMergeable == -1) {
-            logger.warn("No commits in your local stack are mergeable.")
-            return
+        if (!statuses.all(RemoteCommitStatus::isMergeable)) {
+            throw GitJasprException(
+                "Not all commits in the stack are mergeable. " +
+                    "Use --count or --local to limit the merge scope, " +
+                    "or use auto-merge to wait for all commits to become mergeable."
+            )
         }
 
         val prs = ghClient.getPullRequests().filterByMatchingTargetRef()
-        val branchesToDelete =
-            getBranchesToDeleteDuringMerge(stack.slice(0..indexLastMergeable), refSpec.remoteRef)
+        val branchesToDelete = getBranchesToDeleteDuringMerge(stack, refSpec.remoteRef)
 
-        val lastMergeableStatus = statuses[indexLastMergeable]
-        val lastPr = checkNotNull(lastMergeableStatus.pullRequest)
+        val lastStatus = statuses.last()
+        val lastPr = checkNotNull(lastStatus.pullRequest)
         if (lastPr.baseRefName != refSpec.remoteRef) {
             logger.trace("Rebase {} onto {} in prep for merge", lastPr, refSpec.remoteRef)
             ghClient.updatePullRequest(lastPr.copy(baseRefName = refSpec.remoteRef))
         }
 
-        val refSpecs = listOf(RefSpec(lastMergeableStatus.localCommit.hash, refSpec.remoteRef))
-        gitClient.push(refSpecs, remoteName)
-        logger.info(
-            "Merged {} {} to {}",
-            indexLastMergeable + 1,
-            refOrRefs(indexLastMergeable + 1),
-            refSpec.remoteRef,
-        )
+        val mergeRefSpecs = listOf(RefSpec(lastStatus.localCommit.hash, refSpec.remoteRef))
+        gitClient.push(mergeRefSpecs, remoteName)
+        logger.info("Merged {} {} to {}", stack.size, refOrRefs(stack.size), refSpec.remoteRef)
 
-        val mergedRefs =
-            stack.slice(0..indexLastMergeable).map { commit -> commit.toRemoteRefName() }.toSet()
+        val mergedRefs = stack.map { commit -> commit.toRemoteRefName() }.toSet()
         val prsToRebase =
             prs.filter { it.baseRefName in mergedRefs }
                 .map { it.copy(baseRefName = refSpec.remoteRef) }

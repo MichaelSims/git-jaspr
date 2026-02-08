@@ -3071,7 +3071,7 @@ interface GitJasprTest {
 
     @Merge
     @Test
-    fun `merge pushes latest commit that passes the stack check`() {
+    fun `merge fails when not all commits are mergeable`() {
         withTestSetup(useFakeRemote) {
             createCommitsFrom(
                 testCase {
@@ -3087,21 +3087,9 @@ interface GitJasprTest {
                             remoteRefs += buildRemoteRef("b")
                         }
                         commit {
-                            title = "dontpush: c"
-                            id = "c"
+                            title = "c"
                             willPassVerification = true
                             remoteRefs += buildRemoteRef("c")
-                        }
-                        commit {
-                            title = "draft: d"
-                            id = "d"
-                            willPassVerification = true
-                            remoteRefs += buildRemoteRef("d")
-                        }
-                        commit {
-                            title = "e"
-                            willPassVerification = true
-                            remoteRefs += buildRemoteRef("e")
                             localRefs += "development"
                         }
                     }
@@ -3120,38 +3108,85 @@ interface GitJasprTest {
                     pullRequest {
                         headRef = buildRemoteRef("c")
                         baseRef = buildRemoteRef("b")
-                        title = "dontpush: c"
-                        willBeApprovedByUserKey = "michael"
-                    }
-                    pullRequest {
-                        headRef = buildRemoteRef("d")
-                        baseRef = buildRemoteRef("c")
-                        title = "draft: d"
-                    }
-                    pullRequest {
-                        headRef = buildRemoteRef("e")
-                        baseRef = buildRemoteRef("d")
-                        title = "e"
-                        willBeApprovedByUserKey = "michael"
+                        title = "c"
                     }
                 }
             )
 
-            waitForChecksToConclude("a", "b", "c", "d", "e")
-            merge(RefSpec("development", "main"))
-            assertEquals(
-                // All mergeable commits were merged, leaving c, d, and e as the only one not merged
-                listOf("dontpush: c", "draft: d", "e"),
-                localGit
-                    .getLocalCommitStack(remoteName, "development", DEFAULT_TARGET_REF)
-                    .map(Commit::shortMessage),
-            )
+            waitForChecksToConclude("a", "b", "c")
+            val exception =
+                assertThrows<GitJasprException> { merge(RefSpec("development", "main")) }
+            assertContains(exception.message, "Not all commits in the stack are mergeable")
         }
     }
 
     @Merge
     @Test
-    fun `merge sets baseRef to targetRef on the latest PR that is mergeable`() {
+    fun `merge sets baseRef to targetRef on the last PR`() {
+        withTestSetup(useFakeRemote) {
+            createCommitsFrom(
+                testCase {
+                    repository {
+                        commit {
+                            title = "one"
+                            willPassVerification = true
+                            remoteRefs += buildRemoteRef("one")
+                        }
+                        commit {
+                            title = "two"
+                            willPassVerification = true
+                            remoteRefs += buildRemoteRef("two")
+                        }
+                        commit {
+                            title = "three"
+                            willPassVerification = true
+                            remoteRefs += buildRemoteRef("three")
+                        }
+                        commit {
+                            title = "four"
+                            willPassVerification = true
+                            remoteRefs += buildRemoteRef("four")
+                            localRefs += "development"
+                        }
+                    }
+                    pullRequest {
+                        headRef = buildRemoteRef("one")
+                        baseRef = "main"
+                        title = "one"
+                        willBeApprovedByUserKey = "michael"
+                    }
+                    pullRequest {
+                        headRef = buildRemoteRef("two")
+                        baseRef = buildRemoteRef("one")
+                        title = "two"
+                        willBeApprovedByUserKey = "michael"
+                    }
+                    pullRequest {
+                        headRef = buildRemoteRef("three")
+                        baseRef = buildRemoteRef("two")
+                        title = "three"
+                        willBeApprovedByUserKey = "michael"
+                    }
+                    pullRequest {
+                        headRef = buildRemoteRef("four")
+                        baseRef = buildRemoteRef("three")
+                        title = "four"
+                        willBeApprovedByUserKey = "michael"
+                    }
+                }
+            )
+
+            waitForChecksToConclude("one", "two", "three", "four")
+
+            merge(RefSpec("development", "main"))
+            // After merging, all PRs should be closed/merged
+            assertEventuallyEquals(emptyList()) { gitHub.getPullRequests().map(PullRequest::title) }
+        }
+    }
+
+    @Merge
+    @Test
+    fun `merge closes all PRs when entire stack is merged`() {
         withTestSetup(useFakeRemote) {
             createCommitsFrom(
                 testCase {
@@ -3211,6 +3246,7 @@ interface GitJasprTest {
                         headRef = buildRemoteRef("five")
                         baseRef = buildRemoteRef("four")
                         title = "five"
+                        willBeApprovedByUserKey = "michael"
                     }
                 }
             )
@@ -3218,89 +3254,7 @@ interface GitJasprTest {
             waitForChecksToConclude("one", "two", "three", "four", "five")
 
             merge(RefSpec("development", "main"))
-            // Note that "four" will be the last mergeable commit because "five" has not been
-            // approved. Therefore, we should check that PR five is pointing at "main"
-            // (DEFAULT_TARGET_REF)
-            assertEquals(
-                DEFAULT_TARGET_REF,
-                gitHub.getPullRequestsByHeadRef(buildRemoteRef("five")).last().baseRefName,
-            )
-        }
-    }
-
-    @Merge
-    @Test
-    fun `merge closes PRs that were rolled up into the PR for the latest mergeable commit`() {
-        withTestSetup(useFakeRemote) {
-            createCommitsFrom(
-                testCase {
-                    repository {
-                        commit {
-                            title = "one"
-                            willPassVerification = true
-                            remoteRefs += buildRemoteRef("one")
-                        }
-                        commit {
-                            title = "two"
-                            willPassVerification = true
-                            remoteRefs += buildRemoteRef("two")
-                        }
-                        commit {
-                            title = "three"
-                            willPassVerification = true
-                            remoteRefs += buildRemoteRef("three")
-                        }
-                        commit {
-                            title = "four"
-                            willPassVerification = true
-                            remoteRefs += buildRemoteRef("four")
-                        }
-                        commit {
-                            title = "five"
-                            willPassVerification = true
-                            remoteRefs += buildRemoteRef("five")
-                            localRefs += "development"
-                        }
-                    }
-                    pullRequest {
-                        headRef = buildRemoteRef("one")
-                        baseRef = "main"
-                        title = "one"
-                        willBeApprovedByUserKey = "michael"
-                    }
-                    pullRequest {
-                        headRef = buildRemoteRef("two")
-                        baseRef = buildRemoteRef("one")
-                        title = "two"
-                        willBeApprovedByUserKey = "michael"
-                    }
-                    pullRequest {
-                        headRef = buildRemoteRef("three")
-                        baseRef = buildRemoteRef("two")
-                        title = "three"
-                        willBeApprovedByUserKey = "michael"
-                    }
-                    pullRequest {
-                        headRef = buildRemoteRef("four")
-                        baseRef = buildRemoteRef("three")
-                        title = "four"
-                        willBeApprovedByUserKey = "michael"
-                    }
-                    pullRequest {
-                        headRef = buildRemoteRef("five")
-                        baseRef = buildRemoteRef("four")
-                        title = "five"
-                    }
-                }
-            )
-
-            waitForChecksToConclude("one", "two", "three", "four", "five")
-
-            merge(RefSpec("development", "main"))
-            assertEventuallyEquals(
-                listOf("five"),
-                getActual = { gitHub.getPullRequests().map(PullRequest::title) },
-            )
+            assertEventuallyEquals(emptyList()) { gitHub.getPullRequests().map(PullRequest::title) }
         }
     }
 
@@ -3346,7 +3300,7 @@ interface GitJasprTest {
                 }
             )
 
-            merge(RefSpec("development", "main"))
+            assertThrows<GitJasprException> { merge(RefSpec("development", "main")) }
             assertEquals(
                 listOf("one", "two", "three"),
                 gitHub.getPullRequests().map(PullRequest::title),
@@ -3628,7 +3582,7 @@ interface GitJasprTest {
                             title = "c"
                             localRefs += "development"
                             remoteRefs += buildRemoteRef("c")
-                            willPassVerification = false
+                            willPassVerification = true
                         }
                     }
                     pullRequest {
@@ -3693,11 +3647,11 @@ interface GitJasprTest {
             localGit.checkout("dev2")
             push()
 
-            waitForChecksToConclude("a", "b", "d", "d^1", timeout = Long.MAX_VALUE)
+            waitForChecksToConclude("a", "b", "c", "d", "d^1", timeout = Long.MAX_VALUE)
             merge(RefSpec("development", "main"))
 
-            // PR "d" targeted commit "a"'s branch (not "b" which is the last merged ref).
-            // After merging a and b, PR "d" should be rebased to "main".
+            // PR "d" targeted commit "a"'s branch. After merging the full stack (a, b, c),
+            // PR "d" should be rebased to "main".
             assertEquals(
                 "main",
                 gitHub
@@ -3710,7 +3664,7 @@ interface GitJasprTest {
 
     @Merge
     @Test
-    fun `merge with out of date commit`() {
+    fun `merge with out of date commit fails`() {
         withTestSetup(useFakeRemote, rollBackChanges = false) {
             createCommitsFrom(
                 testCase {
@@ -3785,14 +3739,7 @@ interface GitJasprTest {
             )
 
             waitForChecksToConclude("one", "two", "three", "four")
-            merge(RefSpec("development", "main"))
-            assertEquals(
-                // One was merged, leaving three and four unmerged
-                listOf("three", "four"),
-                localGit
-                    .getLocalCommitStack(remoteName, "development", DEFAULT_TARGET_REF)
-                    .map(Commit::shortMessage),
-            )
+            assertThrows<GitJasprException> { merge(RefSpec("development", "main")) }
         }
     }
 
