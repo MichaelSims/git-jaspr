@@ -902,8 +902,11 @@ class GitJaspr(
     }
 
     data class CleanPlan(
+        /** A list of jaspr branches for which no open PR exists (user closed it manually) */
         val orphanedBranches: SortedSet<String> = sortedSetOf(),
+        /** A list of named stack branches that are empty (already merged into their target) */
         val emptyNamedStackBranches: SortedSet<String> = sortedSetOf(),
+        /** A list of jaspr branches that are not orphaned but are unreachable by any named stack */
         val abandonedBranches: SortedSet<String> = sortedSetOf(),
     ) {
         operator fun plus(other: CleanPlan): CleanPlan {
