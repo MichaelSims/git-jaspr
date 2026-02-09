@@ -731,67 +731,54 @@ class GitJaspr(
         }
     }
 
-    suspend fun clean(dryRun: Boolean) {
-        logger.trace("clean{}", if (dryRun) " (dryRun)" else "")
-        val initialPlan = getCleanPlan()
-        logger.trace("clean initial plan: {}", initialPlan)
-
-        val updatedPlan =
-            if (!dryRun && initialPlan.abandonedBranches.isNotEmpty()) {
-                // Close abandoned PRs, then recalculate the plan again (closing PRs may orphan more
-                // branches)
-                val allPrs = ghClient.getPullRequests().filterByMatchingTargetRef()
-                val prsToClose = allPrs.filter { it.headRefName in initialPlan.abandonedBranches }
-                for (pr in prsToClose) {
-                    ghClient.closePullRequest(pr)
-                }
-                (initialPlan + getCleanPlan()).also { updatedPlan ->
-                    logger.trace(
-                        "clean updated plan after closing {} abandoned PRs: {}",
-                        prsToClose.size,
-                        updatedPlan,
-                    )
-                }
-            } else {
-                initialPlan
+    /**
+     * Closes abandoned PRs from the given [plan] and returns an updated plan. Closing PRs may
+     * orphan additional branches, so the plan is recalculated after closing.
+     */
+    suspend fun closeAbandonedPrsAndRecalculate(
+        plan: CleanPlan,
+        cleanAbandonedPrs: Boolean = config.cleanAbandonedPrs,
+        cleanAllCommits: Boolean = config.cleanAllCommits,
+    ): CleanPlan {
+        logger.trace("closeAbandonedPrsAndRecalculate")
+        return if (plan.abandonedBranches.isNotEmpty()) {
+            val allPrs = ghClient.getPullRequests().filterByMatchingTargetRef()
+            val prsToClose = allPrs.filter { pr -> pr.headRefName in plan.abandonedBranches }
+            for (pr in prsToClose) {
+                ghClient.closePullRequest(pr)
             }
+            (plan + getCleanPlan(cleanAbandonedPrs, cleanAllCommits)).also { updatedPlan ->
+                logger.trace(
+                    "closeAbandonedPrsAndRecalculate updated plan after closing {} abandoned PRs: {}",
+                    prsToClose.size,
+                    updatedPlan,
+                )
+            }
+        } else {
+            plan
+        }
+    }
 
-        val (orphanedBranches, emptyNamedStackBranches, abandonedBranches) = updatedPlan
-        val branchesNeedingMessages = orphanedBranches + abandonedBranches
-        val shortMessages =
-            gitClient.getShortMessages(branchesNeedingMessages.map { "${config.remoteName}/$it" })
-        for (branch in orphanedBranches) {
-            val shortMessage = shortMessages["${config.remoteName}/$branch"]
-            logger.info(
-                "{}{} is orphaned",
-                branch,
-                if (shortMessage != null) " ($shortMessage)" else "",
-            )
-        }
-        for (branch in emptyNamedStackBranches) {
-            logger.info("{} is empty (fully merged)", branch)
-        }
-        for (branch in abandonedBranches) {
-            val shortMessage = shortMessages["${config.remoteName}/$branch"]
-            logger.info(
-                "{}{} is abandoned (open PR not reachable by any named stack)",
-                branch,
-                if (shortMessage != null) " ($shortMessage)" else "",
-            )
-        }
+    /** Deletes all branches in the given [plan] from the remote via force push. */
+    fun executeCleanPlan(plan: CleanPlan) {
+        logger.trace("executeCleanPlan")
+        val branchesToDelete = plan.allBranches()
+        logger.info(
+            "Deleting {} {}",
+            branchesToDelete.size,
+            branchOrBranches(branchesToDelete.size),
+        )
+        gitClient.push(
+            branchesToDelete.map { name -> RefSpec(FORCE_PUSH_PREFIX, name) },
+            config.remoteName,
+        )
+    }
 
-        if (!dryRun) {
-            val branchesToDelete = updatedPlan.allBranches()
-            logger.info(
-                "Deleting {} {}",
-                branchesToDelete.size,
-                branchOrBranches(branchesToDelete.size),
-            )
-            gitClient.push(
-                branchesToDelete.map { RefSpec(FORCE_PUSH_PREFIX, it) },
-                config.remoteName,
-            )
-        }
+    /** Returns short commit messages for the given branch names, prefixed with the remote name. */
+    fun getShortMessagesForBranches(branches: List<String>): Map<String, String?> {
+        return gitClient
+            .getShortMessages(branches.map { name -> "${config.remoteName}/$name" })
+            .mapKeys { (key, _) -> key.removePrefix("${config.remoteName}/") }
     }
 
     internal suspend fun getOrphanedBranches(): List<String> {
@@ -907,7 +894,10 @@ class GitJaspr(
             (orphanedBranches + emptyNamedStackBranches + abandonedBranches).sorted()
     }
 
-    internal suspend fun getCleanPlan(): CleanPlan {
+    suspend fun getCleanPlan(
+        cleanAbandonedPrs: Boolean = config.cleanAbandonedPrs,
+        cleanAllCommits: Boolean = config.cleanAllCommits,
+    ): CleanPlan {
         logger.trace("getCleanPlan")
         gitClient.fetch(config.remoteName, prune = true)
         val remoteBranches = gitClient.getRemoteBranches(config.remoteName)
@@ -921,7 +911,7 @@ class GitJaspr(
         val allOrphanedBranches = getOrphanedBranches(remoteBranches, pullRequestHeadRefs)
         val emptyNamedStackBranches = getEmptyNamedStackBranches(remoteBranches)
         val allAbandonedBranches =
-            if (config.cleanAbandonedPrs) {
+            if (cleanAbandonedPrs) {
                 getAbandonedBranches(remoteBranches, pullRequestHeadRefs)
             } else {
                 emptyList()
@@ -933,7 +923,7 @@ class GitJaspr(
         val userIdent = getCurrentUserIdent()
 
         val orphanedBranches =
-            if (config.cleanAllCommits) {
+            if (cleanAllCommits) {
                 allOrphanedBranches
             } else {
                 allOrphanedBranches.filter { branchName ->
@@ -942,7 +932,7 @@ class GitJaspr(
             }
 
         val abandonedBranches =
-            if (config.cleanAllCommits) {
+            if (cleanAllCommits) {
                 allAbandonedBranches
             } else {
                 allAbandonedBranches.filter { branchName ->
