@@ -21,6 +21,11 @@ import com.github.ajalt.clikt.sources.ChainedValueSource
 import com.github.ajalt.clikt.sources.PropertiesValueSource
 import com.github.ajalt.clikt.sources.ValueSource.Companion.getKey
 import com.github.ajalt.mordant.rendering.TextColors
+import com.github.ajalt.mordant.rendering.TextColors.Companion.rgb
+import com.github.ajalt.mordant.rendering.TextColors.brightWhite
+import com.github.ajalt.mordant.rendering.TextColors.cyan
+import com.github.ajalt.mordant.rendering.TextColors.green
+import com.github.ajalt.mordant.rendering.TextColors.red
 import com.github.ajalt.mordant.rendering.TextStyles.bold
 import com.github.ajalt.mordant.terminal.Terminal
 import java.io.File
@@ -95,7 +100,7 @@ class Push : GitJasprCommand(help = "Push local commits to the remote and open P
     private fun promptForStackName(suggested: String): String {
         echo(
             "Please provide a name for your stack or press enter to accept the generated one " +
-                "(in the future you can use the --name option if you prefer)."
+                "(in the future you can use the ${bold("--name")} option if you prefer)."
         )
         val terminal = currentContext.terminal
         var default = suggested
@@ -103,12 +108,12 @@ class Push : GitJasprCommand(help = "Push local commits to the remote and open P
             val input = terminal.prompt("Stack name", default = default.ifEmpty { null }) ?: default
             val normalized = StackNameGenerator.generateName(input)
             if (normalized.isEmpty()) {
-                echo("Stack name must contain at least one alphanumeric character.")
+                echo(red("Stack name must contain at least one alphanumeric character."))
                 default = ""
                 continue
             }
             if (normalized == input) return input
-            echo("Normalized to: $normalized")
+            echo("Normalized to: ${cyan(normalized)}")
             default = normalized
         }
     }
@@ -167,12 +172,12 @@ class Clean : GitJasprCommand(help = "Clean up orphaned jaspr branches") {
             displayPlan(plan, jaspr)
 
             if (plan.allBranches().isEmpty()) {
-                echo(TextColors.green("Nothing to clean."))
+                echo(green("Nothing to clean."))
                 return
             }
 
             fun onOff(v: Boolean) {
-                if (v) TextColors.green("on") else TextColors.red("off")
+                if (v) green("on") else red("off")
             }
 
             echo()
@@ -194,11 +199,7 @@ class Clean : GitJasprCommand(help = "Clean up orphaned jaspr branches") {
                         )
                     jaspr.executeCleanPlan(finalPlan)
                     val count = finalPlan.allBranches().size
-                    echo(
-                        TextColors.green(
-                            "Deleted $count ${if (count == 1) "branch" else "branches"}."
-                        )
-                    )
+                    echo(green("Deleted $count ${if (count == 1) "branch" else "branches"}."))
                     return
                 }
 
@@ -210,7 +211,7 @@ class Clean : GitJasprCommand(help = "Clean up orphaned jaspr branches") {
                     return
                 }
 
-                else -> echo(TextColors.red("Invalid selection."))
+                else -> echo(red("Invalid selection."))
             }
         }
     }
@@ -225,9 +226,8 @@ class Clean : GitJasprCommand(help = "Clean up orphaned jaspr branches") {
             echo()
             echo(bold("Orphaned branches (PRs are closed or do not exist):"))
             for (branch in plan.orphanedBranches) {
-                val message =
-                    shortMessages[branch]?.let { " ${TextColors.brightWhite(it)}" }.orEmpty()
-                echo("  ${TextColors.cyan(branch)}$message")
+                val message = shortMessages[branch]?.let { " ${brightWhite(it)}" }.orEmpty()
+                echo("  ${cyan(branch)}$message")
             }
         }
 
@@ -235,7 +235,7 @@ class Clean : GitJasprCommand(help = "Clean up orphaned jaspr branches") {
             echo()
             echo(bold("Empty named stack branches (fully merged):"))
             for (branch in plan.emptyNamedStackBranches) {
-                echo("  ${TextColors.cyan(branch)}")
+                echo("  ${cyan(branch)}")
             }
         }
 
@@ -243,9 +243,8 @@ class Clean : GitJasprCommand(help = "Clean up orphaned jaspr branches") {
             echo()
             echo(bold("Abandoned branches (open PRs not reachable by any named stack):"))
             for (branch in plan.abandonedBranches) {
-                val message =
-                    shortMessages[branch]?.let { " ${TextColors.brightWhite(it)}" }.orEmpty()
-                echo("  ${TextColors.cyan(branch)}$message")
+                val message = shortMessages[branch]?.let { " ${brightWhite(it)}" }.orEmpty()
+                echo("  ${cyan(branch)}$message")
             }
         }
     }
@@ -297,11 +296,11 @@ class Checkout : GitJasprCommand(help = "Check out an existing named stack") {
                 val remoteName = config.remoteName
                 val refs = stacks.map { "${remoteName}/${it.name()}" }
                 val shortMessages = appWiring.gitClient.getShortMessages(refs)
-                echo("Named stacks targeting $target:")
+                echo(bold("Named stacks targeting $target:"))
                 for ((index, stack) in stacks.withIndex()) {
                     val ref = "${remoteName}/${stack.name()}"
-                    val message = shortMessages[ref]?.let { " $it" }.orEmpty()
-                    echo("  ${index + 1}. [${stack.stackName}]$message")
+                    val message = shortMessages[ref]?.let { " ${brightWhite(it)}" }.orEmpty()
+                    echo("  ${bold("${index + 1}.")} " + "[${cyan(stack.stackName)}]$message")
                 }
                 val terminal = currentContext.terminal
                 promptForSelection(terminal, stacks)
@@ -320,7 +319,7 @@ class Checkout : GitJasprCommand(help = "Check out an existing named stack") {
             if (selection != null && selection in 1..stacks.size) {
                 return stacks[selection - 1]
             }
-            echo("Invalid selection. Please enter a number between 1 and ${stacks.size}.")
+            echo(red("Invalid selection. Please enter a number between 1 and ${stacks.size}."))
         }
     }
 }
@@ -766,7 +765,7 @@ private const val GITHUB_TOKEN_ENV_VAR = "GIT_JASPR_TOKEN"
 @Language("Markdown")
 private val helpEpilog =
     """
-**${TextColors.rgb("#E5C07B").invoke("Note on supplying config options via configuration files")}**
+**${rgb("#E5C07B").invoke("Note on supplying config options via configuration files")}**
 
 Any option above can be supplied via the per-user config file ($CONFIG_FILE_NAME in your home directory) or the per-working copy config file ($CONFIG_FILE_NAME in your working directory). For example, you can supply the --log-level option in the config file like so:
 
