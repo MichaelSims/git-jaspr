@@ -737,8 +737,8 @@ class GitJaspr(
      */
     suspend fun closeAbandonedPrsAndRecalculate(
         plan: CleanPlan,
-        cleanAbandonedPrs: Boolean = config.cleanAbandonedPrs,
-        cleanAllCommits: Boolean = config.cleanAllCommits,
+        cleanAbandonedPrs: Boolean,
+        cleanAllCommits: Boolean,
     ): CleanPlan {
         logger.trace("closeAbandonedPrsAndRecalculate")
         return if (plan.abandonedBranches.isNotEmpty()) {
@@ -894,10 +894,7 @@ class GitJaspr(
             (orphanedBranches + emptyNamedStackBranches + abandonedBranches).sorted()
     }
 
-    suspend fun getCleanPlan(
-        cleanAbandonedPrs: Boolean = config.cleanAbandonedPrs,
-        cleanAllCommits: Boolean = config.cleanAllCommits,
-    ): CleanPlan {
+    suspend fun getCleanPlan(cleanAbandonedPrs: Boolean, cleanAllCommits: Boolean): CleanPlan {
         logger.trace("getCleanPlan")
         gitClient.fetch(config.remoteName, prune = true)
         val remoteBranches = gitClient.getRemoteBranches(config.remoteName)
