@@ -3822,7 +3822,7 @@ interface GitJasprTest {
                 }
             )
 
-            gitJaspr.clean(false)
+            gitJaspr.executeCleanPlan(gitJaspr.getCleanPlan(cleanAbandonedPrs = false))
             assertEquals(
                 listOf(buildRemoteRef("a"), buildRemoteRef("a_01"), buildRemoteRef("z"), "main"),
                 localGit
@@ -4129,7 +4129,7 @@ interface GitJasprTest {
             assertEquals(3, namedStackBranchesBeforeClean.size)
 
             // Now run clean (not dry run)
-            gitJaspr.clean(dryRun = false)
+            gitJaspr.executeCleanPlan(gitJaspr.getCleanPlan())
 
             // Verify only stack-three remains (stack-one and stack-two were deleted)
             val namedStackBranchesAfterClean =
@@ -4232,8 +4232,8 @@ interface GitJasprTest {
                 gitJasprWithCleanAbandoned.getCleanPlan(),
             )
 
-            // Run clean with dry run to ensure nothing is actually deleted
-            gitJasprWithCleanAbandoned.clean(dryRun = true)
+            // Get the plan again to ensure it doesn't change anything (no side effects)
+            gitJasprWithCleanAbandoned.getCleanPlan()
 
             // Verify PRs are still open (dry run doesn't close them)
             val prsAfterClean = gitHub.getPullRequests()
@@ -4382,7 +4382,9 @@ interface GitJasprTest {
 
             val gitJasprWithCleanAbandoned =
                 gitJaspr.clone { config -> config.copy(cleanAbandonedPrs = true) }
-            gitJasprWithCleanAbandoned.clean(dryRun = false)
+            val plan = gitJasprWithCleanAbandoned.getCleanPlan()
+            val finalPlan = gitJasprWithCleanAbandoned.closeAbandonedPrsAndRecalculate(plan)
+            gitJasprWithCleanAbandoned.executeCleanPlan(finalPlan)
 
             assertEquals(
                 listOf(
@@ -4406,7 +4408,9 @@ interface GitJasprTest {
                 localGit.getRemoteBranches(remoteName).map(RemoteBranch::name).toSet(),
             )
 
-            gitJasprWithCleanAbandoned.clean(dryRun = false)
+            val plan2 = gitJasprWithCleanAbandoned.getCleanPlan()
+            val finalPlan2 = gitJasprWithCleanAbandoned.closeAbandonedPrsAndRecalculate(plan2)
+            gitJasprWithCleanAbandoned.executeCleanPlan(finalPlan2)
 
             assertEquals(
                 listOf("main"),

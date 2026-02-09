@@ -24,7 +24,7 @@ data class Config(
     @Serializable(with = LevelSerializer::class) val logLevel: Level = Level.INFO,
     @Serializable(with = FileSerializer::class) val logsDirectory: File? = null,
     val dontPushRegex: String = "^(dont[ -]?push)\\b.*$",
-    val cleanAbandonedPrs: Boolean = false,
+    val cleanAbandonedPrs: Boolean = true,
     val cleanAllCommits: Boolean = false,
 )
 

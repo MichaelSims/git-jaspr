@@ -21,6 +21,7 @@ import com.github.ajalt.clikt.sources.ChainedValueSource
 import com.github.ajalt.clikt.sources.PropertiesValueSource
 import com.github.ajalt.clikt.sources.ValueSource.Companion.getKey
 import com.github.ajalt.mordant.rendering.TextColors
+import com.github.ajalt.mordant.rendering.TextStyles.bold
 import com.github.ajalt.mordant.terminal.Terminal
 import java.io.File
 import kotlinx.coroutines.runBlocking
@@ -150,19 +151,103 @@ class AutoMerge :
 }
 
 class Clean : GitJasprCommand(help = "Clean up orphaned jaspr branches") {
-    private val forceDelegate =
-        option("-f").flag("--no-force", default = false).help {
-            "Supply this flag to remove orphaned branches"
-        }
-    private val force by forceDelegate
-
     override suspend fun doRun() {
-        if (!force) {
-            Cli.logger.info(
-                "Refusing to delete branches without the ${forceDelegate.names.first()} option."
-            )
+        val jaspr = appWiring.gitJaspr
+        val terminal = currentContext.terminal
+        var cleanAbandonedPrs = appWiring.config.cleanAbandonedPrs
+        var cleanJustMyPrs = !appWiring.config.cleanAllCommits
+
+        while (true) {
+            echo("Finding branches to clean (this may take a minute)...")
+            val plan =
+                jaspr.getCleanPlan(
+                    cleanAbandonedPrs = cleanAbandonedPrs,
+                    cleanAllCommits = !cleanJustMyPrs,
+                )
+            displayPlan(plan, jaspr)
+
+            if (plan.allBranches().isEmpty()) {
+                echo(TextColors.green("Nothing to clean."))
+                return
+            }
+
+            fun onOff(v: Boolean) {
+                if (v) TextColors.green("on") else TextColors.red("off")
+            }
+
+            echo()
+            echo("Options:")
+            echo("  [${bold("a")}] Clean abandoned PRs: ${onOff(cleanAbandonedPrs)}")
+            echo("  [${bold("m")}] Clean just my PRs: ${onOff(cleanJustMyPrs)}")
+            echo()
+
+            val prompt =
+                "Perform [${bold("c")}]lean, toggle [${bold("a")}]bandoned, " +
+                    "toggle [${bold("m")}]ine, or [${bold("q")}]uit"
+            when (terminal.prompt(prompt)?.trim()?.lowercase()) {
+                "c" -> {
+                    val finalPlan =
+                        jaspr.closeAbandonedPrsAndRecalculate(
+                            plan,
+                            cleanAbandonedPrs,
+                            !cleanJustMyPrs,
+                        )
+                    jaspr.executeCleanPlan(finalPlan)
+                    val count = finalPlan.allBranches().size
+                    echo(
+                        TextColors.green(
+                            "Deleted $count ${if (count == 1) "branch" else "branches"}."
+                        )
+                    )
+                    return
+                }
+
+                "a" -> cleanAbandonedPrs = !cleanAbandonedPrs
+                "m" -> cleanJustMyPrs = !cleanJustMyPrs
+                "q",
+                null -> {
+                    echo(TextColors.yellow("Aborted."))
+                    return
+                }
+
+                else -> echo(TextColors.red("Invalid selection."))
+            }
         }
-        appWiring.gitJaspr.clean(dryRun = !force)
+    }
+
+    private fun displayPlan(plan: GitJaspr.CleanPlan, jaspr: GitJaspr) {
+        val shortMessages =
+            jaspr.getShortMessagesForBranches(
+                (plan.orphanedBranches + plan.abandonedBranches).toList()
+            )
+
+        if (plan.orphanedBranches.isNotEmpty()) {
+            echo()
+            echo(bold("Orphaned branches (PRs are closed or do not exist):"))
+            for (branch in plan.orphanedBranches) {
+                val message =
+                    shortMessages[branch]?.let { " ${TextColors.brightWhite(it)}" }.orEmpty()
+                echo("  ${TextColors.cyan(branch)}$message")
+            }
+        }
+
+        if (plan.emptyNamedStackBranches.isNotEmpty()) {
+            echo()
+            echo(bold("Empty named stack branches (fully merged):"))
+            for (branch in plan.emptyNamedStackBranches) {
+                echo("  ${TextColors.cyan(branch)}")
+            }
+        }
+
+        if (plan.abandonedBranches.isNotEmpty()) {
+            echo()
+            echo(bold("Abandoned branches (open PRs not reachable by any named stack):"))
+            for (branch in plan.abandonedBranches) {
+                val message =
+                    shortMessages[branch]?.let { " ${TextColors.brightWhite(it)}" }.orEmpty()
+                echo("  ${TextColors.cyan(branch)}$message")
+            }
+        }
     }
 }
 
@@ -436,10 +521,9 @@ you'll need to re-enable it again.
         }
 
     private val cleanAbandonedPrs by
-        option().flag("--ignore-abandoned-prs", default = false).help {
+        option().flag("--ignore-abandoned-prs", default = true).help {
             "When enabled, the clean command will also close open PRs for jaspr branches that are not " +
-                "reachable by any existing named stack branch, and then delete those branches. The default is to " +
-                "ignore these."
+                "reachable by any existing named stack branch, and then delete those branches."
         }
 
     private val cleanAllCommits by
