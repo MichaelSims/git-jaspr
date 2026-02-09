@@ -222,31 +222,35 @@ class Clean : GitJasprCommand(help = "Clean up orphaned jaspr branches") {
                 (plan.orphanedBranches + plan.abandonedBranches).toList()
             )
 
-        if (plan.orphanedBranches.isNotEmpty()) {
-            echo()
-            echo(bold("Orphaned branches (PRs are closed or do not exist):"))
-            for (branch in plan.orphanedBranches) {
-                val message = shortMessages[branch]?.let { " ${brightWhite(it)}" }.orEmpty()
-                echo("  ${cyan(branch)}$message")
+        val lines = buildList {
+            if (plan.orphanedBranches.isNotEmpty()) {
+                add("")
+                add(bold("Orphaned branches (PRs are closed or do not exist):"))
+                for (branch in plan.orphanedBranches) {
+                    val message = shortMessages[branch]?.let { " ${brightWhite(it)}" }.orEmpty()
+                    add("  ${cyan(branch)}$message")
+                }
+            }
+
+            if (plan.emptyNamedStackBranches.isNotEmpty()) {
+                add("")
+                add(bold("Empty named stack branches (fully merged):"))
+                for (branch in plan.emptyNamedStackBranches) {
+                    add("  ${cyan(branch)}")
+                }
+            }
+
+            if (plan.abandonedBranches.isNotEmpty()) {
+                add("")
+                add(bold("Abandoned branches (open PRs not reachable by any named stack):"))
+                for (branch in plan.abandonedBranches) {
+                    val message = shortMessages[branch]?.let { " ${brightWhite(it)}" }.orEmpty()
+                    add("  ${cyan(branch)}$message")
+                }
             }
         }
 
-        if (plan.emptyNamedStackBranches.isNotEmpty()) {
-            echo()
-            echo(bold("Empty named stack branches (fully merged):"))
-            for (branch in plan.emptyNamedStackBranches) {
-                echo("  ${cyan(branch)}")
-            }
-        }
-
-        if (plan.abandonedBranches.isNotEmpty()) {
-            echo()
-            echo(bold("Abandoned branches (open PRs not reachable by any named stack):"))
-            for (branch in plan.abandonedBranches) {
-                val message = shortMessages[branch]?.let { " ${brightWhite(it)}" }.orEmpty()
-                echo("  ${cyan(branch)}$message")
-            }
-        }
+        currentContext.terminal.printPaged(lines, appWiring.config.pageSize)
     }
 }
 
@@ -296,13 +300,16 @@ class Checkout : GitJasprCommand(help = "Check out an existing named stack") {
                 val remoteName = config.remoteName
                 val refs = stacks.map { "${remoteName}/${it.name()}" }
                 val shortMessages = appWiring.gitClient.getShortMessages(refs)
-                echo(bold("Named stacks targeting $target:"))
-                for ((index, stack) in stacks.withIndex()) {
-                    val ref = "${remoteName}/${stack.name()}"
-                    val message = shortMessages[ref]?.let { " ${brightWhite(it)}" }.orEmpty()
-                    echo("  ${bold("${index + 1}.")} " + "[${cyan(stack.stackName)}]$message")
-                }
                 val terminal = currentContext.terminal
+                val lines = buildList {
+                    add(bold("Named stacks targeting $target:"))
+                    for ((index, stack) in stacks.withIndex()) {
+                        val ref = "${remoteName}/${stack.name()}"
+                        val message = shortMessages[ref]?.let { " ${brightWhite(it)}" }.orEmpty()
+                        add("  ${bold("${index + 1}.")} " + "[${cyan(stack.stackName)}]$message")
+                    }
+                }
+                terminal.printPaged(lines, appWiring.config.pageSize)
                 promptForSelection(terminal, stacks)
             }
 
@@ -531,6 +538,11 @@ you'll need to re-enable it again.
                 "By default, only branches with commits authored by the current user will be removed."
         }
 
+    private val pageSize by
+        option().int().default(DEFAULT_PAGE_SIZE).help {
+            "Number of lines to display per page in interactive output before prompting to continue."
+        }
+
     private val showConfig by
         option(hidden = true).flag("--no-show-config", default = false).help {
             "Print the effective configuration to standard output (for debugging)"
@@ -562,6 +574,7 @@ you'll need to re-enable it again.
                 dontPushRegex,
                 cleanAbandonedPrs,
                 cleanAllCommits,
+                pageSize,
             )
 
         DefaultAppWiring(githubToken, config, gitClient)
@@ -760,6 +773,18 @@ const val DEFAULT_TARGET_REF = "main"
 const val DEFAULT_REMOTE_NAME = "origin"
 const val COMMIT_ID_LABEL = "commit-id"
 private const val GITHUB_TOKEN_ENV_VAR = "GIT_JASPR_TOKEN"
+
+/** Prints [lines] to the terminal, pausing every [pageSize] lines to prompt for continuation. */
+private fun Terminal.printPaged(lines: List<String>, pageSize: Int = DEFAULT_PAGE_SIZE) {
+    for ((index, line) in lines.withIndex()) {
+        println(line)
+        if (index > 0 && index < lines.lastIndex && (index + 1) % pageSize == 0) {
+            val input =
+                prompt("-- [${bold("n")}]ext page, [${bold("s")}]kip --")?.trim()?.lowercase()
+            if (input != "n" && input != "") break
+        }
+    }
+}
 
 // Note the embedded color below matches what Clikt uses for section headings
 @Language("Markdown")

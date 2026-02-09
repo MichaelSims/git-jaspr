@@ -14,6 +14,8 @@ import sims.michael.gitjaspr.generated.fragment.RateLimitFields
 import sims.michael.gitjaspr.serde.FileSerializer
 import sims.michael.gitjaspr.serde.LevelSerializer
 
+const val DEFAULT_PAGE_SIZE = 50
+
 @Serializable
 data class Config(
     @Serializable(with = FileSerializer::class) val workingDirectory: File,
@@ -26,6 +28,7 @@ data class Config(
     val dontPushRegex: String = "^(dont[ -]?push)\\b.*$",
     val cleanAbandonedPrs: Boolean = true,
     val cleanAllCommits: Boolean = false,
+    val pageSize: Int = DEFAULT_PAGE_SIZE,
 )
 
 @Serializable data class GitHubInfo(val host: String, val owner: String, val name: String)
