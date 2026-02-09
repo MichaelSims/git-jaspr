@@ -24,6 +24,7 @@ import sims.michael.gitjaspr.testing.DontPush
 import sims.michael.gitjaspr.testing.Merge
 import sims.michael.gitjaspr.testing.PrBody
 import sims.michael.gitjaspr.testing.Push
+import sims.michael.gitjaspr.testing.Stack
 import sims.michael.gitjaspr.testing.Status
 
 interface GitJasprTest {
@@ -58,6 +59,11 @@ interface GitJasprTest {
             }
         gitJaspr.checkoutNamedStack(stack)
     }
+
+    fun GitHubTestHarness.renameStack(oldName: String, newName: String) =
+        gitJaspr.renameStack(oldName, newName, DEFAULT_TARGET_REF)
+
+    fun GitHubTestHarness.deleteStack(name: String) = gitJaspr.deleteStack(name, DEFAULT_TARGET_REF)
 
     suspend fun GitHubTestHarness.waitForChecksToConclude(
         vararg commitFilter: String,
@@ -5650,6 +5656,207 @@ interface GitJasprTest {
             localGit.branch(stackName)
 
             assertThrows<GitJasprException> { checkout(stackName) }
+        }
+    }
+
+    // endregion
+
+    // region stack tests
+
+    @Stack
+    @Test
+    fun `rename stack changes remote branch name`() {
+        withTestSetup(useFakeRemote) {
+            createCommitsFrom(
+                testCase {
+                    repository {
+                        commit { title = "one" }
+                        commit { title = "two" }
+                        commit {
+                            title = "three"
+                            localRefs += "main"
+                        }
+                    }
+                    checkout = "main"
+                }
+            )
+
+            val oldName = "my-stack"
+            gitJaspr.push(stackName = oldName)
+
+            renameStack(oldName, "new-stack")
+
+            localGit.fetch(remoteName)
+            val remoteBranches = localGit.getRemoteBranches(remoteName).map(RemoteBranch::name)
+            val oldRef = RemoteNamedStackRef(oldName).name()
+            val newRef = RemoteNamedStackRef("new-stack").name()
+            assertFalse(oldRef in remoteBranches, "Old remote branch should not exist")
+            assertTrue(newRef in remoteBranches, "New remote branch should exist")
+        }
+    }
+
+    @Stack
+    @Test
+    fun `rename stack updates upstream tracking for local branch`() {
+        withTestSetup(useFakeRemote) {
+            createCommitsFrom(
+                testCase {
+                    repository {
+                        commit { title = "one" }
+                        commit { title = "two" }
+                        commit {
+                            title = "three"
+                            localRefs += "main"
+                        }
+                    }
+                    checkout = "main"
+                }
+            )
+
+            val oldName = "my-stack"
+            gitJaspr.push(stackName = oldName)
+
+            // Checkout the stack to create a local tracking branch
+            checkout(oldName)
+            assertEquals(oldName, localGit.getCurrentBranchName())
+
+            renameStack(oldName, "new-stack")
+
+            // Local branch name should be unchanged
+            assertEquals(oldName, localGit.getCurrentBranchName())
+            // But its upstream should point to the new remote ref
+            val upstreamName = localGit.getUpstreamBranchName(oldName, remoteName)
+            assertEquals(RemoteNamedStackRef("new-stack").name(), upstreamName)
+        }
+    }
+
+    @Stack
+    @Test
+    fun `rename stack fails if old name not found`() {
+        withTestSetup(useFakeRemote) {
+            createCommitsFrom(
+                testCase {
+                    repository {
+                        commit { title = "one" }
+                        commit {
+                            title = "two"
+                            localRefs += "main"
+                        }
+                    }
+                    checkout = "main"
+                }
+            )
+
+            assertThrows<GitJasprException> { renameStack("nonexistent", "new-name") }
+        }
+    }
+
+    @Stack
+    @Test
+    fun `rename stack fails if new name already exists`() {
+        withTestSetup(useFakeRemote) {
+            createCommitsFrom(
+                testCase {
+                    repository {
+                        commit { title = "one" }
+                        commit { title = "two" }
+                        commit {
+                            title = "three"
+                            localRefs += "main"
+                        }
+                    }
+                    checkout = "main"
+                }
+            )
+
+            gitJaspr.push(stackName = "stack-a")
+            // Create another stack to collide with
+            localGit.checkout("main")
+            gitJaspr.push(stackName = "stack-b")
+
+            assertThrows<GitJasprException> { renameStack("stack-a", "stack-b") }
+        }
+    }
+
+    @Stack
+    @Test
+    fun `delete stack removes remote branch`() {
+        withTestSetup(useFakeRemote) {
+            createCommitsFrom(
+                testCase {
+                    repository {
+                        commit {
+                            title = "one"
+                            localRefs += "main"
+                        }
+                    }
+                    checkout = "main"
+                }
+            )
+
+            gitJaspr.push(stackName = "my-stack")
+            localGit.fetch(remoteName)
+            val stackRef = RemoteNamedStackRef("my-stack").name()
+            assertTrue(
+                stackRef in localGit.getRemoteBranches(remoteName).map(RemoteBranch::name),
+                "Stack should exist before delete",
+            )
+
+            deleteStack("my-stack")
+
+            localGit.fetch(remoteName, prune = true)
+            val remoteBranches = localGit.getRemoteBranches(remoteName).map(RemoteBranch::name)
+            assertFalse(stackRef in remoteBranches, "Stack should not exist after delete")
+        }
+    }
+
+    @Stack
+    @Test
+    fun `delete non-empty stack removes remote branch`() {
+        withTestSetup(useFakeRemote) {
+            createCommitsFrom(
+                testCase {
+                    repository {
+                        commit { title = "one" }
+                        commit { title = "two" }
+                        commit {
+                            title = "three"
+                            localRefs += "main"
+                        }
+                    }
+                    checkout = "main"
+                }
+            )
+
+            gitJaspr.push(stackName = "my-stack")
+
+            deleteStack("my-stack")
+
+            localGit.fetch(remoteName, prune = true)
+            val remoteBranches = localGit.getRemoteBranches(remoteName).map(RemoteBranch::name)
+            val stackRef = RemoteNamedStackRef("my-stack").name()
+            assertFalse(stackRef in remoteBranches, "Stack should not exist after delete")
+        }
+    }
+
+    @Stack
+    @Test
+    fun `delete stack fails if name not found`() {
+        withTestSetup(useFakeRemote) {
+            createCommitsFrom(
+                testCase {
+                    repository {
+                        commit { title = "one" }
+                        commit {
+                            title = "two"
+                            localRefs += "main"
+                        }
+                    }
+                    checkout = "main"
+                }
+            )
+
+            assertThrows<GitJasprException> { deleteStack("nonexistent") }
         }
     }
 

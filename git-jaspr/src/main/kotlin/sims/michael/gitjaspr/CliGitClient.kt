@@ -386,11 +386,19 @@ class CliGitClient(
 
     override fun getConfigValue(key: String): String? {
         logger.trace("getConfigValue {}", key)
-        return executeCommand(listOf("git", "config", "--get", key))
-            .output
-            .string
-            .trim()
-            .takeIf(String::isNotBlank)
+        val result =
+            ProcessExecutor()
+                .directory(workingDirectory)
+                .command(listOf("git", "config", "--get", key))
+                .destroyOnExit()
+                .readOutput(true)
+                .execute()
+        // git config --get returns 1 when the key is not found
+        return if (result.exitValue == 0) {
+            result.output.string.trim().takeIf(String::isNotBlank)
+        } else {
+            null
+        }
     }
 
     override fun setConfigValue(key: String, value: String) {
@@ -424,6 +432,34 @@ class CliGitClient(
         logger.trace("setUpstreamBranch {} {}", remoteName, branchName)
         check(!isHeadDetached()) { "Cannot set upstream branch when in detached HEAD" }
         executeCommand(listOf("git", "branch", "--set-upstream-to", "$remoteName/$branchName"))
+    }
+
+    override fun getUpstreamBranchName(localBranch: String, remoteName: String): String? {
+        logger.trace("getUpstreamBranchName {} {}", localBranch, remoteName)
+        val merge =
+            getConfigValue("branch.$localBranch.merge")?.removePrefix(Constants.R_HEADS)
+                ?: return null
+        val remote = getConfigValue("branch.$localBranch.remote") ?: return null
+        return if (remote == remoteName) merge else null
+    }
+
+    override fun setUpstreamBranchForLocalBranch(
+        localBranch: String,
+        remoteName: String,
+        remoteBranchName: String?,
+    ) {
+        logger.trace(
+            "setUpstreamBranchForLocalBranch {} {} {}",
+            localBranch,
+            remoteName,
+            remoteBranchName,
+        )
+        if (remoteBranchName != null) {
+            setConfigValue("branch.$localBranch.remote", remoteName)
+            setConfigValue("branch.$localBranch.merge", "${Constants.R_HEADS}$remoteBranchName")
+        } else {
+            executeCommand(listOf("git", "branch", "--unset-upstream", localBranch))
+        }
     }
 
     override fun reflog(): List<Commit> {

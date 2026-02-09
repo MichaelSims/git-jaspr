@@ -500,6 +500,86 @@ class CliGitClientTest : GitClientTest {
     }
 
     @Test
+    fun `compare getUpstreamBranchName`() {
+        withTestSetup {
+            val branchName = "my-feature"
+            localGit.branch(branchName)
+            localGit.push(listOf(RefSpec(branchName, branchName)), remoteName)
+            localGit.checkout(branchName)
+            localGit.setUpstreamBranch(remoteName, branchName)
+            localGit.checkout("main")
+
+            val cliGit = CliGitClient(localGit.workingDirectory)
+            val jGit = JGitClient(localGit.workingDirectory)
+
+            // Branch with upstream configured
+            assertEquals(
+                cliGit.getUpstreamBranchName(branchName, remoteName),
+                jGit.getUpstreamBranchName(branchName, remoteName),
+            )
+
+            // Branch with no upstream configured
+            assertEquals(
+                cliGit.getUpstreamBranchName("main", remoteName),
+                jGit.getUpstreamBranchName("main", remoteName),
+            )
+        }
+    }
+
+    @Test
+    fun `compare setUpstreamBranchForLocalBranch`() {
+        withTestSetup {
+            val branchName = "my-feature"
+            localGit.branch(branchName)
+            localGit.push(listOf(RefSpec(branchName, branchName)), remoteName)
+
+            val cliDir = localGit.workingDirectory
+            val cliGit = CliGitClient(cliDir)
+            val jGit = JGitClient(cliDir)
+
+            // Set upstream without checkout using CliGitClient
+            cliGit.setUpstreamBranchForLocalBranch(branchName, remoteName, branchName)
+            val cliResult = cliGit.getUpstreamBranchName(branchName, remoteName)
+
+            // Unset it so we can test with JGitClient
+            cliGit.setUpstreamBranchForLocalBranch(branchName, remoteName, null)
+            assertNull(cliGit.getUpstreamBranchName(branchName, remoteName))
+
+            // Set upstream without checkout using JGitClient
+            jGit.setUpstreamBranchForLocalBranch(branchName, remoteName, branchName)
+            val jGitResult = jGit.getUpstreamBranchName(branchName, remoteName)
+
+            assertEquals(cliResult, jGitResult)
+        }
+    }
+
+    @Test
+    fun `compare setUpstreamBranchForLocalBranch unset`() {
+        withTestSetup {
+            val branchName = "my-feature"
+            localGit.branch(branchName)
+            localGit.push(listOf(RefSpec(branchName, branchName)), remoteName)
+
+            val cliGit = CliGitClient(localGit.workingDirectory)
+            val jGit = JGitClient(localGit.workingDirectory)
+
+            // Set upstream, then unset with CliGitClient
+            cliGit.setUpstreamBranchForLocalBranch(branchName, remoteName, branchName)
+            assertNotNull(cliGit.getUpstreamBranchName(branchName, remoteName))
+            cliGit.setUpstreamBranchForLocalBranch(branchName, remoteName, null)
+            val cliResult = cliGit.getUpstreamBranchName(branchName, remoteName)
+
+            // Set upstream, then unset with JGitClient
+            jGit.setUpstreamBranchForLocalBranch(branchName, remoteName, branchName)
+            assertNotNull(jGit.getUpstreamBranchName(branchName, remoteName))
+            jGit.setUpstreamBranchForLocalBranch(branchName, remoteName, null)
+            val jGitResult = jGit.getUpstreamBranchName(branchName, remoteName)
+
+            assertEquals(cliResult, jGitResult)
+        }
+    }
+
+    @Test
     fun `compare reflog`() {
         withTestSetup {
             val titles = (1..4).map(Int::toString)
