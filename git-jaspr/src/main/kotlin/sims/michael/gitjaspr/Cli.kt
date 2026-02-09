@@ -11,6 +11,8 @@ import ch.qos.logback.core.rolling.RollingFileAppender
 import ch.qos.logback.core.rolling.TimeBasedRollingPolicy
 import com.github.ajalt.clikt.core.*
 import com.github.ajalt.clikt.output.MordantHelpFormatter
+import com.github.ajalt.clikt.parameters.arguments.argument
+import com.github.ajalt.clikt.parameters.arguments.convert
 import com.github.ajalt.clikt.parameters.groups.OptionGroup
 import com.github.ajalt.clikt.parameters.groups.provideDelegate
 import com.github.ajalt.clikt.parameters.options.*
@@ -338,6 +340,101 @@ class InstallCommitIdHook :
     }
 }
 
+class Stack : CliktCommand(name = "stack", help = "Manage named stacks") {
+    override fun run() = Unit
+}
+
+class StackList : GitJasprCommand(name = "list", help = "List all named stacks") {
+    override suspend fun doRun() {
+        val gitJaspr = appWiring.gitJaspr
+        val config = appWiring.config
+        val allStacks = gitJaspr.getAllNamedStacks()
+
+        if (allStacks.isEmpty()) {
+            echo("No named stacks found.")
+            return
+        }
+
+        val remoteName = config.remoteName
+        val refs = allStacks.map { ref -> "${remoteName}/${ref.name()}" }
+        val shortMessages = appWiring.gitClient.getShortMessages(refs)
+        val terminal = currentContext.terminal
+
+        val stacksByTarget = allStacks.groupBy(RemoteNamedStackRef::targetRef)
+        val lines = buildList {
+            for ((targetRef, stacks) in stacksByTarget) {
+                add(bold("Stacks targeting $targetRef:"))
+                for (stack in stacks) {
+                    val ref = "${remoteName}/${stack.name()}"
+                    val message = shortMessages[ref]?.let { " ${brightWhite(it)}" }.orEmpty()
+                    add("  [${cyan(stack.stackName)}]$message")
+                }
+                add("")
+            }
+        }
+        terminal.printPaged(lines, config.pageSize)
+    }
+}
+
+class StackRename : GitJasprCommand(name = "rename", help = "Rename a named stack") {
+    private val oldName by argument(help = "The current name of the stack")
+    private val newName by
+        argument(help = "The new name for the stack").convert { value ->
+            StackNameGenerator.generateName(value.trim())
+        }
+
+    override suspend fun doRun() {
+        if (newName.isEmpty()) {
+            throw GitJasprException(
+                "New stack name must contain at least one alphanumeric character."
+            )
+        }
+        appWiring.gitJaspr.renameStack(oldName, newName, target)
+        echo(green("Renamed stack '${cyan(oldName)}' to '${cyan(newName)}'."))
+    }
+}
+
+class StackDelete :
+    GitJasprCommand(name = "delete", help = "Delete a named stack from the remote") {
+    private val name by argument(help = "The name of the stack to delete")
+
+    override suspend fun doRun() {
+        val gitJaspr = appWiring.gitJaspr
+        val config = appWiring.config
+        val remoteName = config.remoteName
+        val prefix = config.remoteNamedStackBranchPrefix
+        val stackRef = RemoteNamedStackRef(name, target, prefix).name()
+        val ref = "$remoteName/$stackRef"
+
+        // Show the stack's commits
+        val shortMessages = appWiring.gitClient.getShortMessages(listOf(ref))
+        val message = shortMessages[ref]
+        if (message != null) {
+            echo("Stack '${cyan(name)}' -> ${brightWhite(message)}")
+        }
+
+        // Prompt for confirmation
+        val terminal = currentContext.terminal
+        val input = terminal.prompt("Delete stack '${name}'? [y/n]")?.trim()?.lowercase()
+        if (input != "y") {
+            echo(TextColors.yellow("Aborted."))
+            return
+        }
+
+        val affectedBranches = gitJaspr.deleteStack(name, target)
+        echo(green("Deleted stack '${cyan(name)}'."))
+        if (affectedBranches.isNotEmpty()) {
+            for (branch in affectedBranches) {
+                echo("Unset upstream for local branch '${cyan(branch)}'.")
+            }
+        }
+        echo(
+            "Note: PRs in the stack (if any) were not removed. " +
+                "Run ${bold("git jaspr clean")} to remove them."
+        )
+    }
+}
+
 // Used by tests
 class NoOp : GitJasprCommand(help = "Do nothing", hidden = true) {
     private val logger = LoggerFactory.getLogger(NoOp::class.java)
@@ -367,8 +464,8 @@ private class GitHubOptions : OptionGroup(name = "GitHub Options") {
         }
 }
 
-abstract class GitJasprCommand(help: String = "", hidden: Boolean = false) :
-    CliktCommand(hidden = hidden, help = help, epilog = helpEpilog) {
+abstract class GitJasprCommand(name: String? = null, help: String = "", hidden: Boolean = false) :
+    CliktCommand(name = name, hidden = hidden, help = help, epilog = helpEpilog) {
     private val workingDirectory =
         File(System.getProperty(WORKING_DIR_PROPERTY_NAME) ?: ".")
             .findNearestGitDir()
@@ -757,6 +854,7 @@ object Cli {
                     Merge(),
                     AutoMerge(),
                     Clean(),
+                    Stack().subcommands(StackList(), StackRename(), StackDelete()),
                     InstallCommitIdHook(),
                     NoOp(),
                 )

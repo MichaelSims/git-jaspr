@@ -498,6 +498,49 @@ class JGitClient(
         }
     }
 
+    override fun getUpstreamBranchName(localBranch: String, remoteName: String): String? {
+        logger.trace("getUpstreamBranchName {} {}", localBranch, remoteName)
+        return useGit { git ->
+            val config = git.repository.config
+            val remote = config.getString(CONFIG_BRANCH_SECTION, localBranch, CONFIG_KEY_REMOTE)
+            val merge = config.getString(CONFIG_BRANCH_SECTION, localBranch, CONFIG_KEY_MERGE)
+            if (remote == remoteName && merge != null) {
+                merge.removePrefix(Constants.R_HEADS)
+            } else {
+                null
+            }
+        }
+    }
+
+    override fun setUpstreamBranchForLocalBranch(
+        localBranch: String,
+        remoteName: String,
+        remoteBranchName: String?,
+    ) {
+        logger.trace(
+            "setUpstreamBranchForLocalBranch {} {} {}",
+            localBranch,
+            remoteName,
+            remoteBranchName,
+        )
+        useGit { git ->
+            val config = git.repository.config
+            if (remoteBranchName != null) {
+                config.setString(CONFIG_BRANCH_SECTION, localBranch, CONFIG_KEY_REMOTE, remoteName)
+                config.setString(
+                    CONFIG_BRANCH_SECTION,
+                    localBranch,
+                    CONFIG_KEY_MERGE,
+                    "${Constants.R_HEADS}$remoteBranchName",
+                )
+            } else {
+                config.unset(CONFIG_BRANCH_SECTION, localBranch, CONFIG_KEY_REMOTE)
+                config.unset(CONFIG_BRANCH_SECTION, localBranch, CONFIG_KEY_MERGE)
+            }
+            config.save()
+        }
+    }
+
     override fun reflog(): List<Commit> {
         logger.trace("reflog")
         return useGit { git ->

@@ -1601,6 +1601,87 @@ class GitJaspr(
         }
     }
 
+    /**
+     * Renames a named stack on the remote and updates the upstream tracking config of any local
+     * branch that was tracking the old remote ref.
+     */
+    fun renameStack(oldName: String, newName: String, targetRef: String) {
+        logger.trace("renameStack {} -> {} (target {})", oldName, newName, targetRef)
+        val remoteName = config.remoteName
+        val prefix = config.remoteNamedStackBranchPrefix
+        gitClient.fetch(remoteName, prune = true)
+
+        val oldRef = RemoteNamedStackRef(oldName, targetRef, prefix).name()
+        val newRef = RemoteNamedStackRef(newName, targetRef, prefix).name()
+
+        // Verify the old name exists
+        val remoteBranches = gitClient.getRemoteBranches(remoteName).map(RemoteBranch::name)
+        if (oldRef !in remoteBranches) {
+            throw GitJasprException("Named stack '$oldName' not found (looking for $oldRef).")
+        }
+
+        // Verify the new name doesn't already exist
+        if (newRef in remoteBranches) {
+            throw GitJasprException("Named stack '$newName' already exists ($newRef).")
+        }
+
+        // Push old content to new name AND delete old branch in a single push
+        gitClient.push(
+            listOf(RefSpec("$remoteName/$oldRef", newRef), RefSpec(FORCE_PUSH_PREFIX, oldRef)),
+            remoteName,
+        )
+        logger.info("Renamed remote stack branch {} -> {}", oldRef, newRef)
+
+        // Update tracking config for any local branch that pointed to the old remote ref
+        for (localBranch in gitClient.getBranchNames()) {
+            val upstreamName = gitClient.getUpstreamBranchName(localBranch, remoteName)
+            if (upstreamName == oldRef) {
+                gitClient.setUpstreamBranchForLocalBranch(localBranch, remoteName, newRef)
+                logger.info(
+                    "Updated upstream for local branch '{}': {} -> {}",
+                    localBranch,
+                    oldRef,
+                    newRef,
+                )
+            }
+        }
+    }
+
+    /**
+     * Deletes a named stack from the remote and unsets upstream tracking for any local branches
+     * that were tracking it. Returns the list of local branches whose upstream was unset.
+     */
+    fun deleteStack(name: String, targetRef: String): List<String> {
+        logger.trace("deleteStack {} (target {})", name, targetRef)
+        val remoteName = config.remoteName
+        val prefix = config.remoteNamedStackBranchPrefix
+        gitClient.fetch(remoteName, prune = true)
+
+        val stackRef = RemoteNamedStackRef(name, targetRef, prefix).name()
+
+        // Verify the stack exists
+        val remoteBranches = gitClient.getRemoteBranches(remoteName).map(RemoteBranch::name)
+        if (stackRef !in remoteBranches) {
+            throw GitJasprException("Named stack '$name' not found (looking for $stackRef).")
+        }
+
+        // Force-delete the remote branch
+        gitClient.push(listOf(RefSpec(FORCE_PUSH_PREFIX, stackRef)), remoteName)
+        logger.info("Deleted remote stack branch {}", stackRef)
+
+        // Unset upstream tracking for any local branches that pointed to the deleted ref
+        val affectedBranches = mutableListOf<String>()
+        for (localBranch in gitClient.getBranchNames()) {
+            val upstreamName = gitClient.getUpstreamBranchName(localBranch, remoteName)
+            if (upstreamName == stackRef) {
+                gitClient.setUpstreamBranchForLocalBranch(localBranch, remoteName, null)
+                affectedBranches.add(localBranch)
+                logger.info("Unset upstream for local branch '{}'", localBranch)
+            }
+        }
+        return affectedBranches
+    }
+
     /** Intended for tests */
     internal fun clone(transformConfig: (Config) -> Config) =
         GitJaspr(ghClient, gitClient, transformConfig(config), newUuid, commitIdentOverride)

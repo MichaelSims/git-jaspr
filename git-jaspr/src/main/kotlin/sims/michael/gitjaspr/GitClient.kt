@@ -96,6 +96,23 @@ interface GitClient {
 
     fun setUpstreamBranch(remoteName: String, branchName: String)
 
+    /**
+     * Returns the upstream branch name for a specific local branch, or null if none is configured.
+     * Unlike [getUpstreamBranch], this does not require the branch to be checked out.
+     */
+    fun getUpstreamBranchName(localBranch: String, remoteName: String): String?
+
+    /**
+     * Sets or removes the upstream tracking branch for a specific local branch. Unlike
+     * [setUpstreamBranch], this does not require the branch to be checked out. Pass null for
+     * [remoteBranchName] to remove the upstream tracking configuration.
+     */
+    fun setUpstreamBranchForLocalBranch(
+        localBranch: String,
+        remoteName: String,
+        remoteBranchName: String?,
+    )
+
     fun reflog(): List<Commit>
 
     fun getCurrentBranchName(): String

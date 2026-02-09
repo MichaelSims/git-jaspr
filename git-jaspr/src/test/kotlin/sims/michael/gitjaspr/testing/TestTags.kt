@@ -37,6 +37,11 @@ annotation class DontPush
 @Tag("checkout")
 annotation class Checkout
 
+@Target(AnnotationTarget.FUNCTION)
+@Retention(AnnotationRetention.RUNTIME)
+@Tag("stack")
+annotation class Stack
+
 @Target(AnnotationTarget.CLASS)
 @Retention(AnnotationRetention.RUNTIME)
 @Tag("functional")
