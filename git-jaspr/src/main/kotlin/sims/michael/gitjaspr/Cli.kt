@@ -26,6 +26,7 @@ import com.github.ajalt.mordant.terminal.Terminal
 import java.io.File
 import java.lang.reflect.Proxy
 import java.time.ZonedDateTime
+import java.util.Properties
 import kotlinx.coroutines.runBlocking
 import kotlinx.serialization.encodeToString
 import org.slf4j.Logger
@@ -219,10 +220,9 @@ you'll need to re-enable it again.
         }
 
     private val colorScheme by
-        option("--color-scheme")
-            .choice("default" to ColorScheme.DEFAULT, "mono" to ColorScheme.MONO)
-            .default(ColorScheme.DEFAULT)
-            .help { "Terminal color scheme" }
+        option("--color-scheme").default("default").help {
+            "Terminal color scheme (default, mono, or a custom name)"
+        }
 
     private fun buildAppWiring(): AppWiring {
         val token =
@@ -278,15 +278,30 @@ you'll need to re-enable it again.
         }
     }
 
+    /** Loads config properties from both file locations, per-repo values taking precedence. */
+    private fun loadThemeProperties(): Properties {
+        Cli.logger.trace("loadThemeProperties")
+        val userWide = File(System.getenv("HOME")).resolve(CONFIG_FILE_NAME)
+        val perRepo = workingDirectory.resolve(CONFIG_FILE_NAME)
+        val props = Properties()
+        for (file in listOf(userWide, perRepo)) {
+            if (file.exists()) file.reader().use { props.load(it) }
+        }
+        return props
+    }
+
     override fun run() {
         val logger = Cli.logger
-        val theme = colorScheme.toTheme()
+        val (loggingContext, _) = initLogging(logLevel, logsDirectory.takeIf { logToFiles })
+        val themeProperties = loadThemeProperties()
+        logger.trace("Resolving theme for color-scheme '{}'", colorScheme)
+        val theme = resolveTheme(colorScheme, themeProperties)
+        logger.trace("Resolved theme: {}", theme::class.simpleName)
         if (showConfig) {
             buildAppWiring().use { appWiring ->
                 throw PrintMessage(appWiring.json.encodeToString(appWiring.config))
             }
         }
-        val (loggingContext, _) = initLogging(logLevel, logsDirectory.takeIf { logToFiles })
         currentContext.obj =
             CliContext(theme) {
                 try {
@@ -845,6 +860,7 @@ class PreviewTheme :
         help = "Preview the current color scheme with sample output",
     ) {
     override suspend fun doRun() {
+        echo("Using theme $theme.")
         val ident = Ident("Ada Lovelace", "ada@example.com")
         val now = ZonedDateTime.now()
 
@@ -1057,7 +1073,30 @@ private fun buildConfigHelpText(
             "  ${theme.entity("github-token")}=${theme.value("ghp_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx")}"
         )
         appendLine("  ${theme.entity("log-level")}=${theme.value("WARN")}")
-        append("  ${theme.entity("target")}=${theme.value("develop")}")
+        appendLine("  ${theme.entity("target")}=${theme.value("develop")}")
+        appendLine()
+        appendLine(theme.heading("Custom Themes"))
+        appendLine()
+        appendLine("Set ${theme.entity("color-scheme")} to any name, then define role colors")
+        appendLine(
+            "and weights using ${theme.entity("<name>.<role>.color")} and ${theme.entity("<name>.<role>.weight")}."
+        )
+        appendLine()
+        appendLine("Available roles: ${THEME_ROLES.joinToString(", ") { theme.entity(it) }}")
+        appendLine(
+            "Colors are hex RGB (e.g. ${theme.value("#FF5733")} or ${theme.value("FF5733")})."
+        )
+        appendLine("Weights are ${theme.value("bold")} or ${theme.value("dim")}.")
+        appendLine("Unspecified roles fall back to the default theme.")
+        appendLine()
+        appendLine(theme.heading("Example custom theme:"))
+        appendLine()
+        appendLine("  ${theme.entity("color-scheme")}=${theme.value("forest")}")
+        appendLine("  ${theme.entity("forest.error.color")}=${theme.value("#CC3333")}")
+        appendLine("  ${theme.entity("forest.error.weight")}=${theme.value("bold")}")
+        appendLine("  ${theme.entity("forest.success.color")}=${theme.value("#33CC66")}")
+        appendLine("  ${theme.entity("forest.entity.color")}=${theme.value("#66CCAA")}")
+        append("  ${theme.entity("forest.heading.weight")}=${theme.value("bold")}")
     }
 }
 
