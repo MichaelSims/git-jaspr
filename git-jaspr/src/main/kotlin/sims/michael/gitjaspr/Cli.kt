@@ -216,12 +216,8 @@ you'll need to re-enable it again.
 
     private val colorScheme by
         option("--color-scheme")
-            .choice(
-                "dark" to ColorScheme.DARK,
-                "light" to ColorScheme.LIGHT,
-                "mono" to ColorScheme.MONO,
-            )
-            .default(ColorScheme.DARK)
+            .choice("default" to ColorScheme.DEFAULT, "mono" to ColorScheme.MONO)
+            .default(ColorScheme.DEFAULT)
             .help { "Terminal color scheme" }
 
     private fun buildAppWiring(): AppWiring {
@@ -891,7 +887,7 @@ private const val GITHUB_TOKEN_ENV_VAR = "GIT_JASPR_TOKEN"
 private fun Terminal.printPaged(
     lines: List<String>,
     pageSize: Int = DEFAULT_PAGE_SIZE,
-    theme: Theme = DarkTheme,
+    theme: Theme = DefaultTheme,
 ) {
     for ((index, line) in lines.withIndex()) {
         println(line)
@@ -912,7 +908,7 @@ private const val helpEpilog =
 private fun buildConfigHelpText(
     root: CliktCommand,
     context: Context,
-    theme: Theme = DarkTheme,
+    theme: Theme = DefaultTheme,
 ): String {
     data class ConfigEntry(val key: String, val help: String, val default: String?)
 

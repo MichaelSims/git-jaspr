@@ -51,20 +51,18 @@ interface Theme {
 
 /** Selects a built-in [Theme] by name. */
 enum class ColorScheme {
-    DARK,
-    LIGHT,
+    DEFAULT,
     MONO;
 
     /** Returns the [Theme] corresponding to this color scheme. */
     fun toTheme(): Theme =
         when (this) {
-            DARK -> DarkTheme
-            LIGHT -> LightTheme
+            DEFAULT -> DefaultTheme
             MONO -> MonoTheme
         }
 }
 
-object DarkTheme : Theme {
+object DefaultTheme : Theme {
     override fun error(text: String) = red(text)
 
     override fun success(text: String) = green(text)
@@ -82,34 +80,6 @@ object DarkTheme : Theme {
     override fun keyHint(text: String) = bold(text)
 
     override fun commitSubject(text: String) = brightWhite(text)
-
-    override fun hash(text: String) = dim(text)
-
-    override fun comment(text: String) = dim(text)
-
-    override fun muted(text: String) = dim(text)
-
-    override fun value(text: String) = green(text)
-}
-
-object LightTheme : Theme {
-    override fun error(text: String) = red(text)
-
-    override fun success(text: String) = green(text)
-
-    override fun warning(text: String) = yellow(text)
-
-    override fun heading(text: String) = bold(text)
-
-    override fun entity(text: String) = blue(text)
-
-    override fun url(text: String) = blue(text)
-
-    override fun command(text: String) = bold(text)
-
-    override fun keyHint(text: String) = bold(text)
-
-    override fun commitSubject(text: String) = gray(text)
 
     override fun hash(text: String) = dim(text)
 
