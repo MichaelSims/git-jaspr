@@ -14,7 +14,6 @@ import kotlinx.coroutines.withContext
 import org.slf4j.LoggerFactory
 import sims.michael.gitjaspr.CommitParsers.getSubjectAndBodyFromFullMessage
 import sims.michael.gitjaspr.CommitParsers.trimFooters
-import sims.michael.gitjaspr.GitJaspr.StatusBits.Status
 import sims.michael.gitjaspr.GitJaspr.StatusBits.Status.EMPTY
 import sims.michael.gitjaspr.GitJaspr.StatusBits.Status.FAIL
 import sims.michael.gitjaspr.GitJaspr.StatusBits.Status.PENDING
@@ -34,27 +33,71 @@ class GitJaspr(
 
     private val logger = LoggerFactory.getLogger(GitJaspr::class.java)
 
+    /**
+     * Abstracts external interactions needed by [getStatusString] so the rendering can be driven by
+     * fake data (i.e., for theme previews) without requiring a live git repository.
+     *
+     * This is basically an intersection of parts of [GitHubClient] and [GitClient].
+     */
+    interface GetStatusStringStrategy {
+        fun getRemoteBranches(): List<RemoteBranch>
+
+        fun getLocalCommitStack(localRef: String, remoteRef: String): List<Commit>
+
+        fun logRange(since: String, until: String): List<Commit>
+
+        suspend fun getPullRequests(commits: List<Commit>): List<PullRequest>
+    }
+
+    private fun defaultStrategy() =
+        object : GetStatusStringStrategy {
+            override fun getRemoteBranches() = gitClient.getRemoteBranches(config.remoteName)
+
+            override fun getLocalCommitStack(localRef: String, remoteRef: String) =
+                gitClient.getLocalCommitStack(config.remoteName, localRef, remoteRef)
+
+            override fun logRange(since: String, until: String) = gitClient.logRange(since, until)
+
+            override suspend fun getPullRequests(commits: List<Commit>) =
+                ghClient.getPullRequests(commits)
+        }
+
     suspend fun getStatusString(
         refSpec: RefSpec = RefSpec(DEFAULT_LOCAL_OBJECT, DEFAULT_TARGET_REF),
         theme: Theme = MonoTheme,
     ): String {
         gitClient.fetch(config.remoteName)
-        return getStatusString(refSpec, gitClient.getRemoteBranches(config.remoteName), theme)
+        return getStatusString(refSpec, theme, defaultStrategy())
+    }
+
+    suspend fun getStatusString(
+        refSpec: RefSpec,
+        remoteBranches: List<RemoteBranch>,
+        theme: Theme = MonoTheme,
+    ): String {
+        val strategy = defaultStrategy()
+        return getStatusString(
+            refSpec,
+            theme,
+            object : GetStatusStringStrategy by strategy {
+                override fun getRemoteBranches() = remoteBranches
+            },
+        )
     }
 
     suspend fun getStatusString(
         refSpec: RefSpec = RefSpec(DEFAULT_LOCAL_OBJECT, DEFAULT_TARGET_REF),
-        remoteBranches: List<RemoteBranch>,
         theme: Theme = MonoTheme,
+        strategy: GetStatusStringStrategy,
     ): String {
         logger.trace("getStatusString {}", refSpec)
         val remoteName = config.remoteName
-        gitClient.fetch(remoteName)
 
-        val stack = gitClient.getLocalCommitStack(remoteName, refSpec.localRef, refSpec.remoteRef)
+        val remoteBranches = strategy.getRemoteBranches()
+        val stack = strategy.getLocalCommitStack(refSpec.localRef, refSpec.remoteRef)
         if (stack.isEmpty()) return theme.muted("Stack is empty.") + "\n"
 
-        val statuses = getRemoteCommitStatuses(stack, remoteBranches)
+        val statuses = getRemoteCommitStatuses(stack, remoteBranches, strategy)
         val commitsWithDuplicateIds =
             statuses
                 .filter { status -> status.localCommit.id != null }
@@ -65,7 +108,7 @@ class GitJaspr(
                 .filter { (_, statuses) -> statuses.size > 1 }
 
         val numCommitsBehindBase =
-            gitClient.logRange(stack.last().hash, "$remoteName/${refSpec.remoteRef}").size
+            strategy.logRange(stack.last().hash, "$remoteName/${refSpec.remoteRef}").size
         return buildString {
             append(theme.heading(HEADER))
 
@@ -99,7 +142,7 @@ class GitJaspr(
                 appendLine(status.localCommit.shortMessage)
             }
 
-            appendNamedStackInfo(stack, remoteBranches, theme)
+            appendNamedStackInfo(stack, remoteBranches, theme, strategy)
 
             if (numCommitsBehindBase > 0) {
                 appendLine()
@@ -136,6 +179,7 @@ class GitJaspr(
         stack: List<Commit>,
         remoteBranches: List<RemoteBranch>,
         theme: Theme,
+        strategy: GetStatusStringStrategy,
     ) {
         val remoteName = config.remoteName
         data class NamedStackInfo(
@@ -143,10 +187,10 @@ class GitJaspr(
             val numCommitsAhead: Int,
             val numCommitsBehind: Int,
         )
-        val stackName = (getExistingStackName(stack, remoteBranches) as? Found)?.name
+        val stackName = (getExistingStackName(stack, remoteBranches, strategy) as? Found)?.name
         if (stackName != null) {
             val headStackCommit = stack.last().hash
-            val trackingBranch = "${config.remoteName}/$stackName"
+            val trackingBranch = "$remoteName/$stackName"
             val namedStackRef =
                 checkNotNull(
                     RemoteNamedStackRef.parse(stackName, config.remoteNamedStackBranchPrefix)
@@ -154,8 +198,8 @@ class GitJaspr(
             val namedStackInfo =
                 NamedStackInfo(
                     namedStackRef.stackName,
-                    numCommitsAhead = gitClient.logRange(trackingBranch, headStackCommit).size,
-                    numCommitsBehind = gitClient.logRange(headStackCommit, trackingBranch).size,
+                    numCommitsAhead = strategy.logRange(trackingBranch, headStackCommit).size,
+                    numCommitsBehind = strategy.logRange(headStackCommit, trackingBranch).size,
                 )
             with(namedStackInfo) {
                 appendLine()
@@ -210,6 +254,12 @@ class GitJaspr(
     private fun getExistingStackName(
         stack: List<Commit>,
         remoteBranches: List<RemoteBranch>,
+    ): NamedStackSearchResult = getExistingStackName(stack, remoteBranches, defaultStrategy())
+
+    private fun getExistingStackName(
+        stack: List<Commit>,
+        remoteBranches: List<RemoteBranch>,
+        strategy: GetStatusStringStrategy,
     ): NamedStackSearchResult {
         logger.trace("getExistingStackName")
         require(stack.isNotEmpty())
@@ -240,7 +290,7 @@ class GitJaspr(
                                 val remoteName = config.remoteName
                                 val targetInRemote = "$remoteName/${namedStackRefParts.targetRef}"
                                 val namedStackInRemote = "$remoteName/${branch.name}"
-                                gitClient
+                                strategy
                                     .logRange(targetInRemote, namedStackInRemote)
                                     .mapNotNull(Commit::id)
                                     .contains(checkNotNull(commit.id))
@@ -1112,6 +1162,12 @@ class GitJaspr(
     internal suspend fun getRemoteCommitStatuses(
         stack: List<Commit>,
         remoteBranches: List<RemoteBranch>,
+    ): List<RemoteCommitStatus> = getRemoteCommitStatuses(stack, remoteBranches, defaultStrategy())
+
+    private suspend fun getRemoteCommitStatuses(
+        stack: List<Commit>,
+        remoteBranches: List<RemoteBranch>,
+        strategy: GetStatusStringStrategy,
     ): List<RemoteCommitStatus> {
         logger.trace("getRemoteCommitStatuses")
         val remoteBranchesById =
@@ -1124,7 +1180,7 @@ class GitJaspr(
                 .toMap()
         val prsById =
             if (stack.isNotEmpty()) {
-                ghClient
+                strategy
                     .getPullRequests(stack.filter { commit -> commit.id != null })
                     .filterByMatchingTargetRef()
                     .associateBy(PullRequest::commitId)
