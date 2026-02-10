@@ -780,7 +780,7 @@ interface GitJasprTest {
     @Status
     @Test
     fun `status with out of date commit`() {
-        withTestSetup(useFakeRemote, rollBackChanges = false) {
+        withTestSetup(useFakeRemote) {
             createCommitsFrom(
                 testCase {
                     repository {
@@ -872,7 +872,7 @@ interface GitJasprTest {
     @Status
     @Test
     fun `status with two commits sharing same commit id`() {
-        withTestSetup(useFakeRemote, rollBackChanges = false) {
+        withTestSetup(useFakeRemote) {
             createCommitsFrom(
                 testCase {
                     repository {
@@ -1302,7 +1302,7 @@ interface GitJasprTest {
     @Test
     fun `add footers does not consider a trailing URL a footer line`() {
         // assert the absence of a bug where a URL was being interpreted as a footer line
-        withTestSetup(useFakeRemote, rollBackChanges = false) {
+        withTestSetup(useFakeRemote) {
             createCommitsFrom(
                 testCase {
                     repository {
@@ -1792,7 +1792,7 @@ interface GitJasprTest {
     @Push
     @Test
     fun `push with two commits sharing same commit id`() {
-        withTestSetup(useFakeRemote, rollBackChanges = false) {
+        withTestSetup(useFakeRemote) {
             createCommitsFrom(
                 testCase {
                     repository {
@@ -1952,7 +1952,7 @@ interface GitJasprTest {
     @Push
     @Test
     fun `push existing named stack with new name`() {
-        withTestSetup(useFakeRemote, rollBackChanges = false) {
+        withTestSetup(useFakeRemote) {
             createCommitsFrom(
                 testCase {
                     repository {
@@ -3553,7 +3553,7 @@ interface GitJasprTest {
     @Merge
     @Test
     fun `merge with out of date commit`() {
-        withTestSetup(useFakeRemote, rollBackChanges = false) {
+        withTestSetup(useFakeRemote) {
             createCommitsFrom(
                 testCase {
                     repository {
@@ -3721,7 +3721,7 @@ interface GitJasprTest {
     @Clean
     @Test
     fun `getOrphanedBranches prunes stale tracking branches`() {
-        withTestSetup(useFakeRemote, rollBackChanges = false) {
+        withTestSetup(useFakeRemote) {
             createCommitsFrom(
                 testCase {
                     repository {
@@ -4137,7 +4137,7 @@ interface GitJasprTest {
     @Clean
     @Test
     fun `clean with abandoned PRs closes and deletes them`() {
-        withTestSetup(useFakeRemote, rollBackChanges = false) {
+        withTestSetup(useFakeRemote) {
             // Create a named stack and merge it, so it's empty
             createCommitsFrom(
                 testCase {
