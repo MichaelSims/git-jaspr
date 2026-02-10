@@ -14,6 +14,7 @@ import sims.michael.gitjaspr.Commit
 import sims.michael.gitjaspr.Ident
 import sims.michael.gitjaspr.PullRequest
 import sims.michael.gitjaspr.RemoteRefEncoding.DEFAULT_REMOTE_BRANCH_PREFIX
+import sims.michael.gitjaspr.RemoteRefEncoding.DEFAULT_REMOTE_NAMED_STACK_BRANCH_PREFIX
 import sims.michael.gitjaspr.RemoteRefEncoding.RemoteRef
 import sims.michael.gitjaspr.testing.DEFAULT_COMMITTER
 
@@ -26,6 +27,7 @@ private constructor(
     val remoteName: String,
     private val gitHubInfo: GitHubInfo,
     private val remoteBranchPrefix: String = DEFAULT_REMOTE_BRANCH_PREFIX,
+    private val remoteNamedStackBranchPrefix: String = DEFAULT_REMOTE_NAMED_STACK_BRANCH_PREFIX,
     private val configByUserKey: Map<String, UserConfig>,
     private val useFakeRemote: Boolean = true,
     createLocalGitClient: (File) -> GitClient = ::createDefaultGitClient,
@@ -300,10 +302,17 @@ private constructor(
                 .mapNotNull { name -> restoreRegex.matchEntire(name) }
                 .map { RefSpec(it.groupValues[0], it.groupValues[1]) }
 
-        // This currently deletes all "jaspr/" branches indiscriminately. Much better would be to
-        // capture the ones we created via our JGitClient and delete only those
+        // This currently deletes all "(jaspr|jn)/" branches indiscriminately. Much better would be
+        // to capture the ones we created via our JGitClient and delete only those
         val deleteRegex =
-            "($DELETE_PREFIX(.*)|$DEFAULT_REMOTE_NAME/($remoteBranchPrefix.*))".toRegex()
+            "(%s(.*)|%s/((?:%s|%s).*))"
+                .format(
+                    DELETE_PREFIX,
+                    DEFAULT_REMOTE_NAME,
+                    remoteBranchPrefix,
+                    remoteNamedStackBranchPrefix,
+                )
+                .toRegex()
 
         val toDelete =
             localGit
@@ -467,6 +476,7 @@ private constructor(
             rollBackChanges: Boolean = true,
             configPropertiesFile: File = File(System.getenv("HOME")).resolve(CONFIG_FILE_NAME),
             remoteBranchPrefix: String = DEFAULT_REMOTE_BRANCH_PREFIX,
+            remoteNamedStackBranchPrefix: String = DEFAULT_REMOTE_NAMED_STACK_BRANCH_PREFIX,
             remoteName: String = DEFAULT_REMOTE_NAME,
             createLocalGitClient: (File) -> GitClient = ::createDefaultGitClient,
             createRemoteGitClient: (File) -> GitClient = ::createDefaultGitClient,
@@ -509,6 +519,7 @@ private constructor(
                         remoteName,
                         gitHubInfo,
                         remoteBranchPrefix,
+                        remoteNamedStackBranchPrefix,
                         configByUserKey,
                         useFakeRemote,
                         createLocalGitClient,
