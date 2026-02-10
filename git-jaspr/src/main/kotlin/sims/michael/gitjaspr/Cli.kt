@@ -24,6 +24,8 @@ import com.github.ajalt.clikt.sources.PropertiesValueSource
 import com.github.ajalt.clikt.sources.ValueSource.Companion.getKey
 import com.github.ajalt.mordant.terminal.Terminal
 import java.io.File
+import java.lang.reflect.Proxy
+import java.time.ZonedDateTime
 import kotlinx.coroutines.runBlocking
 import kotlinx.serialization.encodeToString
 import org.slf4j.Logger
@@ -71,7 +73,9 @@ class CleanBehaviorOptions : OptionGroup() {
 // region Root Command
 
 /** Wraps [Theme] (a UI concern) alongside [AppWiring] (business-logic DI) in the Clikt context. */
-class CliContext(val theme: Theme, val appWiring: AppWiring)
+class CliContext(val theme: Theme, appWiringFactory: () -> AppWiring) {
+    val appWiring by lazy(appWiringFactory)
+}
 
 /**
  * Root command that owns infrastructure options and passes [CliContext] to subcommands via context.
@@ -283,13 +287,16 @@ you'll need to re-enable it again.
             }
         }
         val (loggingContext, _) = initLogging(logLevel, logsDirectory.takeIf { logToFiles })
-        try {
-            currentContext.obj = CliContext(theme, buildAppWiring())
-        } catch (e: Exception) {
-            logger.debug("Initialization failed", e)
-            loggingContext.stop()
-            throw PrintMessage(e.message.orEmpty(), 255, true)
-        }
+        currentContext.obj =
+            CliContext(theme) {
+                try {
+                    buildAppWiring()
+                } catch (e: Exception) {
+                    logger.debug("Initialization failed", e)
+                    loggingContext.stop()
+                    throw PrintMessage(e.message.orEmpty(), 255, true)
+                }
+            }
         logger.debug("{} version {}", GitJaspr::class.java.simpleName, VERSION)
     }
 
@@ -832,6 +839,82 @@ class StackDelete :
     }
 }
 
+class PreviewTheme :
+    GitJasprSubcommand(
+        name = "preview-theme",
+        help = "Preview the current color scheme with sample output",
+    ) {
+    override suspend fun doRun() {
+        val ident = Ident("Ada Lovelace", "ada@example.com")
+        val now = ZonedDateTime.now()
+
+        fun commit(hash: String, message: String, id: String) =
+            Commit(hash, message, message, id, ident, ident, now, now)
+
+        val commits =
+            listOf(
+                commit("a1b2c3d", "Add user authentication endpoint", "commit-1"),
+                commit("e4f5a6b", "Validate auth tokens on protected routes", "commit-2"),
+                commit("c7d8e9f", "Add rate limiting to auth endpoints", "commit-3"),
+                commit("0a1b2c3", "Update API docs for auth flow", "commit-4"),
+            )
+
+        val prs =
+            commits.mapIndexed { index, c ->
+                PullRequest(
+                    id = "pr-${index + 1}",
+                    commitId = c.id,
+                    number = 100 + index,
+                    headRefName = "$DEFAULT_REMOTE_BRANCH_PREFIX/main/${c.id}",
+                    baseRefName =
+                        if (index == 0) "main"
+                        else "$DEFAULT_REMOTE_BRANCH_PREFIX/main/commit-$index",
+                    title = c.shortMessage,
+                    body = "",
+                    checksPass =
+                        when (index) {
+                            3 -> null // top commit: checks pending
+                            else -> true
+                        },
+                    approved =
+                        when {
+                            index <= 1 -> true
+                            else -> null
+                        },
+                    permalink = "https://github.com/example/repo/pull/${100 + index}",
+                    isDraft = false,
+                )
+            }
+        val prsByCommitId = prs.associateBy(PullRequest::commitId)
+
+        val remoteBranches =
+            commits.map { c -> RemoteBranch("$DEFAULT_REMOTE_BRANCH_PREFIX/main/${c.id}", c) }
+
+        val strategy =
+            object : GitJaspr.GetStatusStringStrategy {
+                override fun getRemoteBranches() = remoteBranches
+
+                override fun getLocalCommitStack(localRef: String, remoteRef: String) = commits
+
+                override fun logRange(since: String, until: String) = emptyList<Commit>()
+
+                override suspend fun getPullRequests(commits: List<Commit>) =
+                    commits.mapNotNull { prsByCommitId[it.id] }
+            }
+
+        val dummyConfig =
+            Config(
+                workingDirectory = File("."),
+                remoteName = "origin",
+                gitHubInfo = GitHubInfo("github.com", "example", "repo"),
+            )
+        val dummyGitJaspr =
+            GitJaspr(ghClient = unusedProxy(), gitClient = unusedProxy(), config = dummyConfig)
+
+        print(dummyGitJaspr.getStatusString(theme = theme, strategy = strategy))
+    }
+}
+
 // Used by tests
 class NoOp : GitJasprSubcommand(help = "Do nothing", hidden = true) {
     private val logger = LoggerFactory.getLogger(NoOp::class.java)
@@ -866,6 +949,7 @@ object Cli {
                     AutoMerge(),
                     Clean(),
                     Stack().subcommands(StackList(), StackRename(), StackDelete()),
+                    PreviewTheme(),
                     InstallCommitIdHook(),
                     NoOp(),
                 )
@@ -975,4 +1059,12 @@ private fun buildConfigHelpText(
         appendLine("  ${theme.entity("log-level")}=${theme.value("WARN")}")
         append("  ${theme.entity("target")}=${theme.value("develop")}")
     }
+}
+
+/** Creates a JDK proxy that throws [UnsupportedOperationException] on any method call. */
+private inline fun <reified T : Any> unusedProxy(): T {
+    val clazz = T::class.java
+    return Proxy.newProxyInstance(clazz.classLoader, arrayOf(clazz)) { _, m, _ ->
+        error("${clazz.simpleName}.${m.name} should not be called")
+    } as T
 }
