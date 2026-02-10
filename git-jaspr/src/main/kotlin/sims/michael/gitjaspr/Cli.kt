@@ -447,7 +447,7 @@ class Status :
     private val targetRef by TargetRefOptions()
 
     override suspend fun doRun() {
-        print(appWiring.gitJaspr.getStatusString(targetRef.refSpec))
+        print(appWiring.gitJaspr.getStatusString(targetRef.refSpec, theme))
     }
 }
 

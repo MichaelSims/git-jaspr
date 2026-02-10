@@ -35,22 +35,24 @@ class GitJaspr(
     private val logger = LoggerFactory.getLogger(GitJaspr::class.java)
 
     suspend fun getStatusString(
-        refSpec: RefSpec = RefSpec(DEFAULT_LOCAL_OBJECT, DEFAULT_TARGET_REF)
+        refSpec: RefSpec = RefSpec(DEFAULT_LOCAL_OBJECT, DEFAULT_TARGET_REF),
+        theme: Theme = MonoTheme,
     ): String {
         gitClient.fetch(config.remoteName)
-        return getStatusString(refSpec, gitClient.getRemoteBranches(config.remoteName))
+        return getStatusString(refSpec, gitClient.getRemoteBranches(config.remoteName), theme)
     }
 
     suspend fun getStatusString(
         refSpec: RefSpec = RefSpec(DEFAULT_LOCAL_OBJECT, DEFAULT_TARGET_REF),
         remoteBranches: List<RemoteBranch>,
+        theme: Theme = MonoTheme,
     ): String {
         logger.trace("getStatusString {}", refSpec)
         val remoteName = config.remoteName
         gitClient.fetch(remoteName)
 
         val stack = gitClient.getLocalCommitStack(remoteName, refSpec.localRef, refSpec.remoteRef)
-        if (stack.isEmpty()) return "Stack is empty.\n"
+        if (stack.isEmpty()) return theme.muted("Stack is empty.") + "\n"
 
         val statuses = getRemoteCommitStatuses(stack, remoteBranches)
         val commitsWithDuplicateIds =
@@ -65,7 +67,7 @@ class GitJaspr(
         val numCommitsBehindBase =
             gitClient.logRange(stack.last().hash, "$remoteName/${refSpec.remoteRef}").size
         return buildString {
-            append(HEADER)
+            append(theme.muted(HEADER))
 
             val stackChecks =
                 if (numCommitsBehindBase != 0) {
@@ -85,32 +87,36 @@ class GitJaspr(
                 append("[")
                 val flags = status.toStatusList(commitsWithDuplicateIds)
                 val statusList = flags + if (stackCheck) SUCCESS else EMPTY
-                append(statusList.joinToString(separator = "", transform = Status::emoji))
+                append(statusList.joinToString(separator = "") { it.styledEmoji(theme) })
                 append("] ")
-                append(status.localCommit.hash)
+                append(theme.muted(status.localCommit.hash))
                 append(" : ")
                 val permalink = status.pullRequest?.permalink
                 if (permalink != null) {
-                    append(status.pullRequest.permalink)
+                    append(theme.highlight(status.pullRequest.permalink))
                     append(" : ")
                 }
                 appendLine(status.localCommit.shortMessage)
             }
 
-            appendNamedStackInfo(stack, remoteBranches)
+            appendNamedStackInfo(stack, remoteBranches, theme)
 
             if (numCommitsBehindBase > 0) {
                 appendLine()
-                append("Your stack is out-of-date with the base branch ")
                 appendLine(
-                    "($numCommitsBehindBase ${commitOrCommits(numCommitsBehindBase)} behind ${refSpec.remoteRef})."
+                    theme.warning(
+                        "Your stack is out-of-date with the base branch " +
+                            "($numCommitsBehindBase ${commitOrCommits(numCommitsBehindBase)} behind ${refSpec.remoteRef})."
+                    )
                 )
-                append("You'll need to rebase it (`git rebase $remoteName/${refSpec.remoteRef}`) ")
+                append("You'll need to rebase it (")
+                append(theme.highlight("`git rebase $remoteName/${refSpec.remoteRef}`"))
+                append(") ")
                 appendLine("before your stack will be mergeable.")
             }
             if (commitsWithDuplicateIds.isNotEmpty()) {
                 appendLine()
-                appendLine("Some commits in your local stack have duplicate IDs:")
+                appendLine(theme.error("Some commits in your local stack have duplicate IDs:"))
                 for ((id, statusList) in commitsWithDuplicateIds) {
                     appendLine(
                         "- $id: (${statusList.joinToString(", ") { it.localCommit.shortMessage }})"
@@ -129,6 +135,7 @@ class GitJaspr(
     private fun StringBuilder.appendNamedStackInfo(
         stack: List<Commit>,
         remoteBranches: List<RemoteBranch>,
+        theme: Theme,
     ) {
         val remoteName = config.remoteName
         data class NamedStackInfo(
@@ -152,20 +159,28 @@ class GitJaspr(
                 )
             with(namedStackInfo) {
                 appendLine()
-                appendLine("Stack name: $name")
+                appendLine("Stack name: ${theme.highlight(name)}")
                 appendLine(
                     if (numCommitsBehind == 0 && numCommitsAhead == 0) {
-                        "Your stack is up to date with the remote stack in '$remoteName'."
+                        theme.success(
+                            "Your stack is up to date with the remote stack in '$remoteName'."
+                        )
                     } else if (numCommitsBehind > 0 && numCommitsAhead == 0) {
-                        "Your stack is behind the remote stack in '$remoteName' by " +
-                            "$numCommitsBehind ${commitOrCommits(numCommitsBehind)}."
+                        theme.warning(
+                            "Your stack is behind the remote stack in '$remoteName' by " +
+                                "$numCommitsBehind ${commitOrCommits(numCommitsBehind)}."
+                        )
                     } else if (numCommitsBehind == 0) { // && numCommitsAhead > 0
-                        "Your stack is ahead of the remote stack in '$remoteName' by " +
-                            "$numCommitsAhead ${commitOrCommits(numCommitsAhead)}."
+                        theme.warning(
+                            "Your stack is ahead of the remote stack in '$remoteName' by " +
+                                "$numCommitsAhead ${commitOrCommits(numCommitsAhead)}."
+                        )
                     } else { // numBehind > 0 && numCommitsAhead > 0
-                        "Your stack and the remote stack in '$remoteName' have diverged, and have " +
-                            "$numCommitsAhead and $numCommitsBehind different commits each, " +
-                            "respectively."
+                        theme.error(
+                            "Your stack and the remote stack in '$remoteName' have diverged, and have " +
+                                "$numCommitsAhead and $numCommitsBehind different commits each, " +
+                                "respectively."
+                        )
                     }
                 )
             }
@@ -1429,7 +1444,17 @@ class GitJaspr(
             PENDING("⌛"),
             UNKNOWN("❓"),
             EMPTY("ㄧ"),
-            WARNING("❗"),
+            WARNING("❗");
+
+            fun styledEmoji(theme: Theme) =
+                when (this) {
+                    SUCCESS -> theme.success(emoji)
+                    FAIL -> theme.error(emoji)
+                    PENDING,
+                    UNKNOWN -> theme.warning(emoji)
+                    EMPTY -> theme.muted(emoji)
+                    WARNING -> theme.warning(emoji)
+                }
         }
     }
 
