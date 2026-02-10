@@ -5,7 +5,7 @@ import com.github.ajalt.mordant.rendering.TextStyles.bold
 import com.github.ajalt.mordant.rendering.TextStyles.dim
 
 /**
- * Maps semantic UI roles to styling functions, enabling color scheme switching and monochrome
+ * Maps functional UI roles to styling functions, enabling color scheme switching and monochrome
  * output for testing.
  */
 interface Theme {
@@ -15,25 +15,37 @@ interface Theme {
     /** Success messages and positive outcomes. */
     fun success(text: String): String
 
-    /** Abort/cancel messages. */
+    /** Abort/cancel messages and cautionary notices. */
     fun warning(text: String): String
-
-    /** Entity names: branches, stacks, keys, paths. */
-    fun highlight(text: String): String
-
-    /** Supplemental info: commit messages. */
-    fun secondary(text: String): String
 
     /** Section headings. */
     fun heading(text: String): String
 
-    /** Interactive keys, option names, command references. */
-    fun emphasis(text: String): String
+    /** Named things: branch names, stack names, config keys, file paths. */
+    fun entity(text: String): String
 
-    /** De-emphasized: defaults, comments. */
+    /** Permalinks and URLs. */
+    fun url(text: String): String
+
+    /** Inline command references and CLI option names. */
+    fun command(text: String): String
+
+    /** Interactive selection keys and numbered list markers. */
+    fun keyHint(text: String): String
+
+    /** Commit short messages shown as supplemental context. */
+    fun commitSubject(text: String): String
+
+    /** Commit hashes. */
+    fun hash(text: String): String
+
+    /** Config file comments and default-value annotations. */
+    fun comment(text: String): String
+
+    /** De-emphasized empty-state messages and decorative legends. */
     fun muted(text: String): String
 
-    /** Config values, literal data. */
+    /** Literal config values. */
     fun value(text: String): String
 }
 
@@ -59,13 +71,21 @@ object DarkTheme : Theme {
 
     override fun warning(text: String) = yellow(text)
 
-    override fun highlight(text: String) = cyan(text)
-
-    override fun secondary(text: String) = brightWhite(text)
-
     override fun heading(text: String) = bold(text)
 
-    override fun emphasis(text: String) = bold(text)
+    override fun entity(text: String) = cyan(text)
+
+    override fun url(text: String) = cyan(text)
+
+    override fun command(text: String) = bold(text)
+
+    override fun keyHint(text: String) = bold(text)
+
+    override fun commitSubject(text: String) = brightWhite(text)
+
+    override fun hash(text: String) = dim(text)
+
+    override fun comment(text: String) = dim(text)
 
     override fun muted(text: String) = dim(text)
 
@@ -79,13 +99,21 @@ object LightTheme : Theme {
 
     override fun warning(text: String) = yellow(text)
 
-    override fun highlight(text: String) = blue(text)
-
-    override fun secondary(text: String) = gray(text)
-
     override fun heading(text: String) = bold(text)
 
-    override fun emphasis(text: String) = bold(text)
+    override fun entity(text: String) = blue(text)
+
+    override fun url(text: String) = blue(text)
+
+    override fun command(text: String) = bold(text)
+
+    override fun keyHint(text: String) = bold(text)
+
+    override fun commitSubject(text: String) = gray(text)
+
+    override fun hash(text: String) = dim(text)
+
+    override fun comment(text: String) = dim(text)
 
     override fun muted(text: String) = dim(text)
 
@@ -99,13 +127,21 @@ object MonoTheme : Theme {
 
     override fun warning(text: String) = text
 
-    override fun highlight(text: String) = text
+    override fun heading(text: String) = text
 
-    override fun secondary(text: String) = text
+    override fun entity(text: String) = text
 
-    override fun heading(text: String) = bold(text)
+    override fun url(text: String) = text
 
-    override fun emphasis(text: String) = bold(text)
+    override fun command(text: String) = text
+
+    override fun keyHint(text: String) = text
+
+    override fun commitSubject(text: String) = text
+
+    override fun hash(text: String) = text
+
+    override fun comment(text: String) = text
 
     override fun muted(text: String) = text
 

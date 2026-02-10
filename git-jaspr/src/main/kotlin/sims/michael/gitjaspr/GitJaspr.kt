@@ -67,7 +67,7 @@ class GitJaspr(
         val numCommitsBehindBase =
             gitClient.logRange(stack.last().hash, "$remoteName/${refSpec.remoteRef}").size
         return buildString {
-            append(theme.muted(HEADER))
+            append(theme.heading(HEADER))
 
             val stackChecks =
                 if (numCommitsBehindBase != 0) {
@@ -89,11 +89,11 @@ class GitJaspr(
                 val statusList = flags + if (stackCheck) SUCCESS else EMPTY
                 append(statusList.joinToString(separator = "") { it.styledEmoji(theme) })
                 append("] ")
-                append(theme.muted(status.localCommit.hash))
+                append(theme.hash(status.localCommit.hash))
                 append(" : ")
                 val permalink = status.pullRequest?.permalink
                 if (permalink != null) {
-                    append(theme.highlight(status.pullRequest.permalink))
+                    append(theme.url(status.pullRequest.permalink))
                     append(" : ")
                 }
                 appendLine(status.localCommit.shortMessage)
@@ -110,7 +110,7 @@ class GitJaspr(
                     )
                 )
                 append("You'll need to rebase it (")
-                append(theme.highlight("`git rebase $remoteName/${refSpec.remoteRef}`"))
+                append(theme.command("`git rebase $remoteName/${refSpec.remoteRef}`"))
                 append(") ")
                 appendLine("before your stack will be mergeable.")
             }
@@ -159,7 +159,7 @@ class GitJaspr(
                 )
             with(namedStackInfo) {
                 appendLine()
-                appendLine("Stack name: ${theme.highlight(name)}")
+                appendLine("Stack name: ${theme.entity(name)}")
                 appendLine(
                     if (numCommitsBehind == 0 && numCommitsAhead == 0) {
                         theme.success(
