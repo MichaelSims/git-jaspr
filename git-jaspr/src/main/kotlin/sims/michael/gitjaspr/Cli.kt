@@ -22,13 +22,6 @@ import com.github.ajalt.clikt.parameters.types.int
 import com.github.ajalt.clikt.sources.ChainedValueSource
 import com.github.ajalt.clikt.sources.PropertiesValueSource
 import com.github.ajalt.clikt.sources.ValueSource.Companion.getKey
-import com.github.ajalt.mordant.rendering.TextColors
-import com.github.ajalt.mordant.rendering.TextColors.brightWhite
-import com.github.ajalt.mordant.rendering.TextColors.cyan
-import com.github.ajalt.mordant.rendering.TextColors.green
-import com.github.ajalt.mordant.rendering.TextColors.red
-import com.github.ajalt.mordant.rendering.TextStyles.bold
-import com.github.ajalt.mordant.rendering.TextStyles.dim
 import com.github.ajalt.mordant.terminal.Terminal
 import java.io.File
 import kotlinx.coroutines.runBlocking
@@ -77,9 +70,12 @@ class CleanBehaviorOptions : OptionGroup() {
 
 // region Root Command
 
+/** Wraps [Theme] (a UI concern) alongside [AppWiring] (business-logic DI) in the Clikt context. */
+class CliContext(val theme: Theme, val appWiring: AppWiring)
+
 /**
- * Root command that owns infrastructure options and passes [AppWiring] to subcommands via context.
- * Subcommands access it via `requireObject<AppWiring>()`.
+ * Root command that owns infrastructure options and passes [CliContext] to subcommands via context.
+ * Subcommands access it via `requireObject<CliContext>()`.
  */
 class GitJasprRoot : CliktCommand(name = "git jaspr", epilog = helpEpilog) {
     private val workingDirectory =
@@ -218,6 +214,16 @@ you'll need to re-enable it again.
             "Print the effective configuration to standard output (for debugging)"
         }
 
+    private val colorScheme by
+        option("--color-scheme")
+            .choice(
+                "dark" to ColorScheme.DARK,
+                "light" to ColorScheme.LIGHT,
+                "mono" to ColorScheme.MONO,
+            )
+            .default(ColorScheme.DARK)
+            .help { "Terminal color scheme" }
+
     private fun buildAppWiring(): AppWiring {
         val token =
             githubToken
@@ -274,6 +280,7 @@ you'll need to re-enable it again.
 
     override fun run() {
         val logger = Cli.logger
+        val theme = colorScheme.toTheme()
         if (showConfig) {
             buildAppWiring().use { appWiring ->
                 throw PrintMessage(appWiring.json.encodeToString(appWiring.config))
@@ -281,7 +288,7 @@ you'll need to re-enable it again.
         }
         val (loggingContext, _) = initLogging(logLevel, logsDirectory.takeIf { logToFiles })
         try {
-            currentContext.obj = buildAppWiring()
+            currentContext.obj = CliContext(theme, buildAppWiring())
         } catch (e: Exception) {
             logger.debug("Initialization failed", e)
             loggingContext.stop()
@@ -364,7 +371,7 @@ private class GitHubOptions : OptionGroup() {
 // region Subcommand Base Class
 
 /**
- * Thin base class for subcommands. Accesses [AppWiring] from the parent command's context.
+ * Thin base class for subcommands. Accesses [CliContext] from the parent command's context.
  * Subclasses implement [doRun] as a suspend function.
  */
 abstract class GitJasprSubcommand(
@@ -373,7 +380,12 @@ abstract class GitJasprSubcommand(
     hidden: Boolean = false,
 ) : CliktCommand(name = name, hidden = hidden, help = help, epilog = helpEpilog) {
 
-    val appWiring by requireObject<AppWiring>()
+    private val cliContext by requireObject<CliContext>()
+    val appWiring
+        get() = cliContext.appWiring
+
+    val theme
+        get() = cliContext.theme
 
     abstract suspend fun doRun()
 
@@ -473,7 +485,7 @@ class Push : GitJasprSubcommand(help = "Push commits and create/update PRs") {
     private fun promptForStackName(suggested: String): String {
         echo(
             "Please provide a name for your stack or press enter to accept the generated one " +
-                "(in the future you can use the ${bold("--name")} option if you prefer)."
+                "(in the future you can use the ${theme.emphasis("--name")} option if you prefer)."
         )
         val terminal = currentContext.terminal
         var default = suggested
@@ -481,12 +493,12 @@ class Push : GitJasprSubcommand(help = "Push commits and create/update PRs") {
             val input = terminal.prompt("Stack name", default = default.ifEmpty { null }) ?: default
             val normalized = StackNameGenerator.generateName(input)
             if (normalized.isEmpty()) {
-                echo(red("Stack name must contain at least one alphanumeric character."))
+                echo(theme.error("Stack name must contain at least one alphanumeric character."))
                 default = ""
                 continue
             }
             if (normalized == input) return input
-            echo("Normalized to: ${cyan(normalized)}")
+            echo("Normalized to: ${theme.highlight(normalized)}")
             default = normalized
         }
     }
@@ -543,23 +555,21 @@ class Clean : GitJasprSubcommand(help = "Clean up orphaned branches") {
             displayPlan(plan, jaspr)
 
             if (plan.allBranches().isEmpty()) {
-                echo(green("Nothing to clean."))
+                echo(theme.success("Nothing to clean."))
                 return
             }
 
-            fun onOff(v: Boolean) {
-                if (v) green("on") else red("off")
-            }
+            fun onOff(v: Boolean) = if (v) theme.success("on") else theme.error("off")
 
             echo()
             echo("Options:")
-            echo("  [${bold("a")}] Clean abandoned PRs: ${onOff(cleanAbandonedPrs)}")
-            echo("  [${bold("m")}] Clean just my PRs: ${onOff(cleanJustMyPrs)}")
+            echo("  [${theme.emphasis("a")}] Clean abandoned PRs: ${onOff(cleanAbandonedPrs)}")
+            echo("  [${theme.emphasis("m")}] Clean just my PRs: ${onOff(cleanJustMyPrs)}")
             echo()
 
             val prompt =
-                "Perform [${bold("c")}]lean, toggle [${bold("a")}]bandoned, " +
-                    "toggle [${bold("m")}]ine, or [${bold("q")}]uit"
+                "Perform [${theme.emphasis("c")}]lean, toggle [${theme.emphasis("a")}]bandoned, " +
+                    "toggle [${theme.emphasis("m")}]ine, or [${theme.emphasis("q")}]uit"
             when (terminal.prompt(prompt)?.trim()?.lowercase()) {
                 "c" -> {
                     val finalPlan =
@@ -570,7 +580,9 @@ class Clean : GitJasprSubcommand(help = "Clean up orphaned branches") {
                         )
                     jaspr.executeCleanPlan(finalPlan)
                     val count = finalPlan.allBranches().size
-                    echo(green("Deleted $count ${if (count == 1) "branch" else "branches"}."))
+                    echo(
+                        theme.success("Deleted $count ${if (count == 1) "branch" else "branches"}.")
+                    )
                     return
                 }
 
@@ -578,11 +590,11 @@ class Clean : GitJasprSubcommand(help = "Clean up orphaned branches") {
                 "m" -> cleanJustMyPrs = !cleanJustMyPrs
                 "q",
                 null -> {
-                    echo(TextColors.yellow("Aborted."))
+                    echo(theme.warning("Aborted."))
                     return
                 }
 
-                else -> echo(red("Invalid selection."))
+                else -> echo(theme.error("Invalid selection."))
             }
         }
     }
@@ -596,32 +608,34 @@ class Clean : GitJasprSubcommand(help = "Clean up orphaned branches") {
         val lines = buildList {
             if (plan.orphanedBranches.isNotEmpty()) {
                 add("")
-                add(bold("Orphaned branches (PRs are closed or do not exist):"))
+                add(theme.heading("Orphaned branches (PRs are closed or do not exist):"))
                 for (branch in plan.orphanedBranches) {
-                    val message = shortMessages[branch]?.let { " ${brightWhite(it)}" }.orEmpty()
-                    add("  ${cyan(branch)}$message")
+                    val message = shortMessages[branch]?.let { " ${theme.secondary(it)}" }.orEmpty()
+                    add("  ${theme.highlight(branch)}$message")
                 }
             }
 
             if (plan.emptyNamedStackBranches.isNotEmpty()) {
                 add("")
-                add(bold("Empty named stack branches (fully merged):"))
+                add(theme.heading("Empty named stack branches (fully merged):"))
                 for (branch in plan.emptyNamedStackBranches) {
-                    add("  ${cyan(branch)}")
+                    add("  ${theme.highlight(branch)}")
                 }
             }
 
             if (plan.abandonedBranches.isNotEmpty()) {
                 add("")
-                add(bold("Abandoned branches (open PRs not reachable by any named stack):"))
+                add(
+                    theme.heading("Abandoned branches (open PRs not reachable by any named stack):")
+                )
                 for (branch in plan.abandonedBranches) {
-                    val message = shortMessages[branch]?.let { " ${brightWhite(it)}" }.orEmpty()
-                    add("  ${cyan(branch)}$message")
+                    val message = shortMessages[branch]?.let { " ${theme.secondary(it)}" }.orEmpty()
+                    add("  ${theme.highlight(branch)}$message")
                 }
             }
         }
 
-        currentContext.terminal.printPaged(lines, pagingOpts.pageSize)
+        currentContext.terminal.printPaged(lines, pagingOpts.pageSize, theme)
     }
 }
 
@@ -672,14 +686,18 @@ class Checkout : GitJasprSubcommand(help = "Check out an existing named stack") 
                 val shortMessages = appWiring.gitClient.getShortMessages(refs)
                 val terminal = currentContext.terminal
                 val lines = buildList {
-                    add(bold("Named stacks targeting $target:"))
+                    add(theme.heading("Named stacks targeting $target:"))
                     for ((index, stack) in stacks.withIndex()) {
                         val ref = "${remoteName}/${stack.name()}"
-                        val message = shortMessages[ref]?.let { " ${brightWhite(it)}" }.orEmpty()
-                        add("  ${bold("${index + 1}.")} " + "[${cyan(stack.stackName)}]$message")
+                        val message =
+                            shortMessages[ref]?.let { " ${theme.secondary(it)}" }.orEmpty()
+                        add(
+                            "  ${theme.emphasis("${index + 1}.")} " +
+                                "[${theme.highlight(stack.stackName)}]$message"
+                        )
                     }
                 }
-                terminal.printPaged(lines, pagingOpts.pageSize)
+                terminal.printPaged(lines, pagingOpts.pageSize, theme)
                 promptForSelection(terminal, stacks)
             }
 
@@ -696,7 +714,11 @@ class Checkout : GitJasprSubcommand(help = "Check out an existing named stack") 
             if (selection != null && selection in 1..stacks.size) {
                 return stacks[selection - 1]
             }
-            echo(red("Invalid selection. Please enter a number between 1 and ${stacks.size}."))
+            echo(
+                theme.error(
+                    "Invalid selection. Please enter a number between 1 and ${stacks.size}."
+                )
+            )
         }
     }
 }
@@ -732,16 +754,16 @@ class StackList : GitJasprSubcommand(name = "list", help = "List all named stack
         val stacksByTarget = allStacks.groupBy(RemoteNamedStackRef::targetRef)
         val lines = buildList {
             for ((targetRef, stacks) in stacksByTarget) {
-                add(bold("Stacks targeting $targetRef:"))
+                add(theme.heading("Stacks targeting $targetRef:"))
                 for (stack in stacks) {
                     val ref = "${remoteName}/${stack.name()}"
-                    val message = shortMessages[ref]?.let { " ${brightWhite(it)}" }.orEmpty()
-                    add("  [${cyan(stack.stackName)}]$message")
+                    val message = shortMessages[ref]?.let { " ${theme.secondary(it)}" }.orEmpty()
+                    add("  [${theme.highlight(stack.stackName)}]$message")
                 }
                 add("")
             }
         }
-        terminal.printPaged(lines, pagingOpts.pageSize)
+        terminal.printPaged(lines, pagingOpts.pageSize, theme)
     }
 }
 
@@ -761,7 +783,11 @@ class StackRename : GitJasprSubcommand(name = "rename", help = "Rename a named s
             )
         }
         appWiring.gitJaspr.renameStack(oldName, newName, targetOpts.target)
-        echo(green("Renamed stack '${cyan(oldName)}' to '${cyan(newName)}'."))
+        echo(
+            theme.success(
+                "Renamed stack '${theme.highlight(oldName)}' to '${theme.highlight(newName)}'."
+            )
+        )
     }
 }
 
@@ -784,27 +810,27 @@ class StackDelete :
         val shortMessages = appWiring.gitClient.getShortMessages(listOf(ref))
         val message = shortMessages[ref]
         if (message != null) {
-            echo("Stack '${cyan(name)}' -> ${brightWhite(message)}")
+            echo("Stack '${theme.highlight(name)}' -> ${theme.secondary(message)}")
         }
 
         // Prompt for confirmation
         val terminal = currentContext.terminal
         val input = terminal.prompt("Delete stack '${name}'? [y/n]")?.trim()?.lowercase()
         if (input != "y") {
-            echo(TextColors.yellow("Aborted."))
+            echo(theme.warning("Aborted."))
             return
         }
 
         val affectedBranches = gitJaspr.deleteStack(name, target)
-        echo(green("Deleted stack '${cyan(name)}'."))
+        echo(theme.success("Deleted stack '${theme.highlight(name)}'."))
         if (affectedBranches.isNotEmpty()) {
             for (branch in affectedBranches) {
-                echo("Unset upstream for local branch '${cyan(branch)}'.")
+                echo("Unset upstream for local branch '${theme.highlight(branch)}'.")
             }
         }
         echo(
             "Note: PRs in the stack (if any) were not removed. " +
-                "Run ${bold("git jaspr clean")} to remove them."
+                "Run ${theme.emphasis("git jaspr clean")} to remove them."
         )
     }
 }
@@ -861,12 +887,18 @@ const val COMMIT_ID_LABEL = "commit-id"
 private const val GITHUB_TOKEN_ENV_VAR = "GIT_JASPR_TOKEN"
 
 /** Prints [lines] to the terminal, pausing every [pageSize] lines to prompt for continuation. */
-private fun Terminal.printPaged(lines: List<String>, pageSize: Int = DEFAULT_PAGE_SIZE) {
+private fun Terminal.printPaged(
+    lines: List<String>,
+    pageSize: Int = DEFAULT_PAGE_SIZE,
+    theme: Theme = DarkTheme,
+) {
     for ((index, line) in lines.withIndex()) {
         println(line)
         if (index > 0 && index < lines.lastIndex && (index + 1) % pageSize == 0) {
             val input =
-                prompt("-- [${bold("n")}]ext page, [${bold("s")}]kip --")?.trim()?.lowercase()
+                prompt("-- [${theme.emphasis("n")}]ext page, [${theme.emphasis("s")}]kip --")
+                    ?.trim()
+                    ?.lowercase()
             if (input != "n" && input != "") break
         }
     }
@@ -876,7 +908,11 @@ private const val helpEpilog =
     "Options can also be set in ~/$CONFIG_FILE_NAME or ./$CONFIG_FILE_NAME (e.g. log-level=WARN)."
 
 /** Walks the command tree and builds config help text from registered options. */
-private fun buildConfigHelpText(root: CliktCommand, context: Context): String {
+private fun buildConfigHelpText(
+    root: CliktCommand,
+    context: Context,
+    theme: Theme = DarkTheme,
+): String {
     data class ConfigEntry(val key: String, val help: String, val default: String?)
 
     val seen = mutableSetOf<String>()
@@ -911,31 +947,35 @@ private fun buildConfigHelpText(root: CliktCommand, context: Context): String {
     val keyLines =
         entries.joinToString("\n") { (key, help, default) ->
             val padding = " ".repeat(maxKeyLen - key.length + 2)
-            val defaultSuffix = if (default != null) dim(" (default: $default)") else ""
-            "  ${cyan(key)}$padding$help$defaultSuffix"
+            val defaultSuffix = if (default != null) theme.muted(" (default: $default)") else ""
+            "  ${theme.highlight(key)}$padding$help$defaultSuffix"
         }
 
     return buildString {
-        appendLine(bold("Configuration File Options"))
+        appendLine(theme.heading("Configuration File Options"))
         appendLine()
         appendLine("Options can be set in a Java properties file at either location:")
-        appendLine("  ${cyan("~/$CONFIG_FILE_NAME")}   (user-wide defaults)")
-        appendLine("  ${cyan("./$CONFIG_FILE_NAME")}   (per-repo overrides)")
+        appendLine("  ${theme.highlight("~/$CONFIG_FILE_NAME")}   (user-wide defaults)")
+        appendLine("  ${theme.highlight("./$CONFIG_FILE_NAME")}   (per-repo overrides)")
         appendLine()
         appendLine("Per-repo values take precedence over user-wide values. CLI flags")
         appendLine("take precedence over both.")
         appendLine()
-        appendLine(bold("Available keys:"))
+        appendLine(theme.heading("Available keys:"))
         appendLine()
         appendLine(keyLines)
         appendLine()
-        appendLine(bold("Example ~/$CONFIG_FILE_NAME:"))
+        appendLine(theme.heading("Example ~/$CONFIG_FILE_NAME:"))
         appendLine()
-        appendLine("  ${dim("# A classic GitHub Personal Access Token")}")
-        appendLine("  ${dim("# with read:org, read:user, repo, and user:email permissions.")}")
-        appendLine("  ${dim("# Don't forget to enable SSO on your PAT, if applicable.")}")
-        appendLine("  ${cyan("github-token")}=${green("ghp_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx")}")
-        appendLine("  ${cyan("log-level")}=${green("WARN")}")
-        append("  ${cyan("target")}=${green("develop")}")
+        appendLine("  ${theme.muted("# A classic GitHub Personal Access Token")}")
+        appendLine(
+            "  ${theme.muted("# with read:org, read:user, repo, and user:email permissions.")}"
+        )
+        appendLine("  ${theme.muted("# Don't forget to enable SSO on your PAT, if applicable.")}")
+        appendLine(
+            "  ${theme.highlight("github-token")}=${theme.value("ghp_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx")}"
+        )
+        appendLine("  ${theme.highlight("log-level")}=${theme.value("WARN")}")
+        append("  ${theme.highlight("target")}=${theme.value("develop")}")
     }
 }
