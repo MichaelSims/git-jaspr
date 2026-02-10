@@ -3828,7 +3828,9 @@ interface GitJasprTest {
                 }
             )
 
-            gitJaspr.executeCleanPlan(gitJaspr.getCleanPlan(cleanAbandonedPrs = false))
+            gitJaspr.executeCleanPlan(
+                gitJaspr.getCleanPlan(cleanAbandonedPrs = false, cleanAllCommits = false)
+            )
             assertEquals(
                 listOf(buildRemoteRef("a"), buildRemoteRef("a_01"), buildRemoteRef("z"), "main"),
                 localGit
@@ -4013,7 +4015,7 @@ interface GitJasprTest {
             merge(RefSpec("dev", "main"))
 
             // Run clean with dry run
-            gitJaspr.getCleanPlan()
+            gitJaspr.getCleanPlan(cleanAbandonedPrs = true, cleanAllCommits = false)
             assertEquals(
                 CleanPlan(
                     emptyNamedStackBranches =
@@ -4022,7 +4024,7 @@ interface GitJasprTest {
                             RemoteNamedStackRef("stack-two").name(),
                         )
                 ),
-                gitJaspr.getCleanPlan(),
+                gitJaspr.getCleanPlan(cleanAbandonedPrs = true, cleanAllCommits = false),
             )
         }
     }
@@ -4135,7 +4137,9 @@ interface GitJasprTest {
             assertEquals(3, namedStackBranchesBeforeClean.size)
 
             // Now run clean (not dry run)
-            gitJaspr.executeCleanPlan(gitJaspr.getCleanPlan())
+            gitJaspr.executeCleanPlan(
+                gitJaspr.getCleanPlan(cleanAbandonedPrs = true, cleanAllCommits = false)
+            )
 
             // Verify only stack-three remains (stack-one and stack-two were deleted)
             val namedStackBranchesAfterClean =
@@ -4226,8 +4230,6 @@ interface GitJasprTest {
             gitJaspr.push(stackName = "my-stack")
 
             // Get the clean plan with cleanAbandonedPrs enabled
-            val gitJasprWithCleanAbandoned =
-                gitJaspr.clone { config -> config.copy(cleanAbandonedPrs = true) }
             assertEquals(
                 CleanPlan(
                     orphanedBranches = sortedSetOf(buildRemoteRef("will_orphan_a")),
@@ -4235,11 +4237,11 @@ interface GitJasprTest {
                         sortedSetOf(RemoteNamedStackRef("empty_stack").name()),
                     abandonedBranches = sortedSetOf(buildRemoteRef("D")),
                 ),
-                gitJasprWithCleanAbandoned.getCleanPlan(),
+                gitJaspr.getCleanPlan(cleanAbandonedPrs = true, cleanAllCommits = false),
             )
 
             // Get the plan again to ensure it doesn't change anything (no side effects)
-            gitJasprWithCleanAbandoned.getCleanPlan()
+            gitJaspr.getCleanPlan(cleanAbandonedPrs = true, cleanAllCommits = false)
 
             // Verify PRs are still open (dry run doesn't close them)
             val prsAfterClean = gitHub.getPullRequests()
@@ -4386,11 +4388,14 @@ interface GitJasprTest {
                 localGit.getRemoteBranches(remoteName).map(RemoteBranch::name).toSet(),
             )
 
-            val gitJasprWithCleanAbandoned =
-                gitJaspr.clone { config -> config.copy(cleanAbandonedPrs = true) }
-            val plan = gitJasprWithCleanAbandoned.getCleanPlan()
-            val finalPlan = gitJasprWithCleanAbandoned.closeAbandonedPrsAndRecalculate(plan)
-            gitJasprWithCleanAbandoned.executeCleanPlan(finalPlan)
+            val plan = gitJaspr.getCleanPlan(cleanAbandonedPrs = true, cleanAllCommits = false)
+            val finalPlan =
+                gitJaspr.closeAbandonedPrsAndRecalculate(
+                    plan,
+                    cleanAbandonedPrs = true,
+                    cleanAllCommits = false,
+                )
+            gitJaspr.executeCleanPlan(finalPlan)
 
             assertEquals(
                 listOf(
@@ -4414,9 +4419,14 @@ interface GitJasprTest {
                 localGit.getRemoteBranches(remoteName).map(RemoteBranch::name).toSet(),
             )
 
-            val plan2 = gitJasprWithCleanAbandoned.getCleanPlan()
-            val finalPlan2 = gitJasprWithCleanAbandoned.closeAbandonedPrsAndRecalculate(plan2)
-            gitJasprWithCleanAbandoned.executeCleanPlan(finalPlan2)
+            val plan2 = gitJaspr.getCleanPlan(cleanAbandonedPrs = true, cleanAllCommits = false)
+            val finalPlan2 =
+                gitJaspr.closeAbandonedPrsAndRecalculate(
+                    plan2,
+                    cleanAbandonedPrs = true,
+                    cleanAllCommits = false,
+                )
+            gitJaspr.executeCleanPlan(finalPlan2)
 
             assertEquals(
                 listOf("main"),
@@ -4494,9 +4504,7 @@ interface GitJasprTest {
             gitJaspr.push(stackName = "my-stack")
 
             // Get the clean plan with cleanAbandonedPrs enabled
-            val gitJasprWithCleanAbandoned =
-                gitJaspr.clone { config -> config.copy(cleanAbandonedPrs = true) }
-            val cleanPlan = gitJasprWithCleanAbandoned.getCleanPlan()
+            val cleanPlan = gitJaspr.getCleanPlan(cleanAbandonedPrs = true, cleanAllCommits = false)
 
             // The jaspr branch should be in abandonedBranches
             assertTrue(
@@ -4583,7 +4591,7 @@ interface GitJasprTest {
             )
 
             // Get clean plan - should only include branches owned by the current user
-            val cleanPlan = gitJaspr.getCleanPlan()
+            val cleanPlan = gitJaspr.getCleanPlan(cleanAbandonedPrs = true, cleanAllCommits = false)
             assertEquals(
                 setOf(buildRemoteRef("A"), buildRemoteRef("B")),
                 cleanPlan.orphanedBranches,
@@ -4659,16 +4667,15 @@ interface GitJasprTest {
             )
 
             // Get the clean plan with cleanAllCommits = false - should only include owned branches
-            val cleanPlan = gitJaspr.getCleanPlan()
+            val cleanPlan = gitJaspr.getCleanPlan(cleanAbandonedPrs = true, cleanAllCommits = false)
             assertEquals(
                 setOf(buildRemoteRef("A"), buildRemoteRef("B")),
                 cleanPlan.orphanedBranches,
             )
 
             // Get the clean plan with cleanAllCommits = true - should include all branches
-            val gitJasprWithCleanAll =
-                gitJaspr.clone { config -> config.copy(cleanAllCommits = true) }
-            val cleanPlanAll = gitJasprWithCleanAll.getCleanPlan()
+            val cleanPlanAll =
+                gitJaspr.getCleanPlan(cleanAbandonedPrs = true, cleanAllCommits = true)
             assertEquals(
                 setOf(
                     buildRemoteRef("A"),
@@ -5561,7 +5568,7 @@ interface GitJasprTest {
 
             // Clean should succeed without errors
             // The PR with non-matching base ref should be ignored (not closed)
-            val cleanPlan = gitJaspr.getCleanPlan()
+            val cleanPlan = gitJaspr.getCleanPlan(cleanAbandonedPrs = true, cleanAllCommits = false)
 
             // The clean plan should only include the empty named stack branch
             // and the orphaned jaspr branches, but NOT consider the foreign PR as abandoned

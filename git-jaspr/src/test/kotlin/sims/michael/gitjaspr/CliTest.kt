@@ -267,7 +267,7 @@ class CliTest {
                         scratchDir,
                         "git@github.com:SomeOwner/some-repo-name.git",
                         DEFAULT_REMOTE_NAME,
-                        strings = listOf("no-op", "--remote-branch-prefix", "jaspr/"),
+                        strings = listOf("--remote-branch-prefix", "jaspr/", "no-op"),
                     )
                 }
                 .message
@@ -285,7 +285,7 @@ class CliTest {
                         "git@github.com:SomeOwner/some-repo-name.git",
                         DEFAULT_REMOTE_NAME,
                         strings =
-                            listOf("no-op", "--remote-named-stack-branch-prefix", "jaspr-named/"),
+                            listOf("--remote-named-stack-branch-prefix", "jaspr-named/", "no-op"),
                     )
                 }
                 .message
@@ -307,11 +307,11 @@ class CliTest {
                         DEFAULT_REMOTE_NAME,
                         strings =
                             listOf(
-                                "no-op",
                                 "--remote-branch-prefix",
                                 "joe",
                                 "--remote-named-stack-branch-prefix",
                                 "joe",
+                                "no-op",
                             ),
                     )
                 }
@@ -352,14 +352,16 @@ private fun getEffectiveConfigFromCli(
 ): Config =
     Json.decodeFromString(
         executeCli(
-                scratchDir,
-                remoteUri,
-                remoteName,
-                extraCliArgs,
-                homeDirConfig,
-                repoDirConfig,
-                listOf("status", "--show-config", "--remote-name", remoteName),
-                invokeLocation,
+                scratchDir = scratchDir,
+                remoteUri = remoteUri,
+                remoteName = remoteName,
+                homeDirConfig = homeDirConfig,
+                repoDirConfig = repoDirConfig,
+                strings =
+                    listOf("--show-config", "--remote-name", remoteName) +
+                        extraCliArgs +
+                        listOf("status"),
+                invokeLocation = invokeLocation,
             )
             .also { println(it) }
     )

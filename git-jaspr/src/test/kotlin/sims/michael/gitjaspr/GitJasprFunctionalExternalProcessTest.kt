@@ -54,7 +54,7 @@ class GitJasprFunctionalExternalProcessTest : GitJasprTest {
             extraCliArgs = emptyList(),
             homeDirConfig = buildHomeDirConfig(),
             repoDirConfig = emptyMap(),
-            strings = listOf("push", "--remote-name", remoteName) + count.toCountArgs(),
+            strings = listOf("--remote-name", remoteName, "push") + count.toCountArgs(),
             invokeLocation = localRepo,
             javaOptions = javaOptions,
         )
@@ -70,9 +70,9 @@ class GitJasprFunctionalExternalProcessTest : GitJasprTest {
             repoDirConfig = emptyMap(),
             strings =
                 listOf(
-                    "status",
                     "--remote-name",
                     remoteName,
+                    "status",
                     "--target",
                     refSpec.remoteRef,
                     "--local",
@@ -93,9 +93,9 @@ class GitJasprFunctionalExternalProcessTest : GitJasprTest {
             repoDirConfig = emptyMap(),
             strings =
                 listOf(
-                    "merge",
                     "--remote-name",
                     remoteName,
+                    "merge",
                     "--target",
                     refSpec.remoteRef,
                     "--local",
@@ -120,9 +120,9 @@ class GitJasprFunctionalExternalProcessTest : GitJasprTest {
             repoDirConfig = emptyMap(),
             strings =
                 listOf(
-                    "auto-merge",
                     "--remote-name",
                     remoteName,
+                    "auto-merge",
                     "--target",
                     refSpec.remoteRef,
                     "--local",
@@ -145,11 +145,11 @@ class GitJasprFunctionalExternalProcessTest : GitJasprTest {
             repoDirConfig = emptyMap(),
             strings =
                 listOf(
+                    "--remote-name",
+                    remoteName,
                     "checkout",
                     "--name",
                     stackName,
-                    "--remote-name",
-                    remoteName,
                     "--target",
                     DEFAULT_TARGET_REF,
                 ),

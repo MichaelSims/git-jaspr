@@ -29,7 +29,7 @@ git-jaspr commands against a test repository.
 4. **Open iTerm** in the `local` subdir using `osascript` with the following setup commands:
    - `sdk use java 21.0.1-graalce`
    - Create an alias: `alias jaspr='$HOME/IdeaProjects/git-jaspr/git-jaspr/build/install/git-jaspr/bin/git-jaspr'`
-   - Create a convenience alias: `alias jaspr-status='jaspr status git-hub-test-harness-remote'`
+   - Create a convenience alias: `alias jaspr-status='jaspr --remote-name=git-hub-test-harness-remote status'`
    - Print a short help message so the user knows what's available
 
 Use this osascript template (fill in `$LOCAL_DIR`):
