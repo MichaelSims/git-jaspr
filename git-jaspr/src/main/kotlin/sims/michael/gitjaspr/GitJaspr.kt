@@ -414,7 +414,7 @@ class GitJaspr(
         val effectiveStackName: String
         val namedStackAlreadyPushed: Boolean
         if (isGeneratingNewName) {
-            // Generate unique name and push named stack branch atomically
+            // Generate a unique name and push the named stack branch atomically
             effectiveStackName =
                 generateUniqueStackName(targetRef, localRef, stack.first().shortMessage)
             namedStackAlreadyPushed = true
@@ -1287,8 +1287,8 @@ class GitJaspr(
      * different target branch outside jaspr.
      *
      * For a PR with head ref `jaspr/main/<commit-id>`, valid base refs are:
-     * - `main` (the target ref itself)
-     * - Any `jaspr/main/` branch (another jaspr branch for the same target)
+     * - main (the target ref itself)
+     * - Any jaspr/main/ branch (another jaspr branch for the same target)
      */
     private fun List<PullRequest>.filterByMatchingTargetRef(): List<PullRequest> {
         logger.trace("filterByMatchingTargetRef")
@@ -1666,7 +1666,7 @@ class GitJaspr(
             if (upstream != null && upstream.name == namedStackRef.name()) {
                 logger.info("Switched to existing local branch '{}'", localBranchName)
             } else {
-                // Restore previous branch before throwing
+                // Restore the previous branch before throwing
                 gitClient.checkout(previousRef)
                 val upstreamDesc = upstream?.name ?: "none"
                 throw GitJasprException(
@@ -1703,7 +1703,7 @@ class GitJaspr(
             throw GitJasprException("Named stack '$newName' already exists ($newRef).")
         }
 
-        // Push old content to new name AND delete old branch in a single push
+        // Push old content to the new name AND delete the old branch in a single push
         gitClient.push(
             listOf(RefSpec("$remoteName/$oldRef", newRef), RefSpec(FORCE_PUSH_PREFIX, oldRef)),
             remoteName,
