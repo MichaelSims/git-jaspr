@@ -60,7 +60,7 @@ mind with regard to using Jaspr:
 - If `git jaspr status` does not show the "pr approved" checkmark or x, you may need to create a branch protection rule
   that requires pull request approvals before merging first. (I've noticed this behavior is inconsistent... sometimes
   this bit shows even without this requirement.)
-- You want to make sure that people can force push to `jspr/**/*`. Jaspr's philosophy is that of Gerrit's, which is to
+- You want to make sure that people can force push to `jaspr/**/*`. Jaspr's philosophy is that of Gerrit's, which is to
   favor a trunk based workflow where PR remediation is done via amends/edits and are force pushed (this is why Jaspr
   pushes revision history branches and includes diff links for them in the PR descriptions).
 
