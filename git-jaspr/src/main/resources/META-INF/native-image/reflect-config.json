@@ -3,13 +3,26 @@
   "name":"[B"
 },
 {
+  "name":"[Lio.ktor.network.selector.SelectInterest;"
+},
+{
+  "name":"[Ljava.lang.Object;"
+},
+{
   "name":"[Ljava.lang.String;"
 },
 {
   "name":"[Lsun.security.pkcs.SignerInfo;"
 },
 {
+  "name":"android.os.Build"
+},
+{
   "name":"android.os.Build$VERSION"
+},
+{
+  "name":"apple.security.AppleProvider",
+  "methods":[{"name":"<init>","parameterTypes":[] }]
 },
 {
   "name":"ch.qos.logback.classic.encoder.PatternLayoutEncoder",
@@ -85,6 +98,10 @@
 {
   "name":"ch.qos.logback.core.spi.ContextAware",
   "methods":[{"name":"valueOf","parameterTypes":["java.lang.String"] }]
+},
+{
+  "name":"com.apollographql.apollo.ApolloCall$singleSuccessOrException$1",
+  "fields":[{"name":"label"}]
 },
 {
   "name":"com.jcraft.jsch.DH25519",
@@ -227,6 +244,18 @@
   "methods":[{"name":"<init>","parameterTypes":[] }]
 },
 {
+  "name":"com.sun.crypto.provider.ARCFOURCipher",
+  "methods":[{"name":"<init>","parameterTypes":[] }]
+},
+{
+  "name":"com.sun.crypto.provider.ChaCha20Cipher$ChaCha20Poly1305",
+  "methods":[{"name":"<init>","parameterTypes":[] }]
+},
+{
+  "name":"com.sun.crypto.provider.DESCipher",
+  "methods":[{"name":"<init>","parameterTypes":[] }]
+},
+{
   "name":"com.sun.crypto.provider.DESedeCipher",
   "methods":[{"name":"<init>","parameterTypes":[] }]
 },
@@ -267,24 +296,65 @@
   "fields":[{"name":"closed"}]
 },
 {
+  "name":"io.ktor.client.HttpClientConfig"
+},
+{
   "name":"io.ktor.client.call.HttpClientCall",
   "fields":[{"name":"received"}]
+},
+{
+  "name":"io.ktor.client.content.ProgressListener"
 },
 {
   "name":"io.ktor.client.engine.HttpClientEngineBase",
   "fields":[{"name":"closed"}]
 },
 {
+  "name":"io.ktor.client.engine.HttpClientEngineCapability"
+},
+{
+  "name":"io.ktor.client.engine.HttpClientEngineConfig"
+},
+{
   "name":"io.ktor.client.engine.cio.Endpoint",
   "fields":[{"name":"connections"}]
+},
+{
+  "name":"io.ktor.client.engine.cio.EndpointKt$setupTimeout$timeoutJob$1",
+  "fields":[{"name":"label"}]
+},
+{
+  "name":"io.ktor.client.plugins.HttpSend"
+},
+{
+  "name":"io.ktor.client.plugins.api.ClientPluginImpl"
+},
+{
+  "name":"io.ktor.client.plugins.api.ClientPluginInstance"
 },
 {
   "name":"io.ktor.client.plugins.auth.AtomicCounter",
   "fields":[{"name":"atomic"}]
 },
 {
+  "name":"io.ktor.client.plugins.auth.AuthProvider"
+},
+{
   "name":"io.ktor.client.plugins.auth.providers.AuthTokenHolder",
   "fields":[{"name":"loadTokensDeferred"}, {"name":"refreshTokensDeferred"}]
+},
+{
+  "name":"io.ktor.client.plugins.internal.ByteChannelReplay",
+  "fields":[{"name":"content"}]
+},
+{
+  "name":"io.ktor.client.request.ResponseAdapter"
+},
+{
+  "name":"io.ktor.http.HttpStatusCode"
+},
+{
+  "name":"io.ktor.http.content.TextContent"
 },
 {
   "name":"io.ktor.network.selector.InterestSuspensionsMap",
@@ -303,12 +373,41 @@
   "fields":[{"name":"_interestedOps"}]
 },
 {
+  "name":"io.ktor.network.sockets.CIOReaderKt$attachForReadingDirectImpl$1",
+  "fields":[{"name":"label"}]
+},
+{
+  "name":"io.ktor.network.sockets.ServerSocketImpl$acceptSuspend$1",
+  "fields":[{"name":"label"}]
+},
+{
+  "name":"io.ktor.util.Attributes"
+},
+{
   "name":"io.ktor.util.collections.CopyOnWriteHashMap",
   "fields":[{"name":"current"}]
 },
 {
+  "name":"io.ktor.util.internal.LockFreeLinkedListNode",
+  "fields":[{"name":"_next"}, {"name":"_prev"}, {"name":"_removedRef"}]
+},
+{
+  "name":"io.ktor.util.reflect.TypeInfo"
+},
+{
   "name":"io.ktor.utils.io.ByteBufferChannel",
   "fields":[{"name":"_closed"}, {"name":"_readOp"}, {"name":"_state"}, {"name":"_writeOp"}]
+},
+{
+  "name":"io.ktor.utils.io.ByteChannel",
+  "fields":[{"name":"_closedCause"}, {"name":"suspensionSlot"}]
+},
+{
+  "name":"io.ktor.utils.io.ByteReadChannel"
+},
+{
+  "name":"io.ktor.utils.io.ByteWriteChannelOperationsKt$writer$job$1",
+  "fields":[{"name":"label"}]
 },
 {
   "name":"io.ktor.utils.io.ClosedWriteChannelException",
@@ -336,7 +435,21 @@
   "name":"java.io.FilePermission"
 },
 {
+  "name":"java.io.IOException",
+  "allDeclaredFields":true
+},
+{
+  "name":"java.lang.Boolean"
+},
+{
+  "name":"java.lang.Class",
+  "methods":[{"name":"getModule","parameterTypes":[] }]
+},
+{
   "name":"java.lang.ClassValue"
+},
+{
+  "name":"java.lang.Enum"
 },
 {
   "name":"java.lang.Exception",
@@ -345,6 +458,13 @@
 {
   "name":"java.lang.IllegalStateException",
   "allDeclaredFields":true
+},
+{
+  "name":"java.lang.Integer"
+},
+{
+  "name":"java.lang.Module",
+  "methods":[{"name":"getDescriptor","parameterTypes":[] }]
 },
 {
   "name":"java.lang.Object",
@@ -387,6 +507,10 @@
   "methods":[{"name":"methodType","parameterTypes":["java.lang.Class","java.lang.Class[]"] }]
 },
 {
+  "name":"java.lang.module.ModuleDescriptor",
+  "methods":[{"name":"name","parameterTypes":[] }]
+},
+{
   "name":"java.lang.reflect.Method",
   "methods":[{"name":"isDefault","parameterTypes":[] }, {"name":"isVarArgs","parameterTypes":[] }]
 },
@@ -405,6 +529,12 @@
 },
 {
   "name":"java.nio.Buffer"
+},
+{
+  "name":"java.nio.channels.ClosedChannelException",
+  "allDeclaredFields":true,
+  "queryAllPublicConstructors":true,
+  "methods":[{"name":"<init>","parameterTypes":[] }]
 },
 {
   "name":"java.security.AlgorithmParametersSpi"
@@ -440,13 +570,32 @@
   "name":"java.util.Date"
 },
 {
+  "name":"java.util.HashSet"
+},
+{
+  "name":"java.util.LinkedHashSet"
+},
+{
+  "name":"java.util.List"
+},
+{
+  "name":"java.util.Map"
+},
+{
   "name":"java.util.PropertyPermission"
+},
+{
+  "name":"java.util.concurrent.ArrayBlockingQueue"
 },
 {
   "name":"java.util.concurrent.CancellationException",
   "allDeclaredFields":true,
   "queryAllPublicConstructors":true,
   "methods":[{"name":"<init>","parameterTypes":["java.lang.String"] }]
+},
+{
+  "name":"java.util.concurrent.ForkJoinPool",
+  "methods":[{"name":"<init>","parameterTypes":["int","java.util.concurrent.ForkJoinPool$ForkJoinWorkerThreadFactory","java.lang.Thread$UncaughtExceptionHandler","boolean","int","int","int","java.util.function.Predicate","long","java.util.concurrent.TimeUnit"] }]
 },
 {
   "name":"java.util.concurrent.ForkJoinTask",
@@ -463,6 +612,24 @@
 {
   "name":"java.util.concurrent.atomic.Striped64",
   "fields":[{"name":"base"}, {"name":"cellsBusy"}]
+},
+{
+  "name":"java.util.concurrent.locks.AbstractOwnableSynchronizer"
+},
+{
+  "name":"java.util.concurrent.locks.AbstractQueuedSynchronizer"
+},
+{
+  "name":"java.util.concurrent.locks.AbstractQueuedSynchronizer$ConditionObject"
+},
+{
+  "name":"java.util.concurrent.locks.ReentrantLock"
+},
+{
+  "name":"java.util.concurrent.locks.ReentrantLock$NonfairSync"
+},
+{
+  "name":"java.util.concurrent.locks.ReentrantLock$Sync"
 },
 {
   "name":"javax.crypto.interfaces.DHPrivateKey"
@@ -482,8 +649,24 @@
   "name":"jdk.internal.misc.Unsafe"
 },
 {
+  "name":"kotlin.Any"
+},
+{
+  "name":"kotlin.Boolean"
+},
+{
+  "name":"kotlin.ByteArray"
+},
+{
+  "name":"kotlin.Int"
+},
+{
+  "name":"kotlin.Long"
+},
+{
   "name":"kotlin.Metadata",
   "queryAllDeclaredMethods":true,
+  "queryAllPublicMethods":true,
   "methods":[{"name":"bv","parameterTypes":[] }, {"name":"d1","parameterTypes":[] }, {"name":"d2","parameterTypes":[] }, {"name":"k","parameterTypes":[] }, {"name":"mv","parameterTypes":[] }, {"name":"pn","parameterTypes":[] }, {"name":"xi","parameterTypes":[] }, {"name":"xs","parameterTypes":[] }]
 },
 {
@@ -494,6 +677,33 @@
   "name":"kotlin.String"
 },
 {
+  "name":"kotlin.Unit"
+},
+{
+  "name":"kotlin.annotation.MustBeDocumented",
+  "queryAllPublicMethods":true
+},
+{
+  "name":"kotlin.annotation.Retention",
+  "queryAllPublicMethods":true
+},
+{
+  "name":"kotlin.annotation.Target",
+  "queryAllPublicMethods":true
+},
+{
+  "name":"kotlin.collections.List"
+},
+{
+  "name":"kotlin.collections.Map"
+},
+{
+  "name":"kotlin.collections.MutableMap"
+},
+{
+  "name":"kotlin.coroutines.jvm.internal.BaseContinuationImpl"
+},
+{
   "name":"kotlin.jvm.internal.DefaultConstructorMarker"
 },
 {
@@ -502,31 +712,35 @@
 },
 {
   "name":"kotlinx.coroutines.CancellableContinuationImpl",
-  "fields":[{"name":"_decision"}, {"name":"_decisionAndIndex"}, {"name":"_parentHandle"}, {"name":"_state"}]
+  "fields":[{"name":"_decision"}, {"name":"_decisionAndIndex"}, {"name":"_decisionAndIndex$volatile"}, {"name":"_parentHandle"}, {"name":"_parentHandle$volatile"}, {"name":"_state"}, {"name":"_state$volatile"}]
 },
 {
   "name":"kotlinx.coroutines.CancelledContinuation",
-  "fields":[{"name":"_resumed"}]
+  "fields":[{"name":"_resumed"}, {"name":"_resumed$volatile"}]
 },
 {
   "name":"kotlinx.coroutines.CompletedExceptionally",
-  "fields":[{"name":"_handled"}]
+  "fields":[{"name":"_handled"}, {"name":"_handled$volatile"}]
+},
+{
+  "name":"kotlinx.coroutines.DispatchedCoroutine",
+  "fields":[{"name":"_decision$volatile"}]
 },
 {
   "name":"kotlinx.coroutines.EventLoopImplBase",
-  "fields":[{"name":"_delayed"}, {"name":"_isCompleted"}, {"name":"_queue"}]
+  "fields":[{"name":"_delayed"}, {"name":"_delayed$volatile"}, {"name":"_isCompleted"}, {"name":"_isCompleted$volatile"}, {"name":"_queue"}, {"name":"_queue$volatile"}]
 },
 {
   "name":"kotlinx.coroutines.InvokeOnCancelling",
-  "fields":[{"name":"_invoked"}]
+  "fields":[{"name":"_invoked"}, {"name":"_invoked$volatile"}]
 },
 {
   "name":"kotlinx.coroutines.JobSupport",
-  "fields":[{"name":"_parentHandle"}, {"name":"_state"}]
+  "fields":[{"name":"_parentHandle"}, {"name":"_parentHandle$volatile"}, {"name":"_state"}, {"name":"_state$volatile"}]
 },
 {
   "name":"kotlinx.coroutines.JobSupport$Finishing",
-  "fields":[{"name":"_exceptionsHolder"}, {"name":"_isCompleting"}, {"name":"_rootCause"}]
+  "fields":[{"name":"_exceptionsHolder"}, {"name":"_exceptionsHolder$volatile"}, {"name":"_isCompleting"}, {"name":"_isCompleting$volatile"}, {"name":"_rootCause"}, {"name":"_rootCause$volatile"}]
 },
 {
   "name":"kotlinx.coroutines.channels.AbstractSendChannel",
@@ -534,7 +748,19 @@
 },
 {
   "name":"kotlinx.coroutines.channels.BufferedChannel",
-  "fields":[{"name":"_closeCause"}, {"name":"bufferEnd"}, {"name":"bufferEndSegment"}, {"name":"closeHandler"}, {"name":"completedExpandBuffersAndPauseFlag"}, {"name":"receiveSegment"}, {"name":"receivers"}, {"name":"sendSegment"}, {"name":"sendersAndCloseStatus"}]
+  "fields":[{"name":"_closeCause"}, {"name":"_closeCause$volatile"}, {"name":"bufferEnd"}, {"name":"bufferEnd$volatile"}, {"name":"bufferEndSegment"}, {"name":"bufferEndSegment$volatile"}, {"name":"closeHandler"}, {"name":"closeHandler$volatile"}, {"name":"completedExpandBuffersAndPauseFlag"}, {"name":"completedExpandBuffersAndPauseFlag$volatile"}, {"name":"receiveSegment"}, {"name":"receiveSegment$volatile"}, {"name":"receivers"}, {"name":"receivers$volatile"}, {"name":"sendSegment"}, {"name":"sendSegment$volatile"}, {"name":"sendersAndCloseStatus"}, {"name":"sendersAndCloseStatus$volatile"}]
+},
+{
+  "name":"kotlinx.coroutines.flow.FlowKt__ChannelsKt$emitAllImpl$1",
+  "fields":[{"name":"label"}]
+},
+{
+  "name":"kotlinx.coroutines.flow.FlowKt__CollectionKt$toCollection$1",
+  "fields":[{"name":"label"}]
+},
+{
+  "name":"kotlinx.coroutines.flow.internal.ChannelFlow$collect$2",
+  "fields":[{"name":"label"}]
 },
 {
   "name":"kotlinx.coroutines.internal.AtomicOp",
@@ -542,54 +768,69 @@
 },
 {
   "name":"kotlinx.coroutines.internal.ConcurrentLinkedListNode",
-  "fields":[{"name":"_next"}, {"name":"_prev"}]
+  "fields":[{"name":"_next"}, {"name":"_next$volatile"}, {"name":"_prev"}, {"name":"_prev$volatile"}]
 },
 {
   "name":"kotlinx.coroutines.internal.DispatchedContinuation",
-  "fields":[{"name":"_reusableCancellableContinuation"}]
+  "fields":[{"name":"_reusableCancellableContinuation"}, {"name":"_reusableCancellableContinuation$volatile"}]
 },
 {
   "name":"kotlinx.coroutines.internal.LimitedDispatcher",
-  "fields":[{"name":"runningWorkers"}]
+  "fields":[{"name":"runningWorkers"}, {"name":"runningWorkers$volatile"}]
 },
 {
   "name":"kotlinx.coroutines.internal.LockFreeLinkedListNode",
-  "fields":[{"name":"_next"}, {"name":"_prev"}, {"name":"_removedRef"}]
+  "fields":[{"name":"_next"}, {"name":"_next$volatile"}, {"name":"_prev"}, {"name":"_prev$volatile"}, {"name":"_removedRef"}, {"name":"_removedRef$volatile"}]
 },
 {
   "name":"kotlinx.coroutines.internal.LockFreeTaskQueue",
-  "fields":[{"name":"_cur"}]
+  "fields":[{"name":"_cur"}, {"name":"_cur$volatile"}]
 },
 {
   "name":"kotlinx.coroutines.internal.LockFreeTaskQueueCore",
-  "fields":[{"name":"_next"}, {"name":"_state"}]
+  "fields":[{"name":"_next"}, {"name":"_next$volatile"}, {"name":"_state"}, {"name":"_state$volatile"}]
 },
 {
   "name":"kotlinx.coroutines.internal.Segment",
-  "fields":[{"name":"cleanedAndPointers"}]
+  "fields":[{"name":"cleanedAndPointers"}, {"name":"cleanedAndPointers$volatile"}]
+},
+{
+  "name":"kotlinx.coroutines.internal.StackTraceRecoveryKt"
 },
 {
   "name":"kotlinx.coroutines.internal.ThreadSafeHeap",
-  "fields":[{"name":"_size"}]
+  "fields":[{"name":"_size"}, {"name":"_size$volatile"}]
 },
 {
   "name":"kotlinx.coroutines.scheduling.CoroutineScheduler",
-  "fields":[{"name":"_isTerminated"}, {"name":"controlState"}, {"name":"parkedWorkersStack"}]
+  "fields":[{"name":"_isTerminated"}, {"name":"_isTerminated$volatile"}, {"name":"controlState"}, {"name":"controlState$volatile"}, {"name":"parkedWorkersStack"}, {"name":"parkedWorkersStack$volatile"}]
 },
 {
   "name":"kotlinx.coroutines.scheduling.CoroutineScheduler$Worker",
-  "fields":[{"name":"workerCtl"}]
+  "fields":[{"name":"workerCtl"}, {"name":"workerCtl$volatile"}]
 },
 {
   "name":"kotlinx.coroutines.scheduling.WorkQueue",
-  "fields":[{"name":"blockingTasksInBuffer"}, {"name":"consumerIndex"}, {"name":"lastScheduledTask"}, {"name":"producerIndex"}]
+  "fields":[{"name":"blockingTasksInBuffer"}, {"name":"blockingTasksInBuffer$volatile"}, {"name":"consumerIndex"}, {"name":"consumerIndex$volatile"}, {"name":"lastScheduledTask"}, {"name":"lastScheduledTask$volatile"}, {"name":"producerIndex"}, {"name":"producerIndex$volatile"}]
+},
+{
+  "name":"kotlinx.coroutines.sync.SemaphoreAndMutexImpl",
+  "fields":[{"name":"_availablePermits$volatile"}, {"name":"deqIdx$volatile"}, {"name":"enqIdx$volatile"}, {"name":"head$volatile"}, {"name":"tail$volatile"}]
 },
 {
   "name":"kotlinx.coroutines.sync.SemaphoreImpl",
   "fields":[{"name":"_availablePermits"}, {"name":"deqIdx"}, {"name":"enqIdx"}, {"name":"head"}, {"name":"tail"}]
 },
 {
+  "name":"kotlinx.io.RefCountingCopyTracker",
+  "fields":[{"name":"copyCount"}]
+},
+{
   "name":"org.eclipse.jgit.diff.DiffAlgorithm$SupportedAlgorithm",
+  "methods":[{"name":"values","parameterTypes":[] }]
+},
+{
+  "name":"org.eclipse.jgit.dircache.DirCache$DirCacheVersion",
   "methods":[{"name":"values","parameterTypes":[] }]
 },
 {
@@ -636,6 +877,27 @@
 {
   "name":"org.eclipse.jgit.util.sha1.SHA1$Sha1Implementation",
   "methods":[{"name":"values","parameterTypes":[] }]
+},
+{
+  "name":"sims.michael.gitjaspr.GitHubClientImpl$getPullRequestsByHeadRef$1",
+  "fields":[{"name":"label"}]
+},
+{
+  "name":"sims.michael.gitjaspr.GitJasprException",
+  "allDeclaredFields":true
+},
+{
+  "name":"sims.michael.gitjaspr.NativeImageMetadataTest",
+  "allDeclaredFields":true,
+  "allDeclaredClasses":true,
+  "queryAllDeclaredMethods":true,
+  "queryAllPublicMethods":true,
+  "queryAllDeclaredConstructors":true,
+  "methods":[{"name":"<init>","parameterTypes":[] }, {"name":"exercise approvePullRequest","parameterTypes":[] }, {"name":"exercise cli command tree","parameterTypes":[] }, {"name":"exercise closePullRequest","parameterTypes":[] }, {"name":"exercise config serialization","parameterTypes":[] }, {"name":"exercise createPullRequest","parameterTypes":[] }, {"name":"exercise error mapping interceptor on 401","parameterTypes":[] }, {"name":"exercise getPullRequestsByHeadRef","parameterTypes":[] }, {"name":"exercise install commit id hook","parameterTypes":[] }, {"name":"exercise push status merge and clean","parameterTypes":[] }, {"name":"exercise rate limit retry interceptor","parameterTypes":[] }, {"name":"exercise stack checkout rename and delete","parameterTypes":[] }, {"name":"exercise suggest stack name","parameterTypes":[] }, {"name":"exercise updatePullRequest","parameterTypes":[] }, {"name":"startServer","parameterTypes":[] }, {"name":"stopServer","parameterTypes":[] }]
+},
+{
+  "name":"sims.michael.gitjaspr.NativeImageMetadataTest$exercise error mapping interceptor on 401$exception$1$1",
+  "fields":[{"name":"label"}]
 },
 {
   "name":"sims.michael.gitjaspr.generated.ClosePullRequest",
@@ -779,6 +1041,10 @@
 },
 {
   "name":"sun.security.rsa.RSASignature$SHA512withRSA",
+  "methods":[{"name":"<init>","parameterTypes":[] }]
+},
+{
+  "name":"sun.security.ssl.SSLContextImpl$TLSContext",
   "methods":[{"name":"<init>","parameterTypes":[] }]
 },
 {
