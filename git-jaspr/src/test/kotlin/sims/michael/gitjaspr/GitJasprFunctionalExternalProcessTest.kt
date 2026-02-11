@@ -63,6 +63,7 @@ class GitJasprFunctionalExternalProcessTest : GitJasprTest {
                         add("--name")
                         add(stackName)
                     }
+                    add("--force")
                     addAll(count.toCountArgs())
                 },
             invokeLocation = localRepo,

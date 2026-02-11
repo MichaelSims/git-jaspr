@@ -323,6 +323,7 @@ class GitJaspr(
         refSpec: RefSpec = RefSpec(DEFAULT_LOCAL_OBJECT, DEFAULT_TARGET_REF),
         stackName: String? = null,
         count: Int? = null,
+        onAbandonedPrs: (List<PullRequest>) -> Boolean = { true },
     ) {
         logger.trace("push {}", refSpec)
 
@@ -420,6 +421,17 @@ class GitJaspr(
 
         val namedStackRefSpec = RefSpec(localRef, prefixedStackName)
         val outOfDateNamedStackBranch = listOfNotNull(namedStackRefSpec) - remoteRefSpecs.toSet()
+
+        // Check for PRs that will be abandoned by this push.
+        // See also: getAbandonedBranches() for the broader detection used by `clean`.
+        val abandonedPrs =
+            findPrsAbandonedByPush(remoteBranches, prefixedStackName, targetRef, stack)
+        if (abandonedPrs.isNotEmpty() && !onAbandonedPrs(abandonedPrs)) {
+            throw GitJasprException(
+                "Push aborted: would abandon ${abandonedPrs.size} open pull " +
+                    "${requestOrRequests(abandonedPrs.size)}."
+            )
+        }
 
         val refSpecs =
             outOfDateBranches.map(RefSpec::forcePush) +
@@ -874,6 +886,35 @@ class GitJaspr(
                 false
             }
         }
+    }
+
+    /**
+     * Returns open PRs that will be abandoned by pushing the given [stack] to the named stack
+     * identified by [prefixedStackName]. A PR is "abandoned" when its commit ID was reachable from
+     * the named stack before the push but is absent from the new stack.
+     *
+     * @see getAbandonedBranches for the broader detection used by `clean`
+     */
+    internal suspend fun findPrsAbandonedByPush(
+        remoteBranches: List<RemoteBranch>,
+        prefixedStackName: String,
+        targetRef: String,
+        stack: List<Commit>,
+    ): List<PullRequest> {
+        val remoteName = config.remoteName
+        val namedStackExists = remoteBranches.any { it.name == prefixedStackName }
+        if (!namedStackExists) return emptyList()
+
+        val oldCommitIds =
+            gitClient
+                .logRange("$remoteName/$targetRef", "$remoteName/$prefixedStackName")
+                .mapNotNull(Commit::id)
+                .toSet()
+        val newCommitIds = stack.mapNotNull(Commit::id).toSet()
+        val droppedIds = oldCommitIds - newCommitIds
+        if (droppedIds.isEmpty()) return emptyList()
+
+        return ghClient.getPullRequestsById(droppedIds.toList()).filterByMatchingTargetRef()
     }
 
     /** Returns a list of jaspr branches with open PRs that are not reachable by any named stack. */

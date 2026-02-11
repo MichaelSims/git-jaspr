@@ -2074,6 +2074,191 @@ interface GitJasprTest {
 
     @Push
     @Test
+    fun `push aborts when onAbandonedPrs returns false`() {
+        withTestSetup(useFakeRemote) {
+            createCommitsFrom(
+                testCase {
+                    repository {
+                        commit { title = "A" }
+                        commit { title = "B" }
+                        commit {
+                            title = "C"
+                            localRefs += "dev"
+                        }
+                    }
+                    checkout = "dev"
+                }
+            )
+
+            gitJaspr.push(stackName = "my-stack")
+
+            // Re-push without commit B, which would abandon its PR
+            createCommitsFrom(
+                testCase {
+                    repository {
+                        commit { title = "A" }
+                        commit {
+                            title = "C"
+                            localRefs += "dev"
+                        }
+                    }
+                    checkout = "dev"
+                }
+            )
+
+            val exception =
+                assertThrows<GitJasprException> {
+                    gitJaspr.push(stackName = "my-stack", onAbandonedPrs = { false })
+                }
+            assertContains(exception.message, "abandon")
+
+            // Succeeds with default (permits abandoning)
+            gitJaspr.push(stackName = "my-stack")
+        }
+    }
+
+    @Push
+    @Test
+    fun `push detects abandoned PRs when commits are dropped`() {
+        withTestSetup(useFakeRemote) {
+            createCommitsFrom(
+                testCase {
+                    repository {
+                        commit { title = "A" }
+                        commit { title = "B" }
+                        commit { title = "C" }
+                        commit {
+                            title = "D"
+                            localRefs += "dev"
+                        }
+                    }
+                    checkout = "dev"
+                }
+            )
+
+            gitJaspr.push(stackName = "my-stack")
+
+            // Re-push without commit B, which will abandon its PR
+            createCommitsFrom(
+                testCase {
+                    repository {
+                        commit { title = "A" }
+                        // B is dropped
+                        commit { title = "C" }
+                        commit {
+                            title = "D"
+                            localRefs += "dev"
+                        }
+                    }
+                    checkout = "dev"
+                }
+            )
+
+            val remoteBranches = localGit.getRemoteBranches(remoteName)
+            val prefixedStackName = RemoteNamedStackRef("my-stack").name()
+            val stack = localGit.getLocalCommitStack(remoteName, GitClient.HEAD, DEFAULT_TARGET_REF)
+
+            val abandonedPrs =
+                gitJaspr.findPrsAbandonedByPush(
+                    remoteBranches,
+                    prefixedStackName,
+                    DEFAULT_TARGET_REF,
+                    stack,
+                )
+
+            assertEquals(1, abandonedPrs.size, "Expected one abandoned PR")
+            assertEquals("B", abandonedPrs.single().title)
+        }
+    }
+
+    @Push
+    @Test
+    fun `push does not detect abandoned PRs for a new stack`() {
+        withTestSetup(useFakeRemote) {
+            createCommitsFrom(
+                testCase {
+                    repository {
+                        commit { title = "A" }
+                        commit {
+                            title = "B"
+                            localRefs += "dev"
+                        }
+                    }
+                    checkout = "dev"
+                }
+            )
+
+            val remoteBranches = localGit.getRemoteBranches(remoteName)
+            val prefixedStackName = RemoteNamedStackRef("my-stack").name()
+            val stack = localGit.getLocalCommitStack(remoteName, GitClient.HEAD, DEFAULT_TARGET_REF)
+
+            val abandonedPrs =
+                gitJaspr.findPrsAbandonedByPush(
+                    remoteBranches,
+                    prefixedStackName,
+                    DEFAULT_TARGET_REF,
+                    stack,
+                )
+
+            assertTrue(abandonedPrs.isEmpty(), "Expected no abandoned PRs for a new stack")
+        }
+    }
+
+    @Push
+    @Test
+    fun `push does not detect abandoned PRs when no commits are dropped`() {
+        withTestSetup(useFakeRemote) {
+            createCommitsFrom(
+                testCase {
+                    repository {
+                        commit { title = "A" }
+                        commit {
+                            title = "B"
+                            localRefs += "dev"
+                        }
+                    }
+                    checkout = "dev"
+                }
+            )
+
+            gitJaspr.push(stackName = "my-stack")
+
+            // Push again with an additional commit (no drops)
+            createCommitsFrom(
+                testCase {
+                    repository {
+                        commit { title = "A" }
+                        commit { title = "B" }
+                        commit {
+                            title = "C"
+                            localRefs += "dev"
+                        }
+                    }
+                    checkout = "dev"
+                }
+            )
+
+            val remoteBranches = localGit.getRemoteBranches(remoteName)
+            val prefixedStackName = RemoteNamedStackRef("my-stack").name()
+            val stack = localGit.getLocalCommitStack(remoteName, GitClient.HEAD, DEFAULT_TARGET_REF)
+
+            val abandonedPrs =
+                gitJaspr.findPrsAbandonedByPush(
+                    remoteBranches,
+                    prefixedStackName,
+                    DEFAULT_TARGET_REF,
+                    stack,
+                )
+
+            assertTrue(
+                abandonedPrs.isEmpty(),
+                "Expected no abandoned PRs when no commits are dropped",
+            )
+        }
+    }
+
+    @Push
+    @Test
     fun `push stack with commit contained in multiple named stacks`() {
         withTestSetup(useFakeRemote) {
             createCommitsFrom(

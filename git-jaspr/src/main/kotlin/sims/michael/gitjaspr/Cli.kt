@@ -487,6 +487,9 @@ class Push : GitJasprSubcommand(help = "Push commits and create/update PRs") {
             "Limit commits from bottom of stack (negative excludes from top)"
         }
 
+    private val force by
+        option("-F", "--force").flag().help { "Push even if it would abandon open pull requests" }
+
     override suspend fun doRun() {
         requireCountLocalExclusive(count, targetRef.local)
         val jaspr = appWiring.gitJaspr
@@ -497,7 +500,33 @@ class Push : GitJasprSubcommand(help = "Push commits and create/update PRs") {
             }
 
         val effectiveName = name ?: promptForNameIfNecessary()
-        jaspr.push(targetRef.refSpec, stackName = effectiveName, count = count)
+        jaspr.push(
+            targetRef.refSpec,
+            stackName = effectiveName,
+            count = count,
+            onAbandonedPrs =
+                if (force) {
+                    { true }
+                } else {
+                    { prs -> promptForAbandonedPrs(prs) }
+                },
+        )
+    }
+
+    private fun promptForAbandonedPrs(prs: List<PullRequest>): Boolean {
+        val terminal = currentContext.terminal
+        echo(
+            theme.warning(
+                "This push will abandon ${prs.size} open pull " +
+                    "${if (prs.size == 1) "request" else "requests"}:"
+            )
+        )
+        for (pr in prs) {
+            echo("  #${pr.number}: ${pr.title}")
+        }
+        echo()
+        val response = terminal.prompt("Continue? [y/N]")?.trim()?.lowercase()
+        return response == "y" || response == "yes"
     }
 
     private fun promptForStackName(suggested: String): String {
