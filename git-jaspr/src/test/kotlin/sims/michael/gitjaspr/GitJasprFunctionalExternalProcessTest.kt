@@ -7,6 +7,7 @@ import kotlinx.coroutines.async
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withTimeout
+import org.junit.jupiter.api.Disabled
 import org.junit.jupiter.api.extension.ExtendWith
 import org.junit.jupiter.api.parallel.Execution
 import org.junit.jupiter.api.parallel.ExecutionMode
@@ -24,11 +25,15 @@ import sims.michael.gitjaspr.testing.FunctionalTest
  * Keep in mind this test class isn't really for verifications. It's mainly to provide a way to
  * update the native-image metadata. Some tests may be painful to get to pass under this setup.
  * [GitJasprFunctionalTest] should be the one used to verify behavior.
+ *
+ * NOTE: This class is disabled because [NativeImageMetadataTest] should be better in every respect
+ * to this, but I'm not quite ready to kill this yet.
  */
 @FunctionalTest
 @Execution(ExecutionMode.SAME_THREAD)
 @ExtendWith(DelayAfterTestsExtension::class)
 @DelayAfterTestMillis(2_000)
+@Disabled
 class GitJasprFunctionalExternalProcessTest : GitJasprTest {
     override val logger: Logger = LoggerFactory.getLogger(GitJasprDefaultTest::class.java)
     override val useFakeRemote: Boolean = false

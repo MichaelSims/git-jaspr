@@ -1,0 +1,11 @@
+{
+  "rules": [
+    {"excludeClasses": "sims.michael.gitjaspr.githubtests.**"},
+    {"excludeClasses": "sims.michael.gitjaspr.testing.**"},
+    {"excludeClasses": "org.junit.**"},
+    {"excludeClasses": "org.eclipse.jgit.junit.**"},
+    {"excludeClasses": "io.ktor.server.**"},
+    {"excludeClasses": "kotlin.test.**"},
+    {"excludeClasses": "org.gradle.**"}
+  ]
+}

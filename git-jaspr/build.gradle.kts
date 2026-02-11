@@ -95,6 +95,8 @@ dependencies {
     testImplementation(libs.kotlin.test.junit5)
     testImplementation(libs.junit.jupiter.engine)
     testImplementation(libs.jgit.junit)
+    testImplementation(libs.ktor.server.core)
+    testImplementation(libs.ktor.server.cio)
 }
 
 configurations.all {
@@ -110,7 +112,8 @@ application {
     mainClass.set("sims.michael.gitjaspr.Cli")
 }
 
-val nonDefaultTestTags = mapOf("functional" to "Functional tests")
+val nonDefaultTestTags =
+    mapOf("functional" to "Functional tests", "nativeImageMetadata" to "Native image metadata")
 
 testing {
     suites {
@@ -136,6 +139,26 @@ nonDefaultTestTags.forEach { (testTag, testDescription) ->
 
         testClassesDirs = files(defaultTestSuite.map { it.sources.output.classesDirs })
         classpath = files(defaultTestSuite.map { it.sources.runtimeClasspath })
+    }
+}
+
+tasks.named<Test>("nativeImageMetadata") {
+    group = VERIFICATION_GROUP
+    val metadataDir = "src/main/resources/META-INF/native-image"
+    // The native-image-agent is only available on GraalVM JDKs. When running on a standard JDK,
+    // the tests still run (useful for verification) but don't collect metadata.
+    val javaHome =
+        javaLauncher.map { it.metadata.installationPath.asFile }.orNull
+            ?: File(System.getProperty("java.home"))
+    val agentLib =
+        javaHome.resolve("lib").listFiles().orEmpty().any { file ->
+            file.name.contains("native-image-agent")
+        }
+    if (agentLib) {
+        val filterFile = file("src/test/resources/native-image-agent-access-filter.json")
+        jvmArgs(
+            "-agentlib:native-image-agent=access-filter-file=$filterFile,config-merge-dir=$metadataDir"
+        )
     }
 }
 

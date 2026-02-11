@@ -37,6 +37,8 @@ ksp-gradle-plugin = { module = "com.google.devtools.ksp:symbol-processing-gradle
 ksp-impl = { module = "com.google.devtools.ksp:symbol-processing", version.ref = "ksp"}
 ktor-client-auth = { module = "io.ktor:ktor-client-auth", version.ref = "ktor" }
 ktor-client-cio = { module = "io.ktor:ktor-client-cio", version.ref = "ktor" }
+ktor-server-core = { module = "io.ktor:ktor-server-core", version.ref = "ktor" }
+ktor-server-cio = { module = "io.ktor:ktor-server-cio", version.ref = "ktor" }
 logback-classic = { module = "ch.qos.logback:logback-classic", version = "1.4.6" }
 mockito-inline = { module = "org.mockito:mockito-inline", version = "2.23.0" }
 mockito-kotlin = { module = "com.nhaarman.mockitokotlin2:mockito-kotlin", version = "2.2.0" }

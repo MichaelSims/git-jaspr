@@ -46,3 +46,8 @@ annotation class Stack
 @Retention(AnnotationRetention.RUNTIME)
 @Tag("functional")
 annotation class FunctionalTest
+
+@Target(AnnotationTarget.CLASS)
+@Retention(AnnotationRetention.RUNTIME)
+@Tag("nativeImageMetadata")
+annotation class NativeImageMetadata
