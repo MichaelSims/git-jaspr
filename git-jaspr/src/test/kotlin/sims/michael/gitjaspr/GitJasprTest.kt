@@ -1,11 +1,9 @@
 package sims.michael.gitjaspr
 
 import java.util.MissingFormatArgumentException
-import kotlin.random.Random
 import kotlin.test.assertContains
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
-import kotlin.test.assertNotEquals
 import org.junit.jupiter.api.*
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.slf4j.Logger
@@ -33,7 +31,8 @@ interface GitJasprTest {
     val useFakeRemote: Boolean
         get() = true
 
-    suspend fun GitHubTestHarness.push(count: Int? = null) = gitJaspr.push(count = count)
+    suspend fun GitHubTestHarness.push(stackName: String? = "test-stack", count: Int? = null) =
+        gitJaspr.push(stackName = stackName, count = count)
 
     suspend fun GitHubTestHarness.getAndPrintStatusString(
         refSpec: RefSpec = RefSpec(DEFAULT_LOCAL_OBJECT, DEFAULT_TARGET_REF)
@@ -1780,7 +1779,7 @@ interface GitJasprTest {
                 }
             )
 
-            gitJaspr.push()
+            gitJaspr.push(stackName = "test-stack")
 
             createCommitsFrom(
                 testCase {
@@ -1893,7 +1892,7 @@ interface GitJasprTest {
             )
 
             localGit.checkout(localGit.log().last().hash)
-            gitJaspr.push()
+            gitJaspr.push(stackName = "test-stack")
             // Assert we have a named stack and it points to commit five
             assertEquals(
                 "five",
@@ -2112,7 +2111,7 @@ interface GitJasprTest {
 
             localGit.checkout(localGit.log().reversed()[1].hash)
 
-            gitJaspr.push()
+            gitJaspr.push(stackName = "stack-3")
 
             val namedStacks =
                 localGit
@@ -2127,7 +2126,9 @@ interface GitJasprTest {
                     .toSet()
 
             val expected =
-                listOf("stack-1", "stack-2").map { RemoteNamedStackRef(it).name() }.toSet()
+                listOf("stack-1", "stack-2", "stack-3")
+                    .map { RemoteNamedStackRef(it).name() }
+                    .toSet()
             val difference = expected - namedStacks
 
             assertEquals(3, namedStacks.size)
@@ -2147,49 +2148,6 @@ interface GitJasprTest {
                 }
             )
             push()
-        }
-    }
-
-    @Push
-    @Test
-    fun `push without explicit stack name generates unique name`() {
-        withTestSetup(useFakeRemote) {
-            createCommitsFrom(
-                testCase {
-                    repository {
-                        commit { title = "one" }
-                        commit { title = "two" }
-                        commit {
-                            title = "three"
-                            localRefs += "main"
-                        }
-                    }
-                    checkout = "main"
-                }
-            )
-
-            // Push without providing a stack name
-            gitJaspr.push()
-
-            val namedStackBranches =
-                localGit.getRemoteBranches(remoteName).filter { branch ->
-                    branch.name.startsWith(
-                        "$DEFAULT_REMOTE_NAMED_STACK_BRANCH_PREFIX/$DEFAULT_TARGET_REF/"
-                    )
-                }
-
-            assertEquals(1, namedStackBranches.size)
-
-            val generatedName =
-                checkNotNull(
-                        RemoteNamedStackRef.parse(
-                            namedStackBranches.single().name,
-                            DEFAULT_REMOTE_NAMED_STACK_BRANCH_PREFIX,
-                        )
-                    )
-                    .name()
-
-            logger.info("Generated stack name: $generatedName")
         }
     }
 
@@ -2238,118 +2196,6 @@ interface GitJasprTest {
             // suggestStackName should return null since the stack already has a name
             val suggested = gitJaspr.suggestStackName()
             assertEquals(null, suggested)
-        }
-    }
-
-    @Push
-    @Test
-    fun `push without explicit stack name handles collision by retrying`() {
-        withTestSetup(useFakeRemote) {
-            createCommitsFrom(
-                testCase {
-                    repository {
-                        commit { title = "A" }
-                        commit { title = "B" }
-                        commit {
-                            title = "C"
-                            localRefs += "main"
-                        }
-                    }
-                    checkout = "main"
-                }
-            )
-
-            // The derived name for commit subject "X" is "x"
-            val derivedName = StackNameGenerator.generateName("X")
-
-            // Pre-create a named stack with the derived name to simulate collision
-            gitJaspr.push(stackName = derivedName)
-
-            // Now create a new stack whose first commit subject also derives to the same name
-            createCommitsFrom(
-                testCase {
-                    repository {
-                        commit { title = "X" }
-                        commit { title = "Y" }
-                        commit {
-                            title = "Z"
-                            localRefs += "dev"
-                        }
-                    }
-                    checkout = "dev"
-                }
-            )
-
-            // Generate a unique name: "x" will collide, so it should append a suffix
-            val localRef = localGit.log("dev", 1).single().hash
-            val generatedName = gitJaspr.generateUniqueStackName(DEFAULT_TARGET_REF, localRef, "X")
-
-            // Verify that a suffixed name was generated (not the bare derived name)
-            assertNotEquals(derivedName, generatedName)
-            assertTrue(generatedName.startsWith("$derivedName-"))
-
-            // Verify both named stacks exist
-            val namedStackBranches =
-                localGit.getRemoteBranches(remoteName).filter { branch ->
-                    branch.name.startsWith(DEFAULT_REMOTE_NAMED_STACK_BRANCH_PREFIX)
-                }
-            assertEquals(2, namedStackBranches.size)
-        }
-    }
-
-    @Push
-    @Test
-    fun `generateUniqueStackName throws exception after max attempts`() {
-        withTestSetup(useFakeRemote) {
-            createCommitsFrom(
-                testCase {
-                    repository {
-                        commit { title = "A" }
-                        commit {
-                            title = "B"
-                            localRefs += "main"
-                        }
-                    }
-                    checkout = "main"
-                }
-            )
-
-            val commitSubject = "Collision test"
-            val derivedName = StackNameGenerator.generateName(commitSubject)
-
-            // Pre-create a branch with the derived name
-            gitJaspr.push(stackName = derivedName)
-
-            // Use a constant random that always produces the same suffix, causing repeated
-            // collisions
-            val constantRandom =
-                object : Random() {
-                    override fun nextBits(bitCount: Int): Int = 0
-                }
-
-            // Also pre-create the suffixed variant so every attempt collides
-            val suffix = StackNameGenerator.generateSuffix(constantRandom)
-            gitJaspr.push(stackName = "$derivedName-$suffix")
-
-            val localRef = localGit.log("main", 1).single().hash
-            val exception =
-                assertThrows<GitJasprException> {
-                    gitJaspr.generateUniqueStackName(
-                        DEFAULT_TARGET_REF,
-                        localRef,
-                        commitSubject,
-                        maxAttempts = 3,
-                        random =
-                            object : Random() {
-                                override fun nextBits(bitCount: Int): Int = 0
-                            },
-                    )
-                }
-
-            assertContains(
-                exception.message,
-                "Failed to generate a unique stack name after 3 attempts",
-            )
         }
     }
 
@@ -5093,7 +4939,9 @@ interface GitJasprTest {
                     }
                 }
             )
-            gitJaspr.clone { config -> config.copy(dontPushRegex = "^(wip)\\b.*$") }.push()
+            gitJaspr
+                .clone { config -> config.copy(dontPushRegex = "^(wip)\\b.*$") }
+                .push(stackName = "test-stack")
 
             // Only commit one should be pushed ("WIP: two" and "three" are excluded)
             assertEquals(

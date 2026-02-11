@@ -3,7 +3,6 @@ package sims.michael.gitjaspr
 import java.nio.file.Files
 import java.time.ZonedDateTime
 import java.util.SortedSet
-import kotlin.random.Random
 import kotlin.text.RegexOption.IGNORE_CASE
 import kotlin.time.Duration.Companion.seconds
 import kotlin.time.measureTime
@@ -409,20 +408,11 @@ class GitJaspr(
                     .stackName
             }
         }
-        val isGeneratingNewName = stackName == null && existingStackName.value == null
-
-        val effectiveStackName: String
-        val namedStackAlreadyPushed: Boolean
-        if (isGeneratingNewName) {
-            // Generate a unique name and push the named stack branch atomically
-            effectiveStackName =
-                generateUniqueStackName(targetRef, localRef, stack.first().shortMessage)
-            namedStackAlreadyPushed = true
-        } else {
-            // Use existing or explicitly provided stack name
-            effectiveStackName = stackName ?: checkNotNull(existingStackName.value)
-            namedStackAlreadyPushed = false
-        }
+        val effectiveStackName =
+            stackName
+                ?: checkNotNull(existingStackName.value) {
+                    "No stack name provided and no existing stack name found on the remote."
+                }
 
         val prefixedStackName =
             RemoteNamedStackRef(
@@ -433,12 +423,7 @@ class GitJaspr(
                 .name()
 
         val namedStackRefSpec = RefSpec(localRef, prefixedStackName)
-        val outOfDateNamedStackBranch =
-            if (namedStackAlreadyPushed) {
-                emptyList()
-            } else {
-                listOfNotNull(namedStackRefSpec) - remoteRefSpecs.toSet()
-            }
+        val outOfDateNamedStackBranch = listOfNotNull(namedStackRefSpec) - remoteRefSpecs.toSet()
 
         val refSpecs =
             outOfDateBranches.map(RefSpec::forcePush) +
@@ -1555,66 +1540,6 @@ class GitJaspr(
         if (existingName != null) return null
 
         return StackNameGenerator.generateName(stack.first().shortMessage)
-    }
-
-    /**
-     * Generate a unique stack name derived from a commit subject. On collision, appends a random
-     * suffix. Uses force-with-lease to atomically ensure the branch doesn't exist when creating it.
-     */
-    internal fun generateUniqueStackName(
-        targetRef: String,
-        localRef: String,
-        commitSubject: String,
-        maxAttempts: Int = 10,
-        random: Random = Random.Default,
-    ): String {
-        val remoteName = config.remoteName
-        val baseName = StackNameGenerator.generateName(commitSubject)
-
-        repeat(maxAttempts) { attempt ->
-            val stackName =
-                if (attempt == 0) baseName
-                else "$baseName-${StackNameGenerator.generateSuffix(random)}"
-            val remoteBranch =
-                RemoteNamedStackRef(stackName, targetRef, config.remoteNamedStackBranchPrefix)
-                    .name()
-
-            // Check if the branch already exists on remote
-            gitClient.fetch(remoteName)
-            val remoteBranches = gitClient.getRemoteBranches(remoteName).map(RemoteBranch::name)
-
-            if (remoteBranch !in remoteBranches) {
-                // Branch doesn't exist, try to create it atomically with force-with-lease
-                try {
-                    logger.debug(
-                        "Attempting to create named stack branch {} (attempt {})",
-                        remoteBranch,
-                        attempt + 1,
-                    )
-                    gitClient.pushWithLease(
-                        refSpecs = listOf(RefSpec(localRef, remoteBranch).forcePush()),
-                        remoteName = remoteName,
-                        forceWithLeaseRefs = mapOf(remoteBranch to null), // Must not exist
-                    )
-                    logger.info("Created unique stack name: {}", stackName)
-                    return stackName
-                } catch (_: PushFailedException) {
-                    // Race condition: someone else created this branch between our check and push
-                    logger.debug(
-                        "Failed to create named stack branch {} due to race condition, retrying",
-                        remoteBranch,
-                    )
-                    // Continue to the next iteration
-                }
-            } else {
-                logger.debug("Stack name {} already exists, trying another", stackName)
-            }
-        }
-
-        throw GitJasprException(
-            "Failed to generate a unique stack name after $maxAttempts attempts. " +
-                "This is likely a bug, please report it."
-        )
     }
 
     private fun refOrRefs(count: Int) = if (count == 1) "ref" else "refs"

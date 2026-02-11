@@ -46,7 +46,7 @@ class GitJasprFunctionalExternalProcessTest : GitJasprTest {
             .map { (k, v) -> k.toString() to v.toString() }
             .toMap()
 
-    override suspend fun GitHubTestHarness.push(count: Int?) {
+    override suspend fun GitHubTestHarness.push(stackName: String?, count: Int?) {
         executeCli(
             scratchDir = scratchDir,
             remoteUri = remoteUri,
@@ -54,7 +54,17 @@ class GitJasprFunctionalExternalProcessTest : GitJasprTest {
             extraCliArgs = emptyList(),
             homeDirConfig = buildHomeDirConfig(),
             repoDirConfig = emptyMap(),
-            strings = listOf("--remote-name", remoteName, "push") + count.toCountArgs(),
+            strings =
+                buildList {
+                    add("--remote-name")
+                    add(remoteName)
+                    add("push")
+                    if (stackName != null) {
+                        add("--name")
+                        add(stackName)
+                    }
+                    addAll(count.toCountArgs())
+                },
             invokeLocation = localRepo,
             javaOptions = javaOptions,
         )
