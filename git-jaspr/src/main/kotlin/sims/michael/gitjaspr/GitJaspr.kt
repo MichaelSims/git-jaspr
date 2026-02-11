@@ -7,7 +7,9 @@ import kotlin.text.RegexOption.IGNORE_CASE
 import kotlin.time.Duration.Companion.seconds
 import kotlin.time.measureTime
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import org.slf4j.LoggerFactory
@@ -689,19 +691,32 @@ class GitJaspr(
 
         val tempGit = OptimizedCliGitClient(tempDir, config.remoteBranchPrefix)
         try {
-            logger.debug(
+            logger.info(
                 "Cloning repository from {} to temporary directory for auto-merge...",
                 remoteUri,
             )
             val cloneTime = measureTime {
-                tempGit.clone(remoteUri, remoteName)
+                coroutineScope {
+                    val heartbeat = launch {
+                        delay(5.seconds)
+                        while (isActive) {
+                            logger.info("Still cloning, please wait... (CTRL-C to cancel)")
+                            delay(5.seconds)
+                        }
+                    }
+                    withContext(Dispatchers.IO) {
+                        tempGit.clone(remoteUri, remoteName)
 
-                // Add the original working directory as a remote so we can fetch unpushed commits
-                logger.debug("Adding local remote for unpushed commits")
-                tempGit.addRemote("local", config.workingDirectory.absolutePath)
-                tempGit.fetch("local")
+                        // Add the original working directory as a remote so we can fetch unpushed
+                        // commits
+                        logger.debug("Adding local remote for unpushed commits")
+                        tempGit.addRemote("local", config.workingDirectory.absolutePath)
+                        tempGit.fetch("local")
 
-                tempGit.checkout(currentRef)
+                        tempGit.checkout(currentRef)
+                    }
+                    heartbeat.cancel()
+                }
             }
             logger.debug("Cloned repository to temporary directory in {}", cloneTime)
         } catch (e: Exception) {
