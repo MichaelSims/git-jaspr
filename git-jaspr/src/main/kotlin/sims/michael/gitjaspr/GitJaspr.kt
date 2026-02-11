@@ -397,30 +397,26 @@ class GitJaspr(
         val localRef = gitClient.log(filteredRefSpec.localRef, 1).single().hash
 
         // Determine the effective stack name
-        val existingStackName = lazy {
+        val existingStackName =
             (getExistingStackName(stack) as? Found)?.name?.let { existingBranchName ->
                 checkNotNull(
-                        RemoteNamedStackRef.parse(
-                            existingBranchName,
-                            config.remoteNamedStackBranchPrefix,
-                        )
+                    RemoteNamedStackRef.parse(
+                        existingBranchName,
+                        config.remoteNamedStackBranchPrefix,
                     )
-                    .stackName
+                )
             }
-        }
+
         val effectiveStackName =
-            stackName
-                ?: checkNotNull(existingStackName.value) {
+            if (stackName != null) {
+                RemoteNamedStackRef(stackName, targetRef, config.remoteNamedStackBranchPrefix)
+            } else {
+                checkNotNull(existingStackName) {
                     "No stack name provided and no existing stack name found on the remote."
                 }
+            }
 
-        val prefixedStackName =
-            RemoteNamedStackRef(
-                    stackName = effectiveStackName,
-                    targetRef = targetRef,
-                    prefix = config.remoteNamedStackBranchPrefix,
-                )
-                .name()
+        val prefixedStackName = effectiveStackName.name()
 
         val namedStackRefSpec = RefSpec(localRef, prefixedStackName)
         val outOfDateNamedStackBranch = listOfNotNull(namedStackRefSpec) - remoteRefSpecs.toSet()
