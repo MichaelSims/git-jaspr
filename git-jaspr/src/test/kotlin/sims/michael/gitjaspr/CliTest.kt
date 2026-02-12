@@ -1,5 +1,6 @@
 package sims.michael.gitjaspr
 
+import com.github.ajalt.clikt.core.*
 import java.io.File
 import java.lang.IllegalStateException
 import java.nio.file.Files
@@ -331,6 +332,90 @@ class CliTest {
             remoteBranchPrefix = DEFAULT_REMOTE_BRANCH_PREFIX,
             logsDirectory = logsDirectory,
         )
+
+    /**
+     * Validates that every property key in default-config.properties is recognized by either the
+     * Clikt command tree (regular options) or the theme system (theme role definitions).
+     */
+    @Test
+    fun `default config resource contains only recognized property keys`() {
+        val resourceText =
+            checkNotNull(Init::class.java.getResourceAsStream("/default-config.properties")) {
+                    "default-config.properties resource not found"
+                }
+                .bufferedReader()
+                .readText()
+
+        // Extract keys from both uncommented lines ("key=value") and commented lines ("#
+        // key=value")
+        val keyValuePattern = """^#?\s*([a-zA-Z][a-zA-Z0-9._-]*)=.*$""".toRegex()
+        val allKeys =
+            resourceText.lines().mapNotNull { line ->
+                keyValuePattern.matchEntire(line)?.groupValues?.get(1)
+            }
+
+        // Theme keys match <scheme>.<role>.<color|weight>
+        val themeKeyPattern = """^([^.]+)\.([^.]+)\.(color|weight)$""".toRegex()
+        val (themeKeys, regularKeys) = allKeys.partition { key -> themeKeyPattern.matches(key) }
+
+        // Build the Clikt command tree to collect valid option keys
+        val tempDir = Files.createTempDirectory("cli-config-test").toFile()
+        JGitClient(tempDir).init()
+        System.setProperty(WORKING_DIR_PROPERTY_NAME, tempDir.absolutePath)
+        try {
+            val root =
+                GitJasprRoot()
+                    .subcommands(
+                        Status(),
+                        Push(),
+                        Checkout(),
+                        Merge(),
+                        AutoMerge(),
+                        Clean(),
+                        Stack().subcommands(StackList(), StackRename(), StackDelete()),
+                        PreviewTheme(),
+                        Init(),
+                        InstallCommitIdHook(),
+                    )
+
+            val validOptionKeys = mutableSetOf<String>()
+            fun collectKeys(command: CliktCommand) {
+                for (option in command.registeredOptions()) {
+                    val key =
+                        option.valueSourceKey
+                            ?: option.names.maxByOrNull(String::length)?.removePrefix("--")
+                            ?: continue
+                    validOptionKeys.add(key)
+                }
+                for (sub in command.registeredSubcommands()) {
+                    collectKeys(sub)
+                }
+            }
+            collectKeys(root)
+
+            // Validate regular keys
+            val unrecognizedRegular = regularKeys.filter { it !in validOptionKeys }
+            assertTrue(unrecognizedRegular.isEmpty()) {
+                "Unrecognized config keys in default-config.properties: $unrecognizedRegular\n" +
+                    "Valid keys: ${validOptionKeys.sorted()}"
+            }
+
+            // Validate theme keys: role must be in THEME_ROLES, suffix must be color or weight
+            val invalidThemeKeys =
+                themeKeys.filter { key ->
+                    val match = checkNotNull(themeKeyPattern.matchEntire(key))
+                    val role = match.groupValues[2]
+                    role !in THEME_ROLES
+                }
+            assertTrue(invalidThemeKeys.isEmpty()) {
+                "Theme keys with unrecognized roles in default-config.properties: $invalidThemeKeys\n" +
+                    "Valid roles: $THEME_ROLES"
+            }
+        } finally {
+            System.clearProperty(WORKING_DIR_PROPERTY_NAME)
+            tempDir.deleteRecursively()
+        }
+    }
 
     private fun createTempDir(): File {
         val dir =

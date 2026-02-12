@@ -272,6 +272,7 @@ class NativeImageMetadataTest {
                     Clean(),
                     Stack().subcommands(StackList(), StackRename(), StackDelete()),
                     PreviewTheme(),
+                    Init(),
                     InstallCommitIdHook(),
                     NoOp(),
                 )

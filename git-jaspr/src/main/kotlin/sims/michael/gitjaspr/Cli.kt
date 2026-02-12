@@ -960,6 +960,45 @@ class PreviewTheme :
     }
 }
 
+/** Generates a commented default config file in the user's home directory. */
+class Init : CliktCommand(help = "Generate a default config file", epilog = helpEpilog) {
+
+    override fun run() {
+        val homeDir = File(System.getenv("HOME"))
+        val configFile = homeDir.resolve(CONFIG_FILE_NAME)
+        val backupFile = homeDir.resolve("$CONFIG_FILE_NAME.bak")
+
+        if (configFile.exists()) {
+            if (backupFile.exists()) {
+                throw PrintMessage(
+                    buildString {
+                        appendLine(
+                            "$configFile already exists and a backup ($backupFile) is also present."
+                        )
+                        append("Please resolve manually before running init again.")
+                    },
+                    statusCode = 1,
+                    printError = true,
+                )
+            }
+            configFile.renameTo(backupFile)
+            echo("Existing config backed up to $backupFile")
+            echo("You'll want to copy your github-token over at a minimum.")
+            echo()
+        }
+
+        val content =
+            checkNotNull(Init::class.java.getResourceAsStream("/default-config.properties")) {
+                    "default-config.properties resource not found"
+                }
+                .bufferedReader()
+                .readText()
+        configFile.writeText(content)
+        echo("Config file written to $configFile")
+        echo("Edit the file and add your GitHub personal access token to get started.")
+    }
+}
+
 // Used by tests
 class NoOp : GitJasprSubcommand(help = "Do nothing", hidden = true) {
     private val logger = LoggerFactory.getLogger(NoOp::class.java)
@@ -995,6 +1034,7 @@ object Cli {
                     Clean(),
                     Stack().subcommands(StackList(), StackRename(), StackDelete()),
                     PreviewTheme(),
+                    Init(),
                     InstallCommitIdHook(),
                     NoOp(),
                 )
