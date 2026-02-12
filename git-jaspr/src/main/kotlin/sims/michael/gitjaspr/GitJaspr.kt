@@ -375,7 +375,7 @@ class GitJaspr(
                 .filter { (_, commits) -> commits.size > 1 }
         if (commitsWithDuplicateIds.isNotEmpty()) {
             logger.error("Refusing to push because some commits in your stack have duplicate IDs.")
-            logger.error("Run `git jaspr status` to see which commits are affected.")
+            logger.error("Run `jaspr status` to see which commits are affected.")
             return
         }
 

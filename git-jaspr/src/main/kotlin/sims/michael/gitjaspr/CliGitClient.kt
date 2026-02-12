@@ -370,7 +370,7 @@ class CliGitClient(
         // Intentionally avoiding trace logging since this is called during initialization and shows
         // up in the output of --show-config, which I want to avoid. It might be better in the
         // future to either log everything to STDERR or conditionally log to STDERR depending on
-        // the command + options (i.e., git jaspr status --show-config should log to STDERR to
+        // the command + options (i.e., jaspr status --show-config should log to STDERR to
         // separate logging from that command's output).
         return executeCommand(listOf("git", "remote", "get-url", remoteName))
             .output

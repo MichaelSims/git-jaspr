@@ -17,6 +17,7 @@ graalvmNative {
     binaries {
         all { resources.autodetect() }
         named("main") {
+            imageName.set("jaspr")
             // The class kotlin.DeprecationLevel ends up getting initialized at build time. During
             // compilation, graalvm presumably attempts to see if a class is annotated with
             // com.oracle.svm.core.hub.Hybrid, which has the side effect of initializing
@@ -110,6 +111,7 @@ configurations.all {
 application {
     // Define the main class for the application.
     mainClass.set("sims.michael.gitjaspr.Cli")
+    applicationName = "jaspr"
 }
 
 val nonDefaultTestTags =

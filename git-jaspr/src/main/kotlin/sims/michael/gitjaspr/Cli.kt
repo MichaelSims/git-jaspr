@@ -82,7 +82,7 @@ class CliContext(val theme: Theme, appWiringFactory: () -> AppWiring) {
  * Root command that owns infrastructure options and passes [CliContext] to subcommands via context.
  * Subcommands access it via `requireObject<CliContext>()`.
  */
-class GitJasprRoot : CliktCommand(name = "git jaspr", epilog = helpEpilog) {
+class GitJasprRoot : CliktCommand(name = "jaspr", epilog = helpEpilog) {
     private val workingDirectory =
         File(System.getProperty(WORKING_DIR_PROPERTY_NAME) ?: ".")
             .findNearestGitDir()
@@ -112,7 +112,7 @@ class GitJasprRoot : CliktCommand(name = "git jaspr", epilog = helpEpilog) {
 Hello! First time running Jaspr?
 
 We couldn't find your GitHub PAT (personal access token).
-Run 'git jaspr init' to generate a config file, then edit
+Run 'jaspr init' to generate a config file, then edit
 ~/$CONFIG_FILE_NAME and replace the placeholder token
 with a real one (read:org, read:user, repo, user:email).
 
@@ -866,7 +866,7 @@ class StackDelete :
         }
         echo(
             "Note: PRs in the stack (if any) were not removed. " +
-                "Run ${theme.command("git jaspr clean")} to remove them."
+                "Run ${theme.command("jaspr clean")} to remove them."
         )
     }
 }
@@ -1073,7 +1073,7 @@ private fun Terminal.printPaged(
 
 private const val helpEpilog =
     "Options can also be set in ~/$CONFIG_FILE_NAME or ./$CONFIG_FILE_NAME.\n" +
-        "Run 'git jaspr init' to generate a commented example config file."
+        "Run 'jaspr init' to generate a commented example config file."
 
 /** Creates a JDK proxy that throws [UnsupportedOperationException] on any method call. */
 private inline fun <reified T : Any> unusedProxy(): T {
