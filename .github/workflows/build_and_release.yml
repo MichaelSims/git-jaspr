@@ -11,6 +11,9 @@ on:
         required: true
         type: string
 
+env:
+  TAG: ${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref_name }}
+
 jobs:
   create_release:
     name: Create Release
@@ -24,7 +27,7 @@ jobs:
         id: create_release
         uses: "softprops/action-gh-release@v2"
         with:
-          tag_name: ${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref_name }}
+          tag_name: ${{ env.TAG }}
           draft: true
           generate_release_notes: true
 
@@ -35,9 +38,9 @@ jobs:
       matrix:
         include:
           - os: 'ubuntu-latest'
-            label: 'linux'
+            label: 'linux-amd64'
           - os: 'macos-latest'
-            label: 'mac'
+            label: 'macos-arm64'
     runs-on: ${{matrix.os}}
     steps:
       - uses: actions/checkout@v6
@@ -61,8 +64,8 @@ jobs:
           GITHUB_TOKEN: ${{secrets.GITHUB_TOKEN}}
         with:
           upload_url: ${{ needs.create_release.outputs.upload_url }}
-          asset_name: 'git-jaspr-${{matrix.label}}'
-          asset_path: 'git-jaspr/build/native/nativeCompile/git-jaspr'
+          asset_name: 'jaspr-${{matrix.label}}'
+          asset_path: 'git-jaspr/build/native/nativeCompile/jaspr'
           asset_content_type: application/octet-stream
 
   publish_release:
@@ -75,3 +78,77 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
           release_id: ${{ needs.create_release.outputs.release_id }}
+
+  update_homebrew:
+    name: Update Homebrew Formula
+    needs: ['publish_release']
+    runs-on: 'ubuntu-latest'
+    steps:
+      - name: 'Download release assets'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: gh release download "$TAG" --repo "${{ github.repository }}" --pattern 'jaspr-*'
+
+      - name: 'Compute checksums'
+        id: checksums
+        run: |
+          echo "linux_amd64=$(sha256sum jaspr-linux-amd64 | awk '{print $1}')" >> "$GITHUB_OUTPUT"
+          echo "macos_arm64=$(sha256sum jaspr-macos-arm64 | awk '{print $1}')" >> "$GITHUB_OUTPUT"
+
+      - name: 'Generate formula'
+        env:
+          LINUX_AMD64_SHA256: ${{ steps.checksums.outputs.linux_amd64 }}
+          MACOS_ARM64_SHA256: ${{ steps.checksums.outputs.macos_arm64 }}
+        run: |
+          cat > jaspr.rb << FORMULA
+          class Jaspr < Formula
+            desc "Stacked pull requests on GitHub"
+            homepage "https://github.com/MichaelSims/git-jaspr"
+            version "${TAG#v}"
+            license "Apache-2.0"
+
+            on_macos do
+              if Hardware::CPU.arm?
+                url "https://github.com/MichaelSims/git-jaspr/releases/download/${TAG}/jaspr-macos-arm64"
+                sha256 "${MACOS_ARM64_SHA256}"
+
+                def install
+                  bin.install "jaspr-macos-arm64" => "jaspr"
+                end
+              end
+            end
+
+            on_linux do
+              if Hardware::CPU.intel?
+                url "https://github.com/MichaelSims/git-jaspr/releases/download/${TAG}/jaspr-linux-amd64"
+                sha256 "${LINUX_AMD64_SHA256}"
+
+                def install
+                  bin.install "jaspr-linux-amd64" => "jaspr"
+                end
+              end
+            end
+
+            test do
+              system "#{bin}/jaspr", "--version"
+            end
+          end
+          FORMULA
+
+      - name: 'Setup SSH for tap repo'
+        uses: webfactory/ssh-agent@v0.9.0
+        with:
+          ssh-private-key: ${{ secrets.HOMEBREW_TAP_DEPLOY_KEY }}
+
+      - name: 'Clone tap repo'
+        run: git clone git@github.com:MichaelSims/homebrew-tap.git
+
+      - name: 'Update formula'
+        run: |
+          cp jaspr.rb homebrew-tap/jaspr.rb
+          cd homebrew-tap
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add jaspr.rb
+          git commit -m "Update jaspr to ${TAG}"
+          git push
