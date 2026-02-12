@@ -13,6 +13,9 @@ import org.slf4j.LoggerFactory
  * output for testing.
  */
 interface Theme {
+    /** The name of this theme */
+    val name: String
+
     /** Error messages and invalid states. */
     fun error(text: String): String
 
@@ -91,6 +94,8 @@ fun resolveTheme(name: String, properties: Properties): Theme {
 }
 
 object DefaultTheme : Theme {
+    override val name = "default"
+
     override fun error(text: String) = red(text)
 
     override fun success(text: String) = green(text)
@@ -119,6 +124,8 @@ object DefaultTheme : Theme {
 }
 
 object MonoTheme : Theme {
+    override val name = "mono"
+
     override fun error(text: String) = text
 
     override fun success(text: String) = text
@@ -173,7 +180,7 @@ private fun buildCustomTheme(scheme: String, properties: Properties): Theme {
         styleFunctions.size,
         styleFunctions.keys,
     )
-    return CustomTheme(styleFunctions)
+    return CustomTheme(scheme, styleFunctions)
 }
 
 /**
@@ -218,6 +225,7 @@ private fun buildRoleStyle(
  * any role not present in the map.
  */
 private class CustomTheme(
+    override val name: String,
     private val styles: Map<String, (String) -> String>,
     private val fallback: Theme = DefaultTheme,
 ) : Theme {

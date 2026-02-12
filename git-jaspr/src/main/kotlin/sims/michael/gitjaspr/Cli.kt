@@ -877,7 +877,7 @@ class PreviewTheme :
         help = "Preview the current color scheme with sample output",
     ) {
     override suspend fun doRun() {
-        echo("Using theme $theme.")
+        echo("Using theme ${theme.entity(theme.name)}.")
         val ident = Ident("Ada Lovelace", "ada@example.com")
         val now = ZonedDateTime.now()
 
