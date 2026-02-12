@@ -112,23 +112,14 @@ class GitJasprRoot : CliktCommand(name = "git jaspr", epilog = helpEpilog) {
 Hello! First time running Jaspr?
 
 We couldn't find your GitHub PAT (personal access token).
-You need to create one with read:org, read:user, repo,
-and user:email permissions and provide it via one of
-the following methods:
+Run 'git jaspr init' to generate a config file, then edit
+~/$CONFIG_FILE_NAME and replace the placeholder token
+with a real one (read:org, read:user, repo, user:email).
 
-- Create a file named $CONFIG_FILE_NAME in your home
-  directory with the following contents:
-    github-token=<your token here>
-- Create a file named $CONFIG_FILE_NAME in your working
-  directory with the following contents:
-    github-token=<your token here>
-- Set the environment variable $GITHUB_TOKEN_ENV_VAR to
-  your token
+Alternatively, set the environment variable $GITHUB_TOKEN_ENV_VAR.
 
-⚠️  NOTE ⚠️ : Please remember to enable SSO on your token
-if applicable. If in the future you change the scope of an
-existing token, it will disable the SSO authorization so
-you'll need to re-enable it again.
+NOTE: Please remember to enable SSO on your token if
+applicable.
     """
             .trimIndent()
 
