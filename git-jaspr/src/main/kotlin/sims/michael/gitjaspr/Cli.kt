@@ -105,9 +105,6 @@ class GitJasprRoot : CliktCommand(name = "git jaspr", epilog = helpEpilog) {
                 )
             helpFormatter = { MordantHelpFormatter(context = it, showDefaultValues = true) }
         }
-        eagerOption("--help-config", help = "Show config file options and exit") {
-            throw PrintMessage(buildConfigHelpText(context.command, context))
-        }
     }
 
     private val missingTokenMessage =
@@ -963,7 +960,17 @@ class PreviewTheme :
 /** Generates a commented default config file in the user's home directory. */
 class Init : CliktCommand(help = "Generate a default config file", epilog = helpEpilog) {
 
+    private val show by
+        option("--show").flag().help { "Display the example config without writing it" }
+
     override fun run() {
+        val content = readDefaultConfigResource()
+
+        if (show) {
+            echo(content)
+            return
+        }
+
         val homeDir = File(System.getenv("HOME"))
         val configFile = homeDir.resolve(CONFIG_FILE_NAME)
         val backupFile = homeDir.resolve("$CONFIG_FILE_NAME.bak")
@@ -987,15 +994,18 @@ class Init : CliktCommand(help = "Generate a default config file", epilog = help
             echo()
         }
 
-        val content =
+        configFile.writeText(content)
+        echo("Config file written to $configFile")
+        echo("Edit the file and add your GitHub personal access token to get started.")
+    }
+
+    companion object {
+        fun readDefaultConfigResource(): String =
             checkNotNull(Init::class.java.getResourceAsStream("/default-config.properties")) {
                     "default-config.properties resource not found"
                 }
                 .bufferedReader()
                 .readText()
-        configFile.writeText(content)
-        echo("Config file written to $configFile")
-        echo("Edit the file and add your GitHub personal access token to get started.")
     }
 }
 
@@ -1071,103 +1081,8 @@ private fun Terminal.printPaged(
 }
 
 private const val helpEpilog =
-    "Options can also be set in ~/$CONFIG_FILE_NAME or ./$CONFIG_FILE_NAME (e.g. log-level=WARN)."
-
-/** Walks the command tree and builds config help text from registered options. */
-private fun buildConfigHelpText(
-    root: CliktCommand,
-    context: Context,
-    theme: Theme = DefaultTheme,
-): String {
-    data class ConfigEntry(val key: String, val help: String, val default: String?)
-
-    val seen = mutableSetOf<String>()
-    val entries = mutableListOf<ConfigEntry>()
-    val excludedKeys = setOf("show-config")
-
-    fun collectOptions(command: CliktCommand) {
-        for (option in command.registeredOptions()) {
-            if (option.eager || !option.hidden) continue
-            val key =
-                option.valueSourceKey
-                    ?: option.names.maxByOrNull(String::length)?.removePrefix("--")
-                    ?: continue
-            if (key in seen || key in excludedKeys) continue
-            seen.add(key)
-            val help = option.optionHelp(context)
-            val default =
-                option.helpTags["default"]?.takeIf { default ->
-                    // Exclude logs-directory default because it's a long value on macOS
-                    default.isNotBlank() && key != "logs-directory"
-                }
-            entries.add(ConfigEntry(key, help, default))
-        }
-        for (sub in command.registeredSubcommands()) {
-            collectOptions(sub)
-        }
-    }
-
-    collectOptions(root)
-
-    val maxKeyLen = entries.maxOf { it.key.length }
-    val keyLines =
-        entries.joinToString("\n") { (key, help, default) ->
-            val padding = " ".repeat(maxKeyLen - key.length + 2)
-            val defaultSuffix = if (default != null) theme.comment(" (default: $default)") else ""
-            "  ${theme.entity(key)}$padding$help$defaultSuffix"
-        }
-
-    return buildString {
-        appendLine(theme.heading("Configuration File Options"))
-        appendLine()
-        appendLine("Options can be set in a Java properties file at either location:")
-        appendLine("  ${theme.entity("~/$CONFIG_FILE_NAME")}   (user-wide defaults)")
-        appendLine("  ${theme.entity("./$CONFIG_FILE_NAME")}   (per-repo overrides)")
-        appendLine()
-        appendLine("Per-repo values take precedence over user-wide values. CLI flags")
-        appendLine("take precedence over both.")
-        appendLine()
-        appendLine(theme.heading("Available keys:"))
-        appendLine()
-        appendLine(keyLines)
-        appendLine()
-        appendLine(theme.heading("Example ~/$CONFIG_FILE_NAME:"))
-        appendLine()
-        appendLine("  ${theme.comment("# A classic GitHub Personal Access Token")}")
-        appendLine(
-            "  ${theme.comment("# with read:org, read:user, repo, and user:email permissions.")}"
-        )
-        appendLine("  ${theme.comment("# Don't forget to enable SSO on your PAT, if applicable.")}")
-        appendLine(
-            "  ${theme.entity("github-token")}=${theme.value("ghp_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx")}"
-        )
-        appendLine("  ${theme.entity("log-level")}=${theme.value("WARN")}")
-        appendLine("  ${theme.entity("target")}=${theme.value("develop")}")
-        appendLine()
-        appendLine(theme.heading("Custom Themes"))
-        appendLine()
-        appendLine("Set ${theme.entity("color-scheme")} to any name, then define role colors")
-        appendLine(
-            "and weights using ${theme.entity("<name>.<role>.color")} and ${theme.entity("<name>.<role>.weight")}."
-        )
-        appendLine()
-        appendLine("Available roles: ${THEME_ROLES.joinToString(", ") { theme.entity(it) }}")
-        appendLine(
-            "Colors are hex RGB (e.g. ${theme.value("#FF5733")} or ${theme.value("FF5733")})."
-        )
-        appendLine("Weights are ${theme.value("bold")} or ${theme.value("dim")}.")
-        appendLine("Unspecified roles fall back to the default theme.")
-        appendLine()
-        appendLine(theme.heading("Example custom theme:"))
-        appendLine()
-        appendLine("  ${theme.entity("color-scheme")}=${theme.value("forest")}")
-        appendLine("  ${theme.entity("forest.error.color")}=${theme.value("#CC3333")}")
-        appendLine("  ${theme.entity("forest.error.weight")}=${theme.value("bold")}")
-        appendLine("  ${theme.entity("forest.success.color")}=${theme.value("#33CC66")}")
-        appendLine("  ${theme.entity("forest.entity.color")}=${theme.value("#66CCAA")}")
-        append("  ${theme.entity("forest.heading.weight")}=${theme.value("bold")}")
-    }
-}
+    "Options can also be set in ~/$CONFIG_FILE_NAME or ./$CONFIG_FILE_NAME.\n" +
+        "Run 'git jaspr init' to generate a commented example config file."
 
 /** Creates a JDK proxy that throws [UnsupportedOperationException] on any method call. */
 private inline fun <reified T : Any> unusedProxy(): T {

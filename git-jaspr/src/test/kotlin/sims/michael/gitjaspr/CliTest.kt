@@ -339,12 +339,7 @@ class CliTest {
      */
     @Test
     fun `default config resource contains only recognized property keys`() {
-        val resourceText =
-            checkNotNull(Init::class.java.getResourceAsStream("/default-config.properties")) {
-                    "default-config.properties resource not found"
-                }
-                .bufferedReader()
-                .readText()
+        val resourceText = Init.readDefaultConfigResource()
 
         // Extract keys from both uncommented lines ("key=value") and commented lines ("#
         // key=value")
