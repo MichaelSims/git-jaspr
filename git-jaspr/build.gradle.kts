@@ -150,6 +150,16 @@ application {
     applicationName = "jaspr"
 }
 
+val generateCompletions by
+    tasks.registering(JavaExec::class) {
+        description = "Generate shell completion scripts for bash, zsh, and fish"
+        mainClass.set("sims.michael.gitjaspr.GenerateCompletions")
+        classpath = sourceSets.main.get().runtimeClasspath
+        val outputDir = layout.buildDirectory.dir("completions")
+        outputs.dir(outputDir)
+        args(outputDir.get().asFile.absolutePath)
+    }
+
 val nonDefaultTestTags =
     mapOf("functional" to "Functional tests", "nativeImageMetadata" to "Native image metadata")
 

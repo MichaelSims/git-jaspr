@@ -9,6 +9,7 @@ import ch.qos.logback.classic.spi.ILoggingEvent
 import ch.qos.logback.core.FileAppender
 import ch.qos.logback.core.rolling.RollingFileAppender
 import ch.qos.logback.core.rolling.TimeBasedRollingPolicy
+import com.github.ajalt.clikt.completion.completionOption
 import com.github.ajalt.clikt.core.*
 import com.github.ajalt.clikt.output.MordantHelpFormatter
 import com.github.ajalt.clikt.parameters.arguments.argument
@@ -1024,26 +1025,27 @@ object Cli {
 
     @JvmStatic
     fun main(args: Array<out String>) {
-        GitJasprRoot()
-            .versionOption(VERSION)
-            .subcommands(
-                listOf(
-                    Status(),
-                    Push(),
-                    Checkout(),
-                    Merge(),
-                    AutoMerge(),
-                    Clean(),
-                    Stack().subcommands(StackList(), StackRename(), StackDelete()),
-                    PreviewTheme(),
-                    Init(),
-                    InstallCommitIdHook(),
-                    NoOp(),
-                )
-            )
-            .main(args)
+        buildCommand().main(args)
     }
 }
+
+fun buildCommand(): CliktCommand =
+    GitJasprRoot()
+        .versionOption(VERSION)
+        .completionOption()
+        .subcommands(
+            Status(),
+            Push(),
+            Checkout(),
+            Merge(),
+            AutoMerge(),
+            Clean(),
+            Stack().subcommands(StackList(), StackRename(), StackDelete()),
+            PreviewTheme(),
+            Init(),
+            InstallCommitIdHook(),
+            NoOp(),
+        )
 
 const val WORKING_DIR_PROPERTY_NAME = "git-jaspr-working-dir"
 const val CONFIG_FILE_NAME = ".git-jaspr.properties"
