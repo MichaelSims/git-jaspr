@@ -30,7 +30,10 @@ object GenerateCompletions {
                     e.message.orEmpty()
                 }
             val file = outputDir.resolve(filename)
-            file.writeText(script)
+            // Clikt's zsh output uses bashcompinit but omits the #compdef directive that
+            // zsh's compinit needs to auto-load the file from site-functions.
+            val finalScript = if (shell == "zsh") "#compdef jaspr\n\n$script" else script
+            file.writeText(finalScript)
             println("Generated $file")
         }
     }
