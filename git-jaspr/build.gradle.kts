@@ -13,6 +13,42 @@ plugins {
     application
 }
 
+val generateVersionFile by
+    tasks.registering {
+        val outputDir = layout.buildDirectory.dir("generated/source/version")
+        outputs.dir(outputDir)
+        // Always execute but only write when content changes to preserve compileKotlin caching.
+        outputs.upToDateWhen { false }
+        doLast {
+            val version =
+                try {
+                    providers
+                        .exec { commandLine("git", "describe", "--tags") }
+                        .standardOutput
+                        .asText
+                        .get()
+                        .trim()
+                } catch (_: Exception) {
+                    "undefined"
+                }
+            val file = outputDir.get().asFile.resolve("sims/michael/gitjaspr/Version.kt")
+            val content =
+                """
+                |package sims.michael.gitjaspr
+                |
+                |const val VERSION = "$version"
+                |
+                |"""
+                    .trimMargin()
+            if (!file.exists() || file.readText() != content) {
+                file.parentFile.mkdirs()
+                file.writeText(content)
+            }
+        }
+    }
+
+sourceSets.main { kotlin.srcDir(generateVersionFile) }
+
 graalvmNative {
     binaries {
         all { resources.autodetect() }
