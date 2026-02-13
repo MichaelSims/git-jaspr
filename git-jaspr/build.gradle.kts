@@ -10,6 +10,7 @@ plugins {
     alias(libs.plugins.apollo)
     alias(libs.plugins.spotless)
     alias(libs.plugins.graalvm)
+    alias(libs.plugins.asciidoctor)
     application
 }
 
@@ -159,6 +160,12 @@ val generateCompletions by
         outputs.dir(outputDir)
         args(outputDir.get().asFile.absolutePath)
     }
+
+tasks.named<org.asciidoctor.gradle.jvm.AsciidoctorTask>("asciidoctor") {
+    sourceDir(file("src/docs/asciidoc"))
+    setOutputDir(layout.buildDirectory.dir("manpage"))
+    outputOptions { backends("manpage") }
+}
 
 val nonDefaultTestTags =
     mapOf("functional" to "Functional tests", "nativeImageMetadata" to "Native image metadata")

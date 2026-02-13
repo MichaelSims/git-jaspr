@@ -1,0 +1,205 @@
+= jaspr(1)
+Michael Sims
+:doctype: manpage
+:manmanual: Jaspr Manual
+:mansource: Jaspr
+
+== Name
+
+jaspr - tool that enables managing stacked pull requests on GitHub
+
+== Synopsis
+
+*jaspr* [_GLOBAL OPTIONS_] _COMMAND_ [_COMMAND OPTIONS_]
+
+== Description
+
+Jaspr creates and manages stacked pull requests on GitHub.
+Commits in your local branch are pushed as a stack of dependent pull requests, with one PR per commit.
+Commit subjects are used as PR titles, and commit bodies are used as PR descriptions.
+Reviewers see small, focused diffs, which eases code review and enables faster and more frequent merges, which
+are especially useful for teams practicing trunk-based development.
+
+== Global Options
+
+Note that many of these options should be set in the config file rather than passed on the command line, if the
+defaults aren't sufficient.
+
+*-t, --target*=_TEXT_::
+Target branch on the remote (default: *main*).
+
+*-r, --remote-name*=_TEXT_::
+Git remote name (default: *origin*).
+
+*-L, --log-level*=_LEVEL_::
+Log level: OFF, ERROR, WARN, INFO, DEBUG, TRACE, ALL (default: *INFO*).
+
+*--theme*=_NAME_::
+Terminal theme: *default*, *mono*, or a custom name defined in the config file.
+
+*--version*::
+Show the version and exit.
+
+*-h, --help*::
+Show help and exit.
+
+== Commands
+
+=== jaspr status
+
+Show the status of the current stack.
+Displays a table of commits with columns for whether each commit has been
+pushed, has an open PR, passes checks, is not a draft, is approved, and is
+fully mergeable.
+
+*-l, --local*=_TEXT_:::
+Local branch or commit that is the HEAD of the current stack (default: *HEAD*).
+
+*-c, --count*=_INT_:::
+Limit commits from the bottom of the stack. A negative value excludes from the top.
+
+=== jaspr push
+
+Push commits and create or update pull requests.
+
+*-l, --local*=_TEXT_:::
+Local branch or commit that is the HEAD of the current stack (default: *HEAD*).
+
+*--name*=_TEXT_:::
+Name for the stack. If omitted and the stack is unnamed, Jaspr will prompt.
+
+*-c, --count*=_INT_:::
+Limit commits from the bottom of the stack. A negative value excludes from the top.
+
+*-F, --force*:::
+Push even if it would abandon open pull requests.
+
+=== jaspr merge
+
+Merge all mergeable commits in the stack.
+
+*-l, --local*=_TEXT_:::
+Local branch or commit that is the HEAD of the current stack (default: *HEAD*).
+
+*-c, --count*=_INT_:::
+Limit commits from the bottom of the stack.
+
+=== jaspr auto-merge
+
+Wait for checks to pass, then merge.
+
+*-l, --local*=_TEXT_:::
+Local branch or commit that is the HEAD of the current stack (default: *HEAD*).
+
+*-c, --count*=_INT_:::
+Limit commits from the bottom of the stack.
+
+*-i, --interval*=_INT_:::
+Polling interval in seconds (default: *10*).
+
+=== jaspr clean
+
+Clean up orphaned remote branches and optionally close abandoned PRs.
+Presents an interactive menu to toggle options and confirm before deleting.
+
+*--clean-abandoned-prs / --ignore-abandoned-prs*:::
+Also close open PRs for orphaned jaspr branches (default: on).
+
+*--clean-all-commits / --clean-only-my-commits*:::
+Remove branches regardless of commit author (default: off).
+
+*--page-size*=_INT_:::
+Lines per page in interactive output (default: *50*).
+
+=== jaspr checkout
+
+Check out an existing named stack.
+Without *--name*, presents an interactive list of stacks to choose from.
+
+*-n, --name*=_TEXT_:::
+Stack name (skips interactive selection).
+
+*--page-size*=_INT_:::
+Lines per page in interactive output (default: *50*).
+
+=== jaspr stack list
+
+List all named stacks, grouped by target branch.
+
+*--page-size*=_INT_:::
+Lines per page in interactive output (default: *50*).
+
+=== jaspr stack rename _OLDNAME_ _NEWNAME_
+
+Rename a named stack on the remote.
+
+=== jaspr stack delete _NAME_
+
+Delete a named stack from the remote.
+Prompts for confirmation before deleting.
+
+=== jaspr init
+
+Generate a default config file at *~/.jaspr.properties*.
+If an old config (*~/.git-jaspr.properties*) is found, the GitHub token is
+carried over automatically.
+
+*--show*:::
+Display the example config without writing it.
+
+=== jaspr install-commit-id-hook
+
+Install the Git *commit-msg* hook that appends a *commit-id* trailer to new
+commits. Run this once per repository.
+
+=== jaspr preview-theme
+
+Preview the current theme with sample status output.
+
+== Configuration
+
+Options can be set in *~/.jaspr.properties* (user-wide) or
+*./.jaspr.properties* (per-repo).
+Per-repo values take precedence over user-wide values.
+Command-line flags take precedence over both.
+
+Run *jaspr init* to generate a commented example config file.
+
+Key configuration properties:
+
+*github-token*=_TOKEN_::
+GitHub personal access token (required).
+Permissions needed: read:org, read:user, repo, user:email.
+Can also be set via the *GIT_JASPR_TOKEN* environment variable.
+
+*remote-name*=_TEXT_::
+Git remote name (default: *origin*).
+
+*target*=_TEXT_::
+Target branch on the remote (default: *main*).
+
+*theme*=_NAME_::
+Terminal theme (default: *default*).
+
+*log-level*=_LEVEL_::
+Log level (default: *INFO*).
+
+== Environment
+
+*GIT_JASPR_TOKEN*::
+GitHub personal access token. Overrides the *github-token* config property.
+
+== Exit Status
+
+*0*::
+Success.
+
+*1*::
+Configuration or usage error.
+
+*255*::
+Runtime error.
+
+== See Also
+
+The project homepage: https://github.com/MichaelSims/git-jaspr

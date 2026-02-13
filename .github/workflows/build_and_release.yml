@@ -68,8 +68,8 @@ jobs:
           asset_path: 'git-jaspr/build/native/nativeCompile/jaspr'
           asset_content_type: application/octet-stream
 
-  generate_completions:
-    name: Generate Shell Completions
+  generate_extras:
+    name: Generate Completions & Man Page
     needs: ['create_release']
     runs-on: 'ubuntu-latest'
     steps:
@@ -81,8 +81,8 @@ jobs:
       - name: 'Install asdf & tools'
         uses: asdf-vm/actions/install@v4
 
-      - name: 'Generate completions'
-        run: ./gradlew :git-jaspr:generateCompletions
+      - name: 'Generate completions and man page'
+        run: ./gradlew :git-jaspr:generateCompletions :git-jaspr:asciidoctor
 
       - name: 'Upload bash completion'
         uses: actions/upload-release-asset@v1
@@ -114,9 +114,19 @@ jobs:
           asset_path: 'git-jaspr/build/completions/jaspr.fish'
           asset_content_type: text/plain
 
+      - name: 'Upload man page'
+        uses: actions/upload-release-asset@v1
+        env:
+          GITHUB_TOKEN: ${{secrets.GITHUB_TOKEN}}
+        with:
+          upload_url: ${{ needs.create_release.outputs.upload_url }}
+          asset_name: 'jaspr.1'
+          asset_path: 'git-jaspr/build/manpage/jaspr.1'
+          asset_content_type: text/troff
+
   publish_release:
     name: Publish Release
-    needs: ['create_release', 'native_builds', 'generate_completions']
+    needs: ['create_release', 'native_builds', 'generate_extras']
     runs-on: 'ubuntu-latest'
     steps:
       - uses: eregon/publish-release@v1.0.6

@@ -14,6 +14,7 @@ kotlin-kapt = { id = "org.jetbrains.kotlin.kapt", version.ref = "kotlin" }
 kotlin-serialization = { id = "org.jetbrains.kotlin.plugin.serialization", version.ref = "kotlin" }
 apollo = { id = "com.apollographql.apollo", version.ref = "apollo" }
 spotless = { id = "com.diffplug.spotless", version = "7.2.1" }
+asciidoctor = { id = "org.asciidoctor.jvm.convert", version = "4.0.5" }
 graalvm = { id = "org.graalvm.buildtools.native", version = "0.11.1" }
 ksp = { id = "com.google.devtools.ksp", version.ref = "ksp"}
 
