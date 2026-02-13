@@ -990,6 +990,16 @@ class Init : CliktCommand(help = "Generate a default config file", epilog = help
                     printError = true,
                 )
             }
+            echo("$configFile already exists.")
+            val response =
+                currentContext.terminal
+                    .prompt("Overwrite? The existing file will be backed up to $backupFile. [y/N]")
+                    ?.trim()
+                    ?.lowercase()
+            if (response != "y" && response != "yes") {
+                echo("Aborted.")
+                return
+            }
             configFile.renameTo(backupFile)
             echo("Existing config backed up to $backupFile")
             echo()
