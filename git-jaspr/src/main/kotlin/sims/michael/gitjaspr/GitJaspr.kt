@@ -325,6 +325,7 @@ class GitJaspr(
         refSpec: RefSpec = RefSpec(DEFAULT_LOCAL_OBJECT, DEFAULT_TARGET_REF),
         stackName: String? = null,
         count: Int? = null,
+        theme: Theme = MonoTheme,
         onAbandonedPrs: (List<PullRequest>) -> Boolean = { true },
     ) {
         logger.trace("push {}", refSpec)
@@ -515,7 +516,7 @@ class GitJaspr(
             requestOrRequests(prsToMutate.size),
         )
 
-        print(getStatusString(refSpec, remoteBranchesAfterPush))
+        print(getStatusString(refSpec, remoteBranchesAfterPush, theme))
     }
 
     suspend fun merge(refSpec: RefSpec, count: Int? = null) {

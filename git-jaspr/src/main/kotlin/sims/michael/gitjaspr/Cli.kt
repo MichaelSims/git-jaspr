@@ -492,6 +492,7 @@ class Push : GitJasprSubcommand(help = "Push commits and create/update PRs") {
             targetRef.refSpec,
             stackName = effectiveName,
             count = count,
+            theme = theme,
             onAbandonedPrs =
                 if (force) {
                     { true }
