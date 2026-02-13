@@ -33,6 +33,11 @@ class Jaspr < Formula
     sha256 "${FISH_COMP_SHA256}"
   end
 
+  resource "man_page" do
+    url "https://github.com/MichaelSims/git-jaspr/releases/download/${TAG}/jaspr.1"
+    sha256 "${MAN_PAGE_SHA256}"
+  end
+
   def install
     if OS.mac? && Hardware::CPU.arm?
       bin.install "jaspr-macos-arm64" => "jaspr"
@@ -51,6 +56,9 @@ class Jaspr < Formula
     end
     resource("fish_completion").stage do
       fish_completion.install "jaspr.fish" => "jaspr.fish"
+    end
+    resource("man_page").stage do
+      man1.install "jaspr.1"
     end
   end
 

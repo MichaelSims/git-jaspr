@@ -148,6 +148,7 @@ jobs:
           gh release download "$TAG" --repo "${{ github.repository }}" --pattern 'jaspr.bash'
           gh release download "$TAG" --repo "${{ github.repository }}" --pattern '_jaspr'
           gh release download "$TAG" --repo "${{ github.repository }}" --pattern 'jaspr.fish'
+          gh release download "$TAG" --repo "${{ github.repository }}" --pattern 'jaspr.1'
 
       - name: 'Compute checksums'
         id: checksums
@@ -161,6 +162,11 @@ jobs:
           echo "bash=$(sha256sum jaspr.bash | awk '{print $1}')" >> "$GITHUB_OUTPUT"
           echo "zsh=$(sha256sum _jaspr | awk '{print $1}')" >> "$GITHUB_OUTPUT"
           echo "fish=$(sha256sum jaspr.fish | awk '{print $1}')" >> "$GITHUB_OUTPUT"
+
+      - name: 'Compute man page checksum'
+        id: man_page_checksum
+        run: |
+          echo "man_page=$(sha256sum jaspr.1 | awk '{print $1}')" >> "$GITHUB_OUTPUT"
 
       - uses: actions/checkout@v6
         with:
@@ -176,6 +182,7 @@ jobs:
           BASH_COMP_SHA256: ${{ steps.completion_checksums.outputs.bash }}
           ZSH_COMP_SHA256: ${{ steps.completion_checksums.outputs.zsh }}
           FISH_COMP_SHA256: ${{ steps.completion_checksums.outputs.fish }}
+          MAN_PAGE_SHA256: ${{ steps.man_page_checksum.outputs.man_page }}
         run: |
           export VERSION="${VERSION#v}"
           envsubst < source/homebrew/jaspr.rb > jaspr.rb
