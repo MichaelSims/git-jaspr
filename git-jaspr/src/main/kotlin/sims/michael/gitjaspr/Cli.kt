@@ -207,9 +207,9 @@ applicable.
             "Print the effective configuration to standard output (for debugging)"
         }
 
-    private val colorScheme by
-        option("--color-scheme").default("default").help {
-            "Terminal color scheme (default, mono, or a custom name)"
+    private val theme by
+        option("--theme").default("default").help {
+            "Terminal theme (default, mono, or a custom name)"
         }
 
     private fun buildAppWiring(): AppWiring {
@@ -282,16 +282,16 @@ applicable.
         val logger = Cli.logger
         val (loggingContext, _) = initLogging(logLevel, logsDirectory.takeIf { logToFiles })
         val themeProperties = loadThemeProperties()
-        logger.trace("Resolving theme for color-scheme '{}'", colorScheme)
-        val theme = resolveTheme(colorScheme, themeProperties)
-        logger.trace("Resolved theme: {}", theme::class.simpleName)
+        logger.trace("Resolving theme '{}'", theme)
+        val resolvedTheme = resolveTheme(theme, themeProperties)
+        logger.trace("Resolved theme: {}", resolvedTheme::class.simpleName)
         if (showConfig) {
             buildAppWiring().use { appWiring ->
                 throw PrintMessage(appWiring.json.encodeToString(appWiring.config))
             }
         }
         currentContext.obj =
-            CliContext(theme) {
+            CliContext(resolvedTheme) {
                 try {
                     buildAppWiring()
                 } catch (e: Exception) {
@@ -874,7 +874,7 @@ class StackDelete :
 class PreviewTheme :
     GitJasprSubcommand(
         name = "preview-theme",
-        help = "Preview the current color scheme with sample output",
+        help = "Preview the current theme with sample output",
     ) {
     override suspend fun doRun() {
         echo("Using theme ${theme.entity(theme.name)}.")

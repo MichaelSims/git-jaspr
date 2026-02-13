@@ -9,8 +9,8 @@ import org.slf4j.Logger
 import org.slf4j.LoggerFactory
 
 /**
- * Maps functional UI roles to styling functions, enabling color scheme switching and monochrome
- * output for testing.
+ * Maps functional UI roles to styling functions, enabling theme switching and monochrome output for
+ * testing.
  */
 interface Theme {
     /** The name of this theme */
