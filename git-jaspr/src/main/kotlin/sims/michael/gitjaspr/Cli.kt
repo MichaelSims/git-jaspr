@@ -54,11 +54,6 @@ class TargetOptions : OptionGroup() {
         option("-t", "--target").default(DEFAULT_TARGET_REF).help { "Target branch on the remote" }
 }
 
-class PagingOptions : OptionGroup() {
-    val pageSize by
-        option().int().default(DEFAULT_PAGE_SIZE).help { "Lines per page in interactive output" }
-}
-
 class CleanBehaviorOptions : OptionGroup() {
     val cleanAbandonedPrs by
         option().flag("--ignore-abandoned-prs", default = true).help {
@@ -585,7 +580,6 @@ class AutoMerge : GitJasprSubcommand(help = "Wait for checks then merge") {
 
 class Clean : GitJasprSubcommand(help = "Clean up orphaned branches") {
     private val cleanOpts by CleanBehaviorOptions()
-    private val pagingOpts by PagingOptions()
 
     override suspend fun doRun() {
         val jaspr = appWiring.gitJaspr
@@ -685,13 +679,12 @@ class Clean : GitJasprSubcommand(help = "Clean up orphaned branches") {
             }
         }
 
-        currentContext.terminal.printPaged(lines, pagingOpts.pageSize, theme)
+        printPaged(lines)
     }
 }
 
 class Checkout : GitJasprSubcommand(help = "Check out an existing named stack") {
     private val targetOpts by TargetOptions()
-    private val pagingOpts by PagingOptions()
 
     private val name by option("-n", "--name").help { "Stack name (skips interactive selection)" }
 
@@ -747,7 +740,7 @@ class Checkout : GitJasprSubcommand(help = "Check out an existing named stack") 
                         )
                     }
                 }
-                terminal.printPaged(lines, pagingOpts.pageSize, theme)
+                printPaged(lines)
                 promptForSelection(terminal, stacks)
             }
 
@@ -784,7 +777,6 @@ class Stack : CliktCommand(name = "stack", help = "Manage named stacks") {
 }
 
 class StackList : GitJasprSubcommand(name = "list", help = "List all named stacks") {
-    private val pagingOpts by PagingOptions()
 
     override suspend fun doRun() {
         val gitJaspr = appWiring.gitJaspr
@@ -799,7 +791,6 @@ class StackList : GitJasprSubcommand(name = "list", help = "List all named stack
         val remoteName = config.remoteName
         val refs = allStacks.map { ref -> "${remoteName}/${ref.name()}" }
         val shortMessages = appWiring.gitClient.getShortMessages(refs)
-        val terminal = currentContext.terminal
 
         val stacksByTarget = allStacks.groupBy(RemoteNamedStackRef::targetRef)
         val lines = buildList {
@@ -814,7 +805,7 @@ class StackList : GitJasprSubcommand(name = "list", help = "List all named stack
                 add("")
             }
         }
-        terminal.printPaged(lines, pagingOpts.pageSize, theme)
+        printPaged(lines)
     }
 }
 
@@ -1099,21 +1090,26 @@ const val DEFAULT_REMOTE_NAME = "origin"
 const val COMMIT_ID_LABEL = "commit-id"
 private const val GITHUB_TOKEN_ENV_VAR = "GIT_JASPR_TOKEN"
 
-/** Prints [lines] to the terminal, pausing every [pageSize] lines to prompt for continuation. */
-private fun Terminal.printPaged(
-    lines: List<String>,
-    pageSize: Int = DEFAULT_PAGE_SIZE,
-    theme: Theme = DefaultTheme,
-) {
-    for ((index, line) in lines.withIndex()) {
-        println(line)
-        if (index > 0 && index < lines.lastIndex && (index + 1) % pageSize == 0) {
-            val input =
-                prompt("-- [${theme.keyHint("n")}]ext page, [${theme.keyHint("s")}]kip --")
-                    ?.trim()
-                    ?.lowercase()
-            if (input != "n" && input != "") break
+/** Pipes [lines] through the user's pager (`$PAGER`, defaulting to `less -RF`). */
+private fun printPaged(lines: List<String>) {
+    val pagerCommand =
+        System.getenv("PAGER")?.trim()?.takeIf(String::isNotEmpty)?.split("\\s+".toRegex())
+            ?: listOf("less", "-RF")
+    try {
+        val process =
+            ProcessBuilder(pagerCommand)
+                .redirectOutput(ProcessBuilder.Redirect.INHERIT)
+                .redirectError(ProcessBuilder.Redirect.INHERIT)
+                .start()
+        process.outputStream.bufferedWriter().use { writer ->
+            for (line in lines) {
+                writer.write(line)
+                writer.newLine()
+            }
         }
+        process.waitFor()
+    } catch (_: Exception) {
+        lines.forEach(::println)
     }
 }
 

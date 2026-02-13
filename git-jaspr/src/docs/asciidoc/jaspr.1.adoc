@@ -108,9 +108,6 @@ Also close open PRs for orphaned jaspr branches (default: on).
 *--clean-all-commits / --clean-only-my-commits*:::
 Remove branches regardless of commit author (default: off).
 
-*--page-size*=_INT_:::
-Lines per page in interactive output (default: *50*).
-
 === jaspr checkout
 
 Check out an existing named stack.
@@ -119,15 +116,9 @@ Without *--name*, presents an interactive list of stacks to choose from.
 *-n, --name*=_TEXT_:::
 Stack name (skips interactive selection).
 
-*--page-size*=_INT_:::
-Lines per page in interactive output (default: *50*).
-
 === jaspr stack list
 
 List all named stacks, grouped by target branch.
-
-*--page-size*=_INT_:::
-Lines per page in interactive output (default: *50*).
 
 === jaspr stack rename _OLDNAME_ _NEWNAME_
 

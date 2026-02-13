@@ -14,8 +14,6 @@ import sims.michael.gitjaspr.generated.fragment.RateLimitFields
 import sims.michael.gitjaspr.serde.FileSerializer
 import sims.michael.gitjaspr.serde.LevelSerializer
 
-const val DEFAULT_PAGE_SIZE = 50
-
 @Serializable
 data class Config(
     @Serializable(with = FileSerializer::class) val workingDirectory: File,
