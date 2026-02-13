@@ -1,4 +1,4 @@
-# Git Jaspr (Just Another Stacked Pull Request)
+# Jaspr (Just Another Stacked Pull Request)
 
 Jaspr creates and manages stacked pull requests on GitHub.
 Commits in your local branch are pushed as a stack of dependent pull requests, with one PR per commit.
