@@ -265,6 +265,15 @@ applicable.
         }
     }
 
+    private fun migrateOldConfigIfNeeded(directory: File) {
+        val newConfig = directory.resolve(CONFIG_FILE_NAME)
+        val oldConfig = directory.resolve(OLD_CONFIG_FILE_NAME)
+        if (!newConfig.exists() && oldConfig.exists()) {
+            newConfig.writeText(migrateConfig(oldConfig))
+            echo("Migrated config: ${oldConfig.absolutePath} -> ${newConfig.absolutePath}")
+        }
+    }
+
     /** Loads config properties from both file locations, per-repo values taking precedence. */
     private fun loadThemeProperties(): Properties {
         Cli.logger.trace("loadThemeProperties")
@@ -280,6 +289,10 @@ applicable.
     override fun run() {
         val logger = Cli.logger
         val (loggingContext, _) = initLogging(logLevel, logsDirectory.takeIf { logToFiles })
+        if (currentContext.invokedSubcommand !is Init) {
+            listOf(File(System.getenv("HOME")), workingDirectory)
+                .forEach(::migrateOldConfigIfNeeded)
+        }
         val themeProperties = loadThemeProperties()
         logger.trace("Resolving theme '{}'", theme)
         val resolvedTheme = resolveTheme(theme, themeProperties)
@@ -955,10 +968,8 @@ class Init : CliktCommand(help = "Generate a default config file", epilog = help
         option("--show").flag().help { "Display the example config without writing it" }
 
     override fun run() {
-        val content = readDefaultConfigResource()
-
         if (show) {
-            echo(content)
+            echo(readDefaultConfigResource())
             return
         }
 
@@ -981,13 +992,25 @@ class Init : CliktCommand(help = "Generate a default config file", epilog = help
             }
             configFile.renameTo(backupFile)
             echo("Existing config backed up to $backupFile")
-            echo("You'll want to copy your github-token over at a minimum.")
             echo()
         }
 
+        // Carry over the github-token from the old config if present
+        val oldConfig = homeDir.resolve(OLD_CONFIG_FILE_NAME)
+        val content =
+            if (oldConfig.exists()) {
+                migrateConfig(oldConfig).also {
+                    echo("Found old config: ${oldConfig.absolutePath} (github-token carried over)")
+                }
+            } else {
+                readDefaultConfigResource()
+            }
+
         configFile.writeText(content)
         echo("Config file written to $configFile")
-        echo("Edit the file and add your GitHub personal access token to get started.")
+        if (content.contains(TOKEN_PLACEHOLDER)) {
+            echo("Edit the file and add your GitHub personal access token to get started.")
+        }
     }
 
     companion object {
@@ -1010,6 +1033,18 @@ class NoOp : GitJasprSubcommand(help = "Do nothing", hidden = true) {
 }
 
 // endregion
+
+private const val TOKEN_PLACEHOLDER = "ghp_your_token_here"
+
+/**
+ * Reads the github-token from [oldConfig] and returns a new default config with the token
+ * pre-filled. If no token is found (or it's the placeholder), returns the default config as-is.
+ */
+private fun migrateConfig(oldConfig: File): String {
+    val oldProps = Properties().apply { oldConfig.reader().use(::load) }
+    val token = oldProps.getProperty("github-token").orEmpty().ifEmpty { TOKEN_PLACEHOLDER }
+    return Init.readDefaultConfigResource().replace(TOKEN_PLACEHOLDER, token)
+}
 
 internal fun File.findNearestGitDir(): File {
     val parentFiles = generateSequence(canonicalFile) { it.parentFile }
@@ -1046,7 +1081,8 @@ fun buildCommand(): CliktCommand =
         )
 
 const val WORKING_DIR_PROPERTY_NAME = "git-jaspr-working-dir"
-const val CONFIG_FILE_NAME = ".git-jaspr.properties"
+const val CONFIG_FILE_NAME = ".jaspr.properties"
+const val OLD_CONFIG_FILE_NAME = ".git-jaspr.properties"
 const val DEFAULT_LOCAL_OBJECT = GitClient.HEAD
 const val DEFAULT_TARGET_REF = "main"
 const val DEFAULT_REMOTE_NAME = "origin"
