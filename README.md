@@ -1,25 +1,29 @@
 # Git Jaspr (Just Another Stacked Pull Request)
 
-This is a reimplementation of [git spr](https://github.com/ejoffe/spr) written in Kotlin.
+Jaspr creates and manages stacked pull requests on GitHub.
+Commits in your local branch are pushed as a stack of dependent pull requests, with one PR per commit.
+Commit subjects are used as PR titles, and commit bodies are used as PR descriptions.
+Reviewers see small, focused diffs, which eases code review and enables faster and more frequent merges, which
+are especially useful for teams practicing trunk-based development.
 
 # Why
 
-Because I like Gerrit, and wish GitHub were Gerrit. But since it isn't, I have to use this tool instead.
+Because I like Gerrit and wish GitHub were Gerrit. But since it isn't, I have to use this tool instead.
 For more rationale see this [excellent blog post](https://jg.gg/2018/09/29/stacked-diffs-versus-pull-requests/).
 
 # How
 
 ## Installing
 
-Download the appropriate standalone binary for your platform (Linux or OS X, sorry Windows users, you can run the Java
-version maybe?), install it into your `PATH` somewhere (`~/.local/bin`?) renamed as `git-jaspr` (don't forget to set the executable bit w/chmod) and then create a configuration file in 
-`~/.git-jaspr.properties` with the following contents:
+Jaspr can be installed via [Homebrew](https://brew.sh/) on macOS or [Linux](https://docs.brew.sh/Homebrew-on-Linux). Binaries are available currently for Linux x86_64 and macOS arm64. (Please open an issue if you are interested in Jaspr on another architecture.)
 
-```properties
-github-token=<GH PAT>
+```shell
+$ brew tap michaelsims/tap
+$ brew update
+$ brew install jaspr
 ```
 
-Where `<GH PAT>` is a GitHub Personal Access Token (classic) with the permissions `read:org`, `read:user`, `repo`, and 
+If this is your first time using Jaspr, you will need to generate a config file with `jaspr init` and update it with a GitHub Personal Access Token (classic) with the permissions `read:org`, `read:user`, `repo`, and 
 `user:email`.
 
 ### Configuration file
@@ -30,21 +34,21 @@ supply this to every command but can instead add it to your config file:
 ```properties
 log-level=WARN
 ```
+See the generated config file for the available options and descriptions.
 
 ## Using
 
 Some commands to try:
 ```shell
-$ git jaspr -h 
-$ git jaspr status
-$ git jaspr push
-$ git jaspr merge
-$ git jaspr auto-merge
-$ git jaspr clean
+$ jaspr --help
+$ jaspr status
+$ jaspr push
+$ jaspr merge
+$ jaspr auto-merge
+$ jaspr clean
 ```
 
-Any of the above can be invoked with `--help` (except just `git jaspr` which requires `-h` for reasons not worth going
-into).
+Any of the above can be invoked with `--help`.
 
 Enjoy!
 
@@ -61,7 +65,7 @@ mind with regard to using Jaspr:
   that requires pull request approvals before merging first. (I've noticed this behavior is inconsistent... sometimes
   this bit shows even without this requirement.)
 - You want to make sure that people can force push to `jaspr/**/*`. Jaspr's philosophy is that of Gerrit's, which is to
-  favor a trunk based workflow where PR remediation is done via amends/edits and are force pushed (this is why Jaspr
+  favor a trunk-based workflow where PR remediation is done via amends/edits and is force-pushed (this is why Jaspr
   pushes revision history branches and includes diff links for them in the PR descriptions).
 
 ## Note on functional tests
@@ -141,4 +145,4 @@ else
 fi
 ```
 
-If you try to run these and have questions, please contact me or open an issue and I'll try to help.
+If you try to run these and have questions, please contact me or open an issue, and I'll try to help.
