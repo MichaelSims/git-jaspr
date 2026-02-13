@@ -125,14 +125,12 @@ applicable.
             .trimIndent()
 
     private val dontPushRegex by
-        option(hidden = true).default("^(dont[ -]?push)\\b.*$").help {
+        option().default("^(dont[ -]?push)\\b.*$").help {
             "Regular expression pattern (case-insensitive) to match commit subjects that should not be pushed."
         }
 
     private val remoteName by
-        option("-r", "--remote-name", hidden = true)
-            .help { "Git remote name" }
-            .default(DEFAULT_REMOTE_NAME)
+        option("-r", "--remote-name").help { "Git remote name" }.default(DEFAULT_REMOTE_NAME)
 
     private val githubToken by
         option(envvar = GITHUB_TOKEN_ENV_VAR, hidden = true)
@@ -368,9 +366,9 @@ applicable.
 }
 
 private class GitHubOptions : OptionGroup() {
-    val githubHost by option(hidden = true).help { "GitHub host (inferred from remote URI)" }
-    val repoOwner by option(hidden = true).help { "GitHub owner name (inferred from remote URI)" }
-    val repoName by option(hidden = true).help { "GitHub repo name (inferred from remote URI)" }
+    val githubHost by option().help { "GitHub host (inferred from remote URI)" }
+    val repoOwner by option().help { "GitHub owner name (inferred from remote URI)" }
+    val repoName by option().help { "GitHub repo name (inferred from remote URI)" }
 }
 
 // endregion
