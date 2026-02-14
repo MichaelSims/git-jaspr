@@ -22,6 +22,7 @@ class DefaultAppWiring(
     githubToken: String,
     override val config: Config,
     override val gitClient: GitClient,
+    private val renderer: Renderer,
 ) : AppWiring {
 
     private val gitHubClientWiring =
@@ -37,7 +38,9 @@ class DefaultAppWiring(
 
     override val json: Json = Json { prettyPrint = true }
 
-    override val gitJaspr: GitJaspr by lazy { GitJaspr(gitHubClient, gitClient, config) }
+    override val gitJaspr: GitJaspr by lazy {
+        GitJaspr(gitHubClient, gitClient, config, renderer = renderer)
+    }
 
     override fun close() = gitHubClientWiring.close()
 }

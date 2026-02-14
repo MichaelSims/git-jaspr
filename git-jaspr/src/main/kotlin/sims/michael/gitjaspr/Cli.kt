@@ -69,8 +69,11 @@ class CleanBehaviorOptions : OptionGroup() {
 
 // region Root Command
 
-/** Wraps [Theme] (a UI concern) alongside [AppWiring] (business-logic DI) in the Clikt context. */
-class CliContext(val theme: Theme, appWiringFactory: () -> AppWiring) {
+/**
+ * Wraps [Theme] and [Renderer] (UI concerns) alongside [AppWiring] (business-logic DI) in the Clikt
+ * context.
+ */
+class CliContext(val theme: Theme, val renderer: Renderer, appWiringFactory: () -> AppWiring) {
     val appWiring by lazy(appWiringFactory)
 }
 
@@ -206,14 +209,13 @@ applicable.
             "Terminal theme (default, mono, or a custom name)"
         }
 
-    private fun buildAppWiring(): AppWiring {
+    private fun buildAppWiring(renderer: Renderer): AppWiring {
         val token =
             githubToken
-                ?: throw PrintMessage(
-                    message = missingTokenMessage,
-                    statusCode = 1,
-                    printError = true,
-                )
+                ?: run {
+                    renderer.error(missingTokenMessage)
+                    throw ProgramResult(1)
+                }
         val gitClient = OptimizedCliGitClient(workingDirectory, remoteBranchPrefix)
         val githubInfo = determineGithubInfo(gitClient)
         val config =
@@ -227,7 +229,7 @@ applicable.
                 logsDirectory.takeIf { logToFiles },
                 dontPushRegex,
             )
-        return DefaultAppWiring(token, config, gitClient)
+        return DefaultAppWiring(token, config, gitClient, renderer)
     }
 
     private fun determineGithubInfo(gitClient: GitClient): GitHubInfo {
@@ -292,19 +294,22 @@ applicable.
         logger.trace("Resolving theme '{}'", theme)
         val resolvedTheme = resolveTheme(theme, themeProperties)
         logger.trace("Resolved theme: {}", resolvedTheme::class.simpleName)
+        val renderer = ConsoleRenderer(resolvedTheme)
         if (showConfig) {
-            buildAppWiring().use { appWiring ->
-                throw PrintMessage(appWiring.json.encodeToString(appWiring.config))
+            buildAppWiring(renderer).use { appWiring ->
+                echo(appWiring.json.encodeToString(appWiring.config))
+                throw ProgramResult(0)
             }
         }
         currentContext.obj =
-            CliContext(resolvedTheme) {
+            CliContext(resolvedTheme, renderer) {
                 try {
-                    buildAppWiring()
+                    buildAppWiring(renderer)
                 } catch (e: Exception) {
                     logger.debug("Initialization failed", e)
                     loggingContext.stop()
-                    throw PrintMessage(e.message.orEmpty(), 255, true)
+                    renderer.error(e.message.orEmpty())
+                    throw ProgramResult(255)
                 }
             }
         logger.debug("{} version {}", GitJaspr::class.java.simpleName, VERSION)
@@ -335,6 +340,17 @@ applicable.
         if (fileAppender != null) {
             rootLogger.addAppender(fileAppender)
             Cli.logger.debug("Logging to {}", fileAppender.file)
+        }
+
+        // Configure the dedicated UserOutput logger used by ConsoleRenderer.
+        // Set additivity=false so messages only go to the FILE appender (not STDOUT),
+        // preventing duplication since ConsoleRenderer already writes to the console directly.
+        loggerContext.getLogger(ConsoleRenderer.FILE_LOGGER_NAME).apply {
+            isAdditive = false
+            level = ALL
+            if (fileAppender != null) {
+                addAppender(fileAppender)
+            }
         }
 
         return loggerContext to fileAppender?.file
@@ -400,6 +416,9 @@ abstract class GitJasprSubcommand(
     val theme
         get() = cliContext.theme
 
+    val renderer
+        get() = cliContext.renderer
+
     abstract suspend fun doRun()
 
     override fun run() {
@@ -409,10 +428,12 @@ abstract class GitJasprSubcommand(
                 doRun()
             } catch (e: GitJasprException) {
                 logger.debug("An error occurred", e)
-                throw PrintMessage(e.message, 255, true)
+                renderer.error(e.message)
+                throw ProgramResult(255)
             } catch (e: Exception) {
                 logger.logUnhandledException(e)
-                throw PrintMessage(e.message.orEmpty(), 255, true)
+                renderer.error(e.message.orEmpty())
+                throw ProgramResult(255)
             } finally {
                 logger.trace("Closing appWiring")
                 appWiring.close()
@@ -955,6 +976,10 @@ class PreviewTheme :
 /** Generates a commented default config file in the user's home directory. */
 class Init : CliktCommand(help = "Generate a default config file", epilog = helpEpilog) {
 
+    private val cliContext by requireObject<CliContext>()
+    private val renderer
+        get() = cliContext.renderer
+
     private val show by
         option("--show").flag().help { "Display the example config without writing it" }
 
@@ -970,16 +995,11 @@ class Init : CliktCommand(help = "Generate a default config file", epilog = help
 
         if (configFile.exists()) {
             if (backupFile.exists()) {
-                throw PrintMessage(
-                    buildString {
-                        appendLine(
-                            "$configFile already exists and a backup ($backupFile) is also present."
-                        )
-                        append("Please resolve manually before running init again.")
-                    },
-                    statusCode = 1,
-                    printError = true,
-                )
+                renderer.run {
+                    error("$configFile already exists and a backup ($backupFile) is also present.")
+                    error("Please resolve manually before running init again.")
+                }
+                throw ProgramResult(1)
             }
             echo("$configFile already exists.")
             val response =
