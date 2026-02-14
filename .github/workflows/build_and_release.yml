@@ -69,7 +69,7 @@ jobs:
           asset_content_type: application/octet-stream
 
   generate_extras:
-    name: Generate Completions & Man Page
+    name: Generate Completions, Man Page & java application tarball
     needs: ['create_release']
     runs-on: 'ubuntu-latest'
     steps:
@@ -81,8 +81,8 @@ jobs:
       - name: 'Install asdf & tools'
         uses: asdf-vm/actions/install@v4
 
-      - name: 'Generate completions and man page'
-        run: ./gradlew :git-jaspr:generateCompletions :git-jaspr:asciidoctor
+      - name: 'Generate completions, man page, and JVM distribution'
+        run: ./gradlew :git-jaspr:generateCompletions :git-jaspr:asciidoctor :git-jaspr:distTar
 
       - name: 'Upload bash completion'
         uses: actions/upload-release-asset@v1
@@ -123,6 +123,16 @@ jobs:
           asset_name: 'jaspr.1'
           asset_path: 'git-jaspr/build/manpage/jaspr.1'
           asset_content_type: text/troff
+
+      - name: 'Upload JVM distribution'
+        uses: actions/upload-release-asset@v1
+        env:
+          GITHUB_TOKEN: ${{secrets.GITHUB_TOKEN}}
+        with:
+          upload_url: ${{ needs.create_release.outputs.upload_url }}
+          asset_name: 'jaspr-jvm.tar'
+          asset_path: 'git-jaspr/build/distributions/jaspr.tar'
+          asset_content_type: application/x-tar
 
   publish_release:
     name: Publish Release
