@@ -518,7 +518,7 @@ class Push : GitJasprSubcommand(help = "Push commits and create/update PRs") {
             )
         )
         for (pr in prs) {
-            echo("  #${pr.number}: ${pr.title}")
+            echo("  ${theme.url(pr.permalink.orEmpty())} : ${theme.value(pr.title)}")
         }
         echo()
         val response = terminal.prompt("Continue? [y/N]")?.trim()?.lowercase()

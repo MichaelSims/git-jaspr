@@ -140,7 +140,7 @@ class GitJaspr(
                     append(theme.url(status.pullRequest.permalink))
                     append(" : ")
                 }
-                appendLine(status.localCommit.shortMessage)
+                appendLine(theme.value(status.localCommit.shortMessage))
             }
 
             appendNamedStackInfo(stack, remoteBranches, theme, strategy)
