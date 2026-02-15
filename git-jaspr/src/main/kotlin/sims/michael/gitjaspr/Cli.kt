@@ -29,7 +29,9 @@ import java.io.File
 import java.lang.reflect.Proxy
 import java.time.ZonedDateTime
 import java.util.Properties
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.withContext
 import kotlinx.serialization.encodeToString
 import org.slf4j.Logger
 import org.slf4j.LoggerFactory
@@ -629,7 +631,7 @@ class Clean : GitJasprSubcommand(help = "Clean up orphaned branches") {
                     cleanAbandonedPrs = cleanAbandonedPrs,
                     cleanAllCommits = !cleanJustMyPrs,
                 )
-            displayPlan(plan, jaspr)
+            withContext(Dispatchers.IO) { displayPlan(plan, jaspr) }
 
             if (plan.allBranches().isEmpty()) {
                 renderer.info { success("Nothing to clean.") }
@@ -779,7 +781,7 @@ class Checkout : GitJasprSubcommand(help = "Check out an existing named stack") 
                         )
                     }
                 }
-                printPaged(lines)
+                withContext(Dispatchers.IO) { printPaged(lines) }
                 promptForSelection(terminal, stacks)
             }
 
@@ -799,6 +801,58 @@ class Checkout : GitJasprSubcommand(help = "Check out an existing named stack") 
             renderer.error {
                 "Invalid selection. Please enter a number between 1 and ${stacks.size}."
             }
+        }
+    }
+}
+
+class Rebase :
+    GitJasprSubcommand(
+        help =
+            // language=Markdown
+            """
+            Rebase the current stack onto the latest target branch
+
+            Fetches the latest changes from the remote and rebases your stack onto the updated target branch.
+            """
+                .trimIndent()
+    ) {
+    private val targetOpts by TargetOptions()
+
+    override suspend fun doRun() {
+        val config = appWiring.config
+        val remoteName = config.remoteName
+        val target = targetOpts.target
+        val workingDirectory = appWiring.gitClient.workingDirectory
+
+        renderer.info {
+            "Rebasing stack onto ${entity("$remoteName/$target")}. " +
+                "If you encounter merge conflicts, you can abort via ${command("git rebase --abort")} " +
+                "and perform the rebase manually if you wish."
+        }
+
+        val rebaseResult =
+            withContext(Dispatchers.IO) {
+                val fetchResult =
+                    ProcessBuilder("git", "fetch", remoteName)
+                        .directory(workingDirectory)
+                        .inheritIO()
+                        .start()
+                        .waitFor()
+
+                if (fetchResult != 0) {
+                    renderer.error { "Fetch failed with exit code $fetchResult." }
+                    throw ProgramResult(fetchResult)
+                }
+
+                ProcessBuilder("git", "rebase", "$remoteName/$target")
+                    .directory(workingDirectory)
+                    .inheritIO()
+                    .start()
+                    .waitFor()
+            }
+
+        if (rebaseResult != 0) {
+            throw ProgramResult(rebaseResult)
         }
     }
 }
@@ -842,7 +896,7 @@ class StackList : GitJasprSubcommand(name = "list", help = "List all named stack
                 add("")
             }
         }
-        printPaged(lines)
+        withContext(Dispatchers.IO) { printPaged(lines) }
     }
 }
 
@@ -1115,6 +1169,7 @@ fun buildCommand(): CliktCommand =
             Merge(),
             AutoMerge(),
             Clean(),
+            Rebase(),
             Stack().subcommands(StackList(), StackRename(), StackDelete()),
             PreviewTheme(),
             Init(),
