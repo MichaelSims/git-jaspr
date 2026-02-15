@@ -33,16 +33,23 @@ class TipProvider(
     private val logger = LoggerFactory.getLogger(TipProvider::class.java)
     private val json = Json { ignoreUnknownKeys = true }
 
+    init {
+        logger.info("Using state file {}", stateFile.absolutePath)
+    }
+
     /**
      * Returns a tip if it's time to show one, or null otherwise. Updates state as a side effect.
      */
     fun getNextTip(): String? {
+        logger.trace("getNextTip")
         if (tips.isEmpty()) return null
 
         val state = loadState()
+        logger.trace("getNextTip state loaded: {}", state)
         val nextCount = state.invocationsSinceLastTip + 1
 
         if (nextCount < TIP_INTERVAL) {
+            logger.trace("Not time to show tip yet, invocationsSinceLastTip: {}", nextCount)
             saveState(state.copy(invocationsSinceLastTip = nextCount))
             return null
         }
@@ -65,6 +72,7 @@ class TipProvider(
         }
 
     private fun saveState(state: TipsState) {
+        logger.trace("Saving tips state: {}", state)
         try {
             stateFile.parentFile?.mkdirs()
             stateFile.writeText(json.encodeToString(state))
