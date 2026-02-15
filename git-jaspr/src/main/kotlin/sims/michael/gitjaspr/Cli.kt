@@ -9,6 +9,7 @@ import ch.qos.logback.classic.spi.ILoggingEvent
 import ch.qos.logback.core.FileAppender
 import ch.qos.logback.core.rolling.RollingFileAppender
 import ch.qos.logback.core.rolling.TimeBasedRollingPolicy
+import com.github.ajalt.clikt.completion.CompletionCandidates
 import com.github.ajalt.clikt.completion.completionOption
 import com.github.ajalt.clikt.core.*
 import com.github.ajalt.clikt.output.MordantHelpFormatter
@@ -40,7 +41,9 @@ import sims.michael.gitjaspr.RemoteRefEncoding.RemoteNamedStackRef
 
 class TargetRefOptions : OptionGroup() {
     val target by
-        option("-t", "--target").default(DEFAULT_TARGET_REF).help { "Target branch on the remote" }
+        option("-t", "--target", completionCandidates = remoteBranchCandidates)
+            .default(DEFAULT_TARGET_REF)
+            .help { "Target branch on the remote" }
     val local by
         option("-l", "--local").default(DEFAULT_LOCAL_OBJECT).help {
             "Local branch or commit that is the HEAD of the current stack"
@@ -51,7 +54,9 @@ class TargetRefOptions : OptionGroup() {
 
 class TargetOptions : OptionGroup() {
     val target by
-        option("-t", "--target").default(DEFAULT_TARGET_REF).help { "Target branch on the remote" }
+        option("-t", "--target", completionCandidates = remoteBranchCandidates)
+            .default(DEFAULT_TARGET_REF)
+            .help { "Target branch on the remote" }
 }
 
 class CleanBehaviorOptions : OptionGroup() {
@@ -128,7 +133,13 @@ applicable.
         }
 
     private val remoteName by
-        option("-r", "--remote-name").help { "Git remote name" }.default(DEFAULT_REMOTE_NAME)
+        option(
+                "-r",
+                "--remote-name",
+                completionCandidates = CompletionCandidates.Custom.fromStdout("git remote"),
+            )
+            .help { "Git remote name" }
+            .default(DEFAULT_REMOTE_NAME)
 
     private val githubToken by
         option(envvar = GITHUB_TOKEN_ENV_VAR, hidden = true)
@@ -205,9 +216,12 @@ applicable.
         }
 
     private val theme by
-        option("--theme").default("default").help {
-            "Terminal theme (default, mono, or a custom name)"
-        }
+        option(
+                "--theme",
+                completionCandidates = CompletionCandidates.Fixed(setOf("default", "mono")),
+            )
+            .default("default")
+            .help { "Terminal theme (default, mono, or a custom name)" }
 
     private fun buildAppWiring(renderer: Renderer): AppWiring {
         val token =
@@ -1114,6 +1128,12 @@ const val DEFAULT_TARGET_REF = "main"
 const val DEFAULT_REMOTE_NAME = "origin"
 const val COMMIT_ID_LABEL = "commit-id"
 private const val GITHUB_TOKEN_ENV_VAR = "GIT_JASPR_TOKEN"
+
+/** Completes with unique remote branch names (remote prefix stripped). */
+private val remoteBranchCandidates =
+    CompletionCandidates.Custom.fromStdout(
+        "git branch -r --format='%(refname:short)' | sed 's|^[^/]*/||' | sort -u"
+    )
 
 /** Pipes [lines] through the user's pager (`$PAGER`, defaulting to `less -RF`). */
 private fun printPaged(lines: List<String>) {
