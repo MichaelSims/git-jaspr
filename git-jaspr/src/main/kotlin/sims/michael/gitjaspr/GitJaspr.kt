@@ -356,11 +356,11 @@ class GitJaspr(
         logExcludedCommits(excludedCommits)
         if (stack.isEmpty()) {
             if (excludedCommits.isNotEmpty()) {
-                renderer.info(
+                renderer.info {
                     "All commits in the stack match the dont-push pattern. Nothing to push."
-                )
+                }
             } else {
-                renderer.info("Stack is empty. Nothing to push.")
+                renderer.info { "Stack is empty. Nothing to push." }
             }
             return
         }
@@ -377,8 +377,8 @@ class GitJaspr(
                 .filter { (_, commits) -> commits.size > 1 }
         if (commitsWithDuplicateIds.isNotEmpty()) {
             renderer.run {
-                error("Refusing to push because some commits in your stack have duplicate IDs.")
-                error("Run `jaspr status` to see which commits are affected.")
+                error { "Refusing to push because some commits in your stack have duplicate IDs." }
+                error { "Run `jaspr status` to see which commits are affected." }
             }
             return
         }
@@ -444,7 +444,7 @@ class GitJaspr(
                 outOfDateNamedStackBranch.map(RefSpec::forcePush) +
                 revisionHistoryRefs
         gitClient.push(refSpecs, config.remoteName)
-        renderer.info(
+        renderer.info {
             "Pushed %s commit %s, %s named stack %s, and %s history %s"
                 .format(
                     outOfDateBranches.size,
@@ -454,7 +454,7 @@ class GitJaspr(
                     revisionHistoryRefs.size,
                     refOrRefs(revisionHistoryRefs.size),
                 )
-        )
+        }
 
         val existingPrsByCommitId = pullRequestsRebased.associateBy(PullRequest::commitId)
 
@@ -503,7 +503,7 @@ class GitJaspr(
                 ghClient.updatePullRequest(pr)
             }
         }
-        renderer.info("Updated ${prsToMutate.size} pull ${requestOrRequests(prsToMutate.size)}")
+        renderer.info { "Updated ${prsToMutate.size} pull ${requestOrRequests(prsToMutate.size)}" }
 
         // Update pull request descriptions second pass. This is necessary because we don't have the
         // GH-assigned PR numbers for new PRs until after we create them.
@@ -515,9 +515,9 @@ class GitJaspr(
                 launch { ghClient.updatePullRequest(pr) }
             }
         }
-        renderer.info(
+        renderer.info {
             "Updated descriptions for ${prsToMutate.size} pull ${requestOrRequests(prsToMutate.size)}"
-        )
+        }
 
         print(getStatusString(refSpec, remoteBranchesAfterPush, theme))
     }
@@ -553,7 +553,9 @@ class GitJaspr(
         logExcludedCommits(excludedCommits)
 
         if (stack.isEmpty()) {
-            renderer.warn("All commits in the stack match the dont-push pattern. Nothing to merge.")
+            renderer.warn {
+                "All commits in the stack match the dont-push pattern. Nothing to merge."
+            }
             return
         }
 
@@ -579,7 +581,7 @@ class GitJaspr(
 
         val mergeRefSpecs = listOf(RefSpec(lastStatus.localCommit.hash, refSpec.remoteRef))
         gitClient.push(mergeRefSpecs, remoteName)
-        renderer.info("Merged ${stack.size} ${refOrRefs(stack.size)} to ${refSpec.remoteRef}")
+        renderer.info { "Merged ${stack.size} ${refOrRefs(stack.size)} to ${refSpec.remoteRef}" }
 
         val mergedRefs = stack.map { commit -> commit.toRemoteRefName() }.toSet()
         val prsToRebase =
@@ -642,7 +644,7 @@ class GitJaspr(
                 } else {
                     "${firstExcluded.hash}..${lastExcluded.hash}"
                 }
-            renderer.info("Excluding commits matching dont-push pattern: $range")
+            renderer.info { "Excluding commits matching dont-push pattern: $range" }
         }
     }
 
@@ -666,9 +668,9 @@ class GitJaspr(
         logExcludedCommits(excludedCommits)
 
         if (filteredStack.isEmpty()) {
-            renderer.warn(
+            renderer.warn {
                 "All commits in the stack are either drafts or match the dont-push pattern. Nothing to auto-merge."
-            )
+            }
             return
         }
 
@@ -695,13 +697,13 @@ class GitJaspr(
 
         val tempGit = OptimizedCliGitClient(tempDir, config.remoteBranchPrefix)
         try {
-            renderer.info("Cloning repository to temporary directory for auto-merge...")
+            renderer.info { "Cloning repository to temporary directory for auto-merge..." }
             val cloneTime = measureTime {
                 coroutineScope {
                     val heartbeat = launch {
                         delay(5.seconds)
                         while (isActive) {
-                            renderer.info("Still cloning, please wait... (CTRL-C to cancel)")
+                            renderer.info { "Still cloning, please wait... (CTRL-C to cancel)" }
                             delay(5.seconds)
                         }
                     }
@@ -776,16 +778,18 @@ class GitJaspr(
                 print(tempJaspr.getStatusString(tempRefSpec))
 
                 if (statuses.any { status -> status.checksPass == false }) {
-                    renderer.warn("Checks are failing. Aborting auto-merge.")
+                    renderer.warn { "Checks are failing. Aborting auto-merge." }
                     break
                 }
                 if (statuses.any { status -> status.approved == false }) {
-                    renderer.warn("PRs are not approved. Aborting auto-merge.")
+                    renderer.warn { "PRs are not approved. Aborting auto-merge." }
                     break
                 }
 
                 attemptsMade++
-                renderer.info("Delaying for $pollingIntervalSeconds seconds... (CTRL-C to cancel)")
+                renderer.info {
+                    "Delaying for $pollingIntervalSeconds seconds... (CTRL-C to cancel)"
+                }
                 delay(pollingIntervalSeconds.seconds)
                 // Fetch the latest changes before we try again
                 tempGit.fetch(remoteName)
@@ -838,9 +842,9 @@ class GitJaspr(
     fun executeCleanPlan(plan: CleanPlan) {
         logger.trace("executeCleanPlan")
         val branchesToDelete = plan.allBranches()
-        renderer.info(
+        renderer.info {
             "Deleting ${branchesToDelete.size} ${branchOrBranches(branchesToDelete.size)}"
-        )
+        }
         gitClient.push(
             branchesToDelete.map { name -> RefSpec(FORCE_PUSH_PREFIX, name) },
             config.remoteName,
@@ -1052,9 +1056,9 @@ class GitJaspr(
         require(hooksDir.isDirectory)
         val hook = hooksDir.resolve(COMMIT_MSG_HOOK)
         val source = checkNotNull(javaClass.getResourceAsStream("/$COMMIT_MSG_HOOK"))
-        renderer.info(
+        renderer.info {
             "Installing/overwriting $COMMIT_MSG_HOOK to $hook and setting the executable bit"
-        )
+        }
         source.use { inStream ->
             hook.outputStream().use { outStream -> inStream.copyTo(outStream) }
         }
@@ -1267,9 +1271,9 @@ class GitJaspr(
     }
 
     private suspend fun cleanUpBranches(branchesToDelete: List<RefSpec>) {
-        renderer.info(
+        renderer.info {
             "Cleaning up ${branchesToDelete.size} ${branchOrBranches(branchesToDelete.size)}."
-        )
+        }
         val maxTries = 3
         val delayBetweenTries = 500L
         var tries = 0
@@ -1278,7 +1282,7 @@ class GitJaspr(
                 gitClient.push(branchesToDelete, config.remoteName)
                 tries++
                 if (tries > 1) {
-                    renderer.info("Successfully deleted branches after $tries tries.")
+                    renderer.info { "Successfully deleted branches after $tries tries." }
                 }
                 break
             } catch (e: Exception) {
@@ -1391,12 +1395,12 @@ class GitJaspr(
             return false
         }
 
-        renderer.warn(
+        renderer.warn {
             "Some commits in your local stack are missing commit IDs and are being amended to add them."
-        )
-        renderer.warn(
+        }
+        renderer.warn {
             "Consider running ${InstallCommitIdHook().commandName} to avoid this in the future."
-        )
+        }
         val missing = commits.slice(indexOfFirstCommitMissingId until commits.size)
         val refName = "${missing.first().hash}^"
         gitClient.reset(refName)
@@ -1501,13 +1505,13 @@ class GitJaspr(
 
     private data class FilteredStack(val included: List<Commit>, val excluded: List<Commit>)
 
-    private fun logStackIsEmptyWarning() = renderer.warn("Stack is empty.")
+    private fun logStackIsEmptyWarning() = renderer.warn { "Stack is empty." }
 
     private fun logMergeOutOfDateWarning(numCommitsBehind: Int, commits: String, refSpec: RefSpec) =
-        renderer.warn(
+        renderer.warn {
             "Cannot merge because your stack is out-of-date with the base branch " +
                 "($numCommitsBehind $commits behind ${refSpec.remoteRef})."
-        )
+        }
 
     private fun Commit.toRefSpec(): RefSpec = RefSpec(hash, toRemoteRefName())
 
@@ -1628,14 +1632,14 @@ class GitJaspr(
             gitClient.branch(localBranchName, startPoint = remoteTrackingRef)
             gitClient.checkout(localBranchName)
             gitClient.setUpstreamBranch(remoteName, namedStackRef.name())
-            renderer.info("Checked out named stack '$localBranchName' on new local branch")
+            renderer.info { "Checked out named stack '$localBranchName' on new local branch" }
         } else {
             // Branch exists - checkout and verify upstream matches
             val previousRef = gitClient.log(GitClient.HEAD, 1).single().hash
             gitClient.checkout(localBranchName)
             val upstream = gitClient.getUpstreamBranch(remoteName)
             if (upstream != null && upstream.name == namedStackRef.name()) {
-                renderer.info("Switched to existing local branch '$localBranchName'")
+                renderer.info { "Switched to existing local branch '$localBranchName'" }
             } else {
                 // Restore the previous branch before throwing
                 gitClient.checkout(previousRef)
@@ -1679,16 +1683,16 @@ class GitJaspr(
             listOf(RefSpec("$remoteName/$oldRef", newRef), RefSpec(FORCE_PUSH_PREFIX, oldRef)),
             remoteName,
         )
-        renderer.info("Renamed remote stack branch $oldRef -> $newRef")
+        renderer.info { "Renamed remote stack branch $oldRef -> $newRef" }
 
         // Update tracking config for any local branch that pointed to the old remote ref
         for (localBranch in gitClient.getBranchNames()) {
             val upstreamName = gitClient.getUpstreamBranchName(localBranch, remoteName)
             if (upstreamName == oldRef) {
                 gitClient.setUpstreamBranchForLocalBranch(localBranch, remoteName, newRef)
-                renderer.info(
+                renderer.info {
                     "Updated upstream for local branch '$localBranch': $oldRef -> $newRef"
-                )
+                }
             }
         }
     }
@@ -1713,7 +1717,7 @@ class GitJaspr(
 
         // Force-delete the remote branch
         gitClient.push(listOf(RefSpec(FORCE_PUSH_PREFIX, stackRef)), remoteName)
-        renderer.info("Deleted remote stack branch $stackRef")
+        renderer.info { "Deleted remote stack branch $stackRef" }
 
         // Unset upstream tracking for any local branches that pointed to the deleted ref
         val affectedBranches = mutableListOf<String>()
@@ -1722,7 +1726,7 @@ class GitJaspr(
             if (upstreamName == stackRef) {
                 gitClient.setUpstreamBranchForLocalBranch(localBranch, remoteName, null)
                 affectedBranches.add(localBranch)
-                renderer.info("Unset upstream for local branch '$localBranch'")
+                renderer.info { "Unset upstream for local branch '$localBranch'" }
             }
         }
         return affectedBranches

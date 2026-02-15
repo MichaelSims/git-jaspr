@@ -213,7 +213,7 @@ applicable.
         val token =
             githubToken
                 ?: run {
-                    renderer.error(missingTokenMessage)
+                    renderer.error { missingTokenMessage }
                     throw ProgramResult(1)
                 }
         val gitClient = OptimizedCliGitClient(workingDirectory, remoteBranchPrefix)
@@ -308,7 +308,7 @@ applicable.
                 } catch (e: Exception) {
                     logger.debug("Initialization failed", e)
                     loggingContext.stop()
-                    renderer.error(e.message.orEmpty())
+                    renderer.error { e.message.orEmpty() }
                     throw ProgramResult(255)
                 }
             }
@@ -428,11 +428,11 @@ abstract class GitJasprSubcommand(
                 doRun()
             } catch (e: GitJasprException) {
                 logger.debug("An error occurred", e)
-                renderer.error(e.message)
+                renderer.error { e.message }
                 throw ProgramResult(255)
             } catch (e: Exception) {
                 logger.logUnhandledException(e)
-                renderer.error(e.message.orEmpty())
+                renderer.error { e.message.orEmpty() }
                 throw ProgramResult(255)
             } finally {
                 logger.trace("Closing appWiring")
@@ -996,8 +996,10 @@ class Init : CliktCommand(help = "Generate a default config file", epilog = help
         if (configFile.exists()) {
             if (backupFile.exists()) {
                 renderer.run {
-                    error("$configFile already exists and a backup ($backupFile) is also present.")
-                    error("Please resolve manually before running init again.")
+                    error {
+                        "$configFile already exists and a backup ($backupFile) is also present."
+                    }
+                    error { "Please resolve manually before running init again." }
                 }
                 throw ProgramResult(1)
             }
