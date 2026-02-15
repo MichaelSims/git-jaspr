@@ -9,9 +9,16 @@ import ch.qos.logback.classic.spi.ILoggingEvent
 import ch.qos.logback.core.FileAppender
 import ch.qos.logback.core.rolling.RollingFileAppender
 import ch.qos.logback.core.rolling.TimeBasedRollingPolicy
+import com.github.ajalt.clikt.command.SuspendingCliktCommand
+import com.github.ajalt.clikt.command.main
 import com.github.ajalt.clikt.completion.CompletionCandidates
 import com.github.ajalt.clikt.completion.completionOption
 import com.github.ajalt.clikt.core.*
+import com.github.ajalt.clikt.core.installMordantMarkdown
+import com.github.ajalt.clikt.core.obj
+import com.github.ajalt.clikt.core.requireObject
+import com.github.ajalt.clikt.core.subcommands
+import com.github.ajalt.clikt.core.terminal
 import com.github.ajalt.clikt.output.MordantHelpFormatter
 import com.github.ajalt.clikt.parameters.arguments.argument
 import com.github.ajalt.clikt.parameters.arguments.convert
@@ -25,6 +32,7 @@ import com.github.ajalt.clikt.sources.ChainedValueSource
 import com.github.ajalt.clikt.sources.PropertiesValueSource
 import com.github.ajalt.clikt.sources.ValueSource.Companion.getKey
 import com.github.ajalt.mordant.terminal.Terminal
+import com.github.ajalt.mordant.terminal.prompt
 import java.io.File
 import java.lang.reflect.Proxy
 import java.time.ZonedDateTime
@@ -89,7 +97,9 @@ class CliContext(
  * Root command that owns infrastructure options and passes [CliContext] to subcommands via context.
  * Subcommands access it via `requireObject<CliContext>()`.
  */
-class GitJasprRoot : CliktCommand(name = "jaspr", epilog = helpEpilog) {
+class GitJasprRoot : SuspendingCliktCommand(name = "jaspr") {
+    override fun helpEpilog(context: Context) = helpEpilog
+
     private val workingDirectory =
         File(System.getProperty(WORKING_DIR_PROPERTY_NAME) ?: ".")
             .findNearestGitDir()
@@ -304,7 +314,7 @@ applicable.
         return props
     }
 
-    override fun run() {
+    override suspend fun run() {
         val logger = Cli.logger
         val (loggingContext, _) = initLogging(logLevel, logsDirectory.takeIf { logToFiles })
         if (currentContext.invokedSubcommand !is Init) {
@@ -430,9 +440,16 @@ private class GitHubOptions : OptionGroup() {
  */
 abstract class GitJasprSubcommand(
     name: String? = null,
-    help: String = "",
-    hidden: Boolean = false,
-) : CliktCommand(name = name, hidden = hidden, help = help, epilog = helpEpilog) {
+    private val helpText: String = "",
+    private val isHidden: Boolean = false,
+) : SuspendingCliktCommand(name = name) {
+
+    override fun help(context: Context) = helpText
+
+    override fun helpEpilog(context: Context) = helpEpilog
+
+    override val hiddenFromHelp
+        get() = isHidden
 
     private val cliContext by requireObject<CliContext>()
     val appWiring
@@ -446,26 +463,24 @@ abstract class GitJasprSubcommand(
 
     abstract suspend fun doRun()
 
-    override fun run() {
+    override suspend fun run() {
         val logger = Cli.logger
-        runBlocking {
-            try {
-                doRun()
-                cliContext.tipProvider?.getNextTip()?.let { tip ->
-                    renderer.info { muted("Tip: $tip") }
-                }
-            } catch (e: GitJasprException) {
-                logger.debug("An error occurred", e)
-                renderer.error { e.message }
-                throw ProgramResult(255)
-            } catch (e: Exception) {
-                logger.logUnhandledException(e)
-                renderer.error { e.message.orEmpty() }
-                throw ProgramResult(255)
-            } finally {
-                logger.trace("Closing appWiring")
-                appWiring.close()
+        try {
+            doRun()
+            cliContext.tipProvider?.getNextTip()?.let { tip ->
+                renderer.info { muted("Tip: $tip") }
             }
+        } catch (e: GitJasprException) {
+            logger.debug("An error occurred", e)
+            renderer.error { e.message }
+            throw ProgramResult(255)
+        } catch (e: Exception) {
+            logger.logUnhandledException(e)
+            renderer.error { e.message.orEmpty() }
+            throw ProgramResult(255)
+        } finally {
+            logger.trace("Closing appWiring")
+            appWiring.close()
         }
     }
 
@@ -489,23 +504,22 @@ abstract class GitJasprSubcommand(
 
 // region Commands
 
-class Status :
-    GitJasprSubcommand(
-        help =
-            // language=Markdown
-            """
-            Show the status of the current stack
+class Status : GitJasprSubcommand() {
+    // language=Markdown
+    override fun help(context: Context) =
+        """
+        Show the status of the current stack
 
-            * **commit pushed** — The commit has been pushed to the remote.
-            * **exists** — A pull request has been created for the given commit.
-            * **checks pass** — GitHub checks pass.
-            * **ready** — The PR is not a draft. Commits beginning with `DRAFT` or `WIP` are created in draft mode.
-            * **approved** — The PR is approved.
-            * **stack check** — This commit and all its parents in the stack are mergeable.
+        * **commit pushed** — The commit has been pushed to the remote.
+        * **exists** — A pull request has been created for the given commit.
+        * **checks pass** — GitHub checks pass.
+        * **ready** — The PR is not a draft. Commits beginning with `DRAFT` or `WIP` are created in draft mode.
+        * **approved** — The PR is approved.
+        * **stack check** — This commit and all its parents in the stack are mergeable.
 
-            """
-                .trimIndent()
-    ) {
+        """
+            .trimIndent()
+
     private val targetRef by TargetRefOptions()
 
     override suspend fun doRun() {
@@ -513,7 +527,7 @@ class Status :
     }
 }
 
-class Push : GitJasprSubcommand(help = "Push commits and create/update PRs") {
+class Push : GitJasprSubcommand(helpText = "Push commits and create/update PRs") {
     private val targetRef by TargetRefOptions()
 
     private val name by
@@ -594,7 +608,7 @@ class Push : GitJasprSubcommand(help = "Push commits and create/update PRs") {
     }
 }
 
-class Merge : GitJasprSubcommand(help = "Merge all mergeable commits") {
+class Merge : GitJasprSubcommand(helpText = "Merge all mergeable commits") {
     private val targetRef by TargetRefOptions()
 
     private val count by
@@ -608,7 +622,7 @@ class Merge : GitJasprSubcommand(help = "Merge all mergeable commits") {
     }
 }
 
-class AutoMerge : GitJasprSubcommand(help = "Wait for checks then merge") {
+class AutoMerge : GitJasprSubcommand(helpText = "Wait for checks then merge") {
     private val targetRef by TargetRefOptions()
 
     private val count by
@@ -625,7 +639,7 @@ class AutoMerge : GitJasprSubcommand(help = "Wait for checks then merge") {
     }
 }
 
-class Clean : GitJasprSubcommand(help = "Clean up orphaned branches") {
+class Clean : GitJasprSubcommand(helpText = "Clean up orphaned branches") {
     private val cleanOpts by CleanBehaviorOptions()
 
     override suspend fun doRun() {
@@ -730,7 +744,7 @@ class Clean : GitJasprSubcommand(help = "Clean up orphaned branches") {
     }
 }
 
-class Checkout : GitJasprSubcommand(help = "Check out an existing named stack") {
+class Checkout : GitJasprSubcommand(helpText = "Check out an existing named stack") {
     private val targetOpts by TargetOptions()
 
     private val name by option("-n", "--name").help { "Stack name (skips interactive selection)" }
@@ -817,17 +831,16 @@ class Checkout : GitJasprSubcommand(help = "Check out an existing named stack") 
     }
 }
 
-class Rebase :
-    GitJasprSubcommand(
-        help =
-            // language=Markdown
-            """
-            Rebase the current stack onto the latest target branch
+class Rebase : GitJasprSubcommand() {
+    // language=Markdown
+    override fun help(context: Context) =
+        """
+        Rebase the current stack onto the latest target branch
 
-            Fetches the latest changes from the remote and rebases your stack onto the updated target branch.
-            """
-                .trimIndent()
-    ) {
+        Fetches the latest changes from the remote and rebases your stack onto the updated target branch.
+        """
+            .trimIndent()
+
     private val targetOpts by TargetOptions()
 
     override suspend fun doRun() {
@@ -869,17 +882,16 @@ class Rebase :
     }
 }
 
-class Edit :
-    GitJasprSubcommand(
-        help =
-            // language=Markdown
-            """
-            Edit your stack via interactive rebase
+class Edit : GitJasprSubcommand() {
+    // language=Markdown
+    override fun help(context: Context) =
+        """
+        Edit your stack via interactive rebase
 
-            Opens an interactive rebase for the commits in your stack, allowing you to reorder, edit, squash, or drop commits.
-            """
-                .trimIndent()
-    ) {
+        Opens an interactive rebase for the commits in your stack, allowing you to reorder, edit, squash, or drop commits.
+        """
+            .trimIndent()
+
     private val targetOpts by TargetOptions()
 
     override suspend fun doRun() {
@@ -947,17 +959,19 @@ class Edit :
     }
 }
 
-class InstallCommitIdHook : GitJasprSubcommand(help = "Install commit-id hook") {
+class InstallCommitIdHook : GitJasprSubcommand(helpText = "Install commit-id hook") {
     override suspend fun doRun() {
         appWiring.gitJaspr.installCommitIdHook()
     }
 }
 
-class Stack : CliktCommand(name = "stack", help = "Manage named stacks") {
-    override fun run() = Unit
+class Stack : SuspendingCliktCommand(name = "stack") {
+    override fun help(context: Context) = "Manage named stacks"
+
+    override suspend fun run() = Unit
 }
 
-class StackList : GitJasprSubcommand(name = "list", help = "List all named stacks") {
+class StackList : GitJasprSubcommand(name = "list", helpText = "List all named stacks") {
 
     override suspend fun doRun() {
         val gitJaspr = appWiring.gitJaspr
@@ -990,7 +1004,7 @@ class StackList : GitJasprSubcommand(name = "list", help = "List all named stack
     }
 }
 
-class StackRename : GitJasprSubcommand(name = "rename", help = "Rename a named stack") {
+class StackRename : GitJasprSubcommand(name = "rename", helpText = "Rename a named stack") {
     private val targetOpts by TargetOptions()
 
     private val oldName by argument(help = "The current name of the stack")
@@ -1010,7 +1024,7 @@ class StackRename : GitJasprSubcommand(name = "rename", help = "Rename a named s
 }
 
 class StackDelete :
-    GitJasprSubcommand(name = "delete", help = "Delete a named stack from the remote") {
+    GitJasprSubcommand(name = "delete", helpText = "Delete a named stack from the remote") {
     private val targetOpts by TargetOptions()
 
     private val name by argument(help = "The name of the stack to delete")
@@ -1056,7 +1070,7 @@ class StackDelete :
 class PreviewTheme :
     GitJasprSubcommand(
         name = "preview-theme",
-        help = "Preview the current theme with sample output",
+        helpText = "Preview the current theme with sample output",
     ) {
     override suspend fun doRun() {
         renderer.info { "Using theme ${entity(name)}." }
@@ -1131,7 +1145,10 @@ class PreviewTheme :
 }
 
 /** Generates a commented default config file in the user's home directory. */
-class Init : CliktCommand(help = "Generate a default config file", epilog = helpEpilog) {
+class Init : SuspendingCliktCommand() {
+    override fun help(context: Context) = "Generate a default config file"
+
+    override fun helpEpilog(context: Context) = helpEpilog
 
     private val cliContext by requireObject<CliContext>()
     private val renderer
@@ -1140,7 +1157,7 @@ class Init : CliktCommand(help = "Generate a default config file", epilog = help
     private val show by
         option("--show").flag().help { "Display the example config without writing it" }
 
-    override fun run() {
+    override suspend fun run() {
         if (show) {
             echo(readDefaultConfigResource())
             return
@@ -1210,7 +1227,7 @@ class Init : CliktCommand(help = "Generate a default config file", epilog = help
 }
 
 // Used by tests
-class NoOp : GitJasprSubcommand(help = "Do nothing", hidden = true) {
+class NoOp : GitJasprSubcommand(helpText = "Do nothing", isHidden = true) {
     private val logger = LoggerFactory.getLogger(NoOp::class.java)
 
     override suspend fun doRun() {
@@ -1244,12 +1261,13 @@ object Cli {
 
     @JvmStatic
     fun main(args: Array<out String>) {
-        buildCommand().main(args)
+        runBlocking { buildCommand().main(args) }
     }
 }
 
-fun buildCommand(): CliktCommand =
+fun buildCommand(): SuspendingCliktCommand =
     GitJasprRoot()
+        .apply { installMordantMarkdown() }
         .versionOption(VERSION)
         .completionOption()
         .subcommands(

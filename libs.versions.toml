@@ -23,7 +23,8 @@ apollo-runtime = { module = "com.apollographql.apollo:apollo-runtime", version.r
 apollo-engine-ktor = { module = "com.apollographql.ktor:apollo-engine-ktor", version = "0.1.1" }
 arrowkt-core = { module = "io.arrow-kt:arrow-core", version.ref = "arrowkt"}
 auto-service = { module = "com.google.auto.service:auto-service", version = "1.0.1" }
-clikt = { module = "com.github.ajalt.clikt:clikt", version = "4.2.0" }
+clikt = { module = "com.github.ajalt.clikt:clikt", version = "5.1.0" }
+clikt-markdown = { module = "com.github.ajalt.clikt:clikt-markdown", version = "5.1.0" }
 jgit = { module = "org.eclipse.jgit:org.eclipse.jgit", version.ref = "jgit" }
 jgit-junit = { module = "org.eclipse.jgit:org.eclipse.jgit.junit", version.ref = "jgit" }
 jgit-ssh = { module = "org.eclipse.jgit:org.eclipse.jgit.ssh.jsch", version.ref = "jgit" }

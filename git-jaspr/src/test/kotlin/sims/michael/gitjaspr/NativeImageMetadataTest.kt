@@ -2,7 +2,9 @@ package sims.michael.gitjaspr
 
 import com.apollographql.apollo.ApolloClient
 import com.apollographql.ktor.http.KtorHttpEngine
+import com.github.ajalt.clikt.command.parse
 import com.github.ajalt.clikt.core.*
+import com.github.ajalt.clikt.core.subcommands
 import com.github.ajalt.clikt.parameters.options.*
 import io.ktor.client.HttpClient
 import io.ktor.client.engine.cio.CIO as ClientCIO
@@ -261,22 +263,24 @@ class NativeImageMetadataTest {
         System.setProperty(WORKING_DIR_PROPERTY_NAME, tempDir.absolutePath)
 
         try {
-            GitJasprRoot()
-                .versionOption(VERSION)
-                .subcommands(
-                    Status(),
-                    Push(),
-                    Checkout(),
-                    Merge(),
-                    AutoMerge(),
-                    Clean(),
-                    Stack().subcommands(StackList(), StackRename(), StackDelete()),
-                    PreviewTheme(),
-                    Init(),
-                    InstallCommitIdHook(),
-                    NoOp(),
-                )
-                .parse(listOf("--help"))
+            runBlocking {
+                GitJasprRoot()
+                    .versionOption(VERSION)
+                    .subcommands(
+                        Status(),
+                        Push(),
+                        Checkout(),
+                        Merge(),
+                        AutoMerge(),
+                        Clean(),
+                        Stack().subcommands(StackList(), StackRename(), StackDelete()),
+                        PreviewTheme(),
+                        Init(),
+                        InstallCommitIdHook(),
+                        NoOp(),
+                    )
+                    .parse(listOf("--help"))
+            }
         } catch (_: PrintHelpMessage) {
             // Expected: --help triggers PrintHelpMessage before run() is called
         } finally {

@@ -117,6 +117,7 @@ apollo {
 
 dependencies {
     implementation(libs.clikt)
+    implementation(libs.clikt.markdown)
     implementation(libs.apollo.runtime)
     implementation(libs.apollo.engine.ktor)
     implementation(libs.ktor.client.cio)

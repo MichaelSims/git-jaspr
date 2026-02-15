@@ -1,6 +1,7 @@
 package sims.michael.gitjaspr
 
 import com.github.ajalt.clikt.core.*
+import com.github.ajalt.clikt.core.subcommands
 import java.io.File
 import java.lang.IllegalStateException
 import java.nio.file.Files
@@ -374,7 +375,7 @@ class CliTest {
                     )
 
             val validOptionKeys = mutableSetOf<String>()
-            fun collectKeys(command: CliktCommand) {
+            fun collectKeys(command: BaseCliktCommand<*>) {
                 for (option in command.registeredOptions()) {
                     val key =
                         option.valueSourceKey
