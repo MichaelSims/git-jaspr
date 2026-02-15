@@ -728,41 +728,47 @@ class Checkout : GitJasprSubcommand(help = "Check out an existing named stack") 
         val allStacks = gitJaspr.getAllNamedStacks()
         val stacks = allStacks.filter { it.targetRef == target }
         if (stacks.isEmpty()) {
-            val message = buildString {
-                append(
-                    "No named stacks found targeting '%s' (searching %s/%s/*)."
-                        .format(target, config.remoteNamedStackBranchPrefix, target)
-                )
-                val otherStacks = allStacks.filter { it.targetRef != target }
-                if (otherStacks.isNotEmpty()) {
-                    appendLine()
-                    appendLine("Named stacks exist for other targets:")
-                    for (stack in otherStacks.take(5)) {
-                        appendLine("  [${stack.targetRef}] ${stack.stackName}")
+            renderer.error {
+                buildString {
+                    append(
+                        "No named stacks found targeting '${entity(target)}' " +
+                            "(searching ${entity("${config.remoteNamedStackBranchPrefix}/$target/*")})."
+                    )
+                    val otherStacks = allStacks.filter { it.targetRef != target }
+                    if (otherStacks.isNotEmpty()) {
+                        appendLine()
+                        appendLine("Named stacks exist for other targets:")
+                        for (stack in otherStacks.take(5)) {
+                            appendLine("  [${entity(stack.targetRef)}] ${entity(stack.stackName)}")
+                        }
+                        if (otherStacks.size > 5) {
+                            appendLine("  ... and ${otherStacks.size - 5} more")
+                        }
+                        append("Use ${command("-t/--target")} to specify a different target.")
                     }
-                    if (otherStacks.size > 5) {
-                        appendLine("  ... and ${otherStacks.size - 5} more")
-                    }
-                    append("Use -t/--target to specify a different target.")
                 }
             }
-            throw GitJasprException(message)
+            throw ProgramResult(255)
         }
 
         val selected =
             if (name != null) {
-                stacks.find { it.stackName == name }
-                    ?: throw GitJasprException(
-                        "No named stack '$name' found targeting '$target'. " +
-                            "Available stacks: ${stacks.joinToString(", ") { it.stackName }}"
-                    )
+                val found = stacks.find { it.stackName == name }
+                if (found == null) {
+                    renderer.error {
+                        "No named stack '${entity(name)}' found targeting '${entity(target)}'. " +
+                            "Available stacks: ${stacks.joinToString(", ") { entity(it.stackName) }}"
+                    }
+                    throw ProgramResult(255)
+                }
+                found
             } else {
                 val remoteName = config.remoteName
                 val refs = stacks.map { "${remoteName}/${it.name()}" }
                 val shortMessages = appWiring.gitClient.getShortMessages(refs)
                 val terminal = currentContext.terminal
                 val lines = buildList {
-                    add(theme.heading("Named stacks targeting $target:"))
+                    add(theme.heading("Named stacks targeting ${theme.entity(target)}:"))
                     for ((index, stack) in stacks.withIndex()) {
                         val ref = "${remoteName}/${stack.name()}"
                         val message =
@@ -826,7 +832,7 @@ class StackList : GitJasprSubcommand(name = "list", help = "List all named stack
         val stacksByTarget = allStacks.groupBy(RemoteNamedStackRef::targetRef)
         val lines = buildList {
             for ((targetRef, stacks) in stacksByTarget) {
-                add(theme.heading("Stacks targeting $targetRef:"))
+                add(theme.heading("Stacks targeting ${theme.entity(targetRef)}:"))
                 for (stack in stacks) {
                     val ref = "${remoteName}/${stack.name()}"
                     val message =
@@ -851,9 +857,8 @@ class StackRename : GitJasprSubcommand(name = "rename", help = "Rename a named s
 
     override suspend fun doRun() {
         if (newName.isEmpty()) {
-            throw GitJasprException(
-                "New stack name must contain at least one alphanumeric character."
-            )
+            renderer.error { "New stack name must contain at least one alphanumeric character." }
+            throw ProgramResult(255)
         }
         appWiring.gitJaspr.renameStack(oldName, newName, targetOpts.target)
         renderer.info { success("Renamed stack '${entity(oldName)}' to '${entity(newName)}'.") }
@@ -988,9 +993,6 @@ class Init : CliktCommand(help = "Generate a default config file", epilog = help
     private val renderer
         get() = cliContext.renderer
 
-    private val theme
-        get() = cliContext.theme
-
     private val show by
         option("--show").flag().help { "Display the example config without writing it" }
 
@@ -1027,7 +1029,7 @@ class Init : CliktCommand(help = "Generate a default config file", epilog = help
                 return
             }
             configFile.renameTo(backupFile)
-            renderer.info { "Existing config backed up to $backupFile" }
+            renderer.info { "Existing config backed up to ${entity(backupFile.toString())}" }
             echo()
         }
 
@@ -1037,7 +1039,7 @@ class Init : CliktCommand(help = "Generate a default config file", epilog = help
             if (oldConfig.exists()) {
                 migrateConfig(oldConfig).also {
                     renderer.info {
-                        "Found old config: ${oldConfig.absolutePath} (github-token carried over)"
+                        "Found old config: ${entity(oldConfig.absolutePath)} (github-token carried over)"
                     }
                 }
             } else {
@@ -1045,7 +1047,7 @@ class Init : CliktCommand(help = "Generate a default config file", epilog = help
             }
 
         configFile.writeText(content)
-        renderer.info { "Config file written to $configFile" }
+        renderer.info { "Config file written to ${entity(configFile.toString())}" }
         if (content.contains(TOKEN_PLACEHOLDER)) {
             renderer.info {
                 "Edit the file and add your GitHub personal access token to get started."

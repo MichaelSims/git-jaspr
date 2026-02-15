@@ -581,7 +581,9 @@ class GitJaspr(
 
         val mergeRefSpecs = listOf(RefSpec(lastStatus.localCommit.hash, refSpec.remoteRef))
         gitClient.push(mergeRefSpecs, remoteName)
-        renderer.info { "Merged ${stack.size} ${refOrRefs(stack.size)} to ${refSpec.remoteRef}" }
+        renderer.info {
+            "Merged ${stack.size} ${refOrRefs(stack.size)} to ${entity(refSpec.remoteRef)}"
+        }
 
         val mergedRefs = stack.map { commit -> commit.toRemoteRefName() }.toSet()
         val prsToRebase =
@@ -644,7 +646,7 @@ class GitJaspr(
                 } else {
                     "${firstExcluded.hash}..${lastExcluded.hash}"
                 }
-            renderer.info { "Excluding commits matching dont-push pattern: $range" }
+            renderer.info { "Excluding commits matching dont-push pattern: ${hash(range)}" }
         }
     }
 
@@ -1057,7 +1059,7 @@ class GitJaspr(
         val hook = hooksDir.resolve(COMMIT_MSG_HOOK)
         val source = checkNotNull(javaClass.getResourceAsStream("/$COMMIT_MSG_HOOK"))
         renderer.info {
-            "Installing/overwriting $COMMIT_MSG_HOOK to $hook and setting the executable bit"
+            "Installing/overwriting ${entity(COMMIT_MSG_HOOK)} to ${entity(hook.toString())} and setting the executable bit"
         }
         source.use { inStream ->
             hook.outputStream().use { outStream -> inStream.copyTo(outStream) }
@@ -1399,7 +1401,7 @@ class GitJaspr(
             "Some commits in your local stack are missing commit IDs and are being amended to add them."
         }
         renderer.warn {
-            "Consider running ${InstallCommitIdHook().commandName} to avoid this in the future."
+            "Consider running ${command(InstallCommitIdHook().commandName)} to avoid this in the future."
         }
         val missing = commits.slice(indexOfFirstCommitMissingId until commits.size)
         val refName = "${missing.first().hash}^"
@@ -1632,14 +1634,16 @@ class GitJaspr(
             gitClient.branch(localBranchName, startPoint = remoteTrackingRef)
             gitClient.checkout(localBranchName)
             gitClient.setUpstreamBranch(remoteName, namedStackRef.name())
-            renderer.info { "Checked out named stack '$localBranchName' on new local branch" }
+            renderer.info {
+                "Checked out named stack '${entity(localBranchName)}' on new local branch"
+            }
         } else {
             // Branch exists - checkout and verify upstream matches
             val previousRef = gitClient.log(GitClient.HEAD, 1).single().hash
             gitClient.checkout(localBranchName)
             val upstream = gitClient.getUpstreamBranch(remoteName)
             if (upstream != null && upstream.name == namedStackRef.name()) {
-                renderer.info { "Switched to existing local branch '$localBranchName'" }
+                renderer.info { "Switched to existing local branch '${entity(localBranchName)}'" }
             } else {
                 // Restore the previous branch before throwing
                 gitClient.checkout(previousRef)
@@ -1683,7 +1687,7 @@ class GitJaspr(
             listOf(RefSpec("$remoteName/$oldRef", newRef), RefSpec(FORCE_PUSH_PREFIX, oldRef)),
             remoteName,
         )
-        renderer.info { "Renamed remote stack branch $oldRef -> $newRef" }
+        renderer.info { "Renamed remote stack branch ${entity(oldRef)} -> ${entity(newRef)}" }
 
         // Update tracking config for any local branch that pointed to the old remote ref
         for (localBranch in gitClient.getBranchNames()) {
@@ -1691,7 +1695,7 @@ class GitJaspr(
             if (upstreamName == oldRef) {
                 gitClient.setUpstreamBranchForLocalBranch(localBranch, remoteName, newRef)
                 renderer.info {
-                    "Updated upstream for local branch '$localBranch': $oldRef -> $newRef"
+                    "Updated upstream for local branch '${entity(localBranch)}': ${entity(oldRef)} -> ${entity(newRef)}"
                 }
             }
         }
@@ -1717,7 +1721,7 @@ class GitJaspr(
 
         // Force-delete the remote branch
         gitClient.push(listOf(RefSpec(FORCE_PUSH_PREFIX, stackRef)), remoteName)
-        renderer.info { "Deleted remote stack branch $stackRef" }
+        renderer.info { "Deleted remote stack branch ${entity(stackRef)}" }
 
         // Unset upstream tracking for any local branches that pointed to the deleted ref
         val affectedBranches = mutableListOf<String>()
@@ -1726,7 +1730,7 @@ class GitJaspr(
             if (upstreamName == stackRef) {
                 gitClient.setUpstreamBranchForLocalBranch(localBranch, remoteName, null)
                 affectedBranches.add(localBranch)
-                renderer.info { "Unset upstream for local branch '$localBranch'" }
+                renderer.info { "Unset upstream for local branch '${entity(localBranch)}'" }
             }
         }
         return affectedBranches
