@@ -23,7 +23,7 @@ class ConsoleRenderer(private val theme: Theme) : Renderer {
     private val fileLogger = LoggerFactory.getLogger(FILE_LOGGER_NAME)
 
     override fun info(message: Theme.() -> String) {
-        println(theme.value(theme.message()))
+        println(theme.message())
         fileLogger.info(MonoTheme.message())
     }
 

@@ -532,14 +532,12 @@ class Push : GitJasprSubcommand(help = "Push commits and create/update PRs") {
 
     private fun promptForAbandonedPrs(prs: List<PullRequest>): Boolean {
         val terminal = currentContext.terminal
-        echo(
-            theme.warning(
-                "This push will abandon ${prs.size} open pull " +
-                    "${if (prs.size == 1) "request" else "requests"}:"
-            )
-        )
+        renderer.warn {
+            "This push will abandon ${prs.size} open pull " +
+                "${if (prs.size == 1) "request" else "requests"}:"
+        }
         for (pr in prs) {
-            echo("  ${theme.url(pr.permalink.orEmpty())} : ${theme.value(pr.title)}")
+            renderer.info { "  ${url(pr.permalink.orEmpty())} : ${value(pr.title)}" }
         }
         echo()
         val response = terminal.prompt("Continue? [y/N]")?.trim()?.lowercase()
@@ -547,22 +545,22 @@ class Push : GitJasprSubcommand(help = "Push commits and create/update PRs") {
     }
 
     private fun promptForStackName(suggested: String): String {
-        echo(
+        renderer.info {
             "Please provide a name for your stack or press enter to accept the generated one " +
-                "(in the future you can use the ${theme.command("--name")} option if you prefer)."
-        )
+                "(in the future you can use the ${command("--name")} option if you prefer)."
+        }
         val terminal = currentContext.terminal
         var default = suggested
         while (true) {
             val input = terminal.prompt("Stack name", default = default.ifEmpty { null }) ?: default
             val normalized = StackNameGenerator.generateName(input)
             if (normalized.isEmpty()) {
-                echo(theme.error("Stack name must contain at least one alphanumeric character."))
+                renderer.error { "Stack name must contain at least one alphanumeric character." }
                 default = ""
                 continue
             }
             if (normalized == input) return input
-            echo("Normalized to: ${theme.entity(normalized)}")
+            renderer.info { "Normalized to: ${entity(normalized)}" }
             default = normalized
         }
     }
@@ -608,8 +606,10 @@ class Clean : GitJasprSubcommand(help = "Clean up orphaned branches") {
         var cleanAbandonedPrs = cleanOpts.cleanAbandonedPrs
         var cleanJustMyPrs = !cleanOpts.cleanAllCommits
 
+        fun Theme.onOff(v: Boolean) = if (v) success("on") else error("off")
+
         while (true) {
-            echo("Finding branches to clean (this may take a minute)...")
+            renderer.info { "Finding branches to clean (this may take a minute)..." }
             val plan =
                 jaspr.getCleanPlan(
                     cleanAbandonedPrs = cleanAbandonedPrs,
@@ -618,16 +618,14 @@ class Clean : GitJasprSubcommand(help = "Clean up orphaned branches") {
             displayPlan(plan, jaspr)
 
             if (plan.allBranches().isEmpty()) {
-                echo(theme.success("Nothing to clean."))
+                renderer.info { success("Nothing to clean.") }
                 return
             }
 
-            fun onOff(v: Boolean) = if (v) theme.success("on") else theme.error("off")
-
             echo()
-            echo("Options:")
-            echo("  [${theme.keyHint("a")}] Clean abandoned PRs: ${onOff(cleanAbandonedPrs)}")
-            echo("  [${theme.keyHint("m")}] Clean just my PRs: ${onOff(cleanJustMyPrs)}")
+            renderer.info { "Options:" }
+            renderer.info { "  [${keyHint("a")}] Clean abandoned PRs: ${onOff(cleanAbandonedPrs)}" }
+            renderer.info { "  [${keyHint("m")}] Clean just my PRs: ${onOff(cleanJustMyPrs)}" }
             echo()
 
             val prompt =
@@ -643,9 +641,9 @@ class Clean : GitJasprSubcommand(help = "Clean up orphaned branches") {
                         )
                     jaspr.executeCleanPlan(finalPlan)
                     val count = finalPlan.allBranches().size
-                    echo(
-                        theme.success("Deleted $count ${if (count == 1) "branch" else "branches"}.")
-                    )
+                    renderer.info {
+                        success("Deleted $count ${if (count == 1) "branch" else "branches"}.")
+                    }
                     return
                 }
 
@@ -653,11 +651,11 @@ class Clean : GitJasprSubcommand(help = "Clean up orphaned branches") {
                 "m" -> cleanJustMyPrs = !cleanJustMyPrs
                 "q",
                 null -> {
-                    echo(theme.warning("Aborted."))
+                    renderer.warn { "Aborted." }
                     return
                 }
 
-                else -> echo(theme.error("Invalid selection."))
+                else -> renderer.error { "Invalid selection." }
             }
         }
     }
@@ -778,11 +776,9 @@ class Checkout : GitJasprSubcommand(help = "Check out an existing named stack") 
             if (selection != null && selection in 1..stacks.size) {
                 return stacks[selection - 1]
             }
-            echo(
-                theme.error(
-                    "Invalid selection. Please enter a number between 1 and ${stacks.size}."
-                )
-            )
+            renderer.error {
+                "Invalid selection. Please enter a number between 1 and ${stacks.size}."
+            }
         }
     }
 }
@@ -805,7 +801,7 @@ class StackList : GitJasprSubcommand(name = "list", help = "List all named stack
         val allStacks = gitJaspr.getAllNamedStacks()
 
         if (allStacks.isEmpty()) {
-            echo("No named stacks found.")
+            renderer.info { "No named stacks found." }
             return
         }
 
@@ -846,9 +842,7 @@ class StackRename : GitJasprSubcommand(name = "rename", help = "Rename a named s
             )
         }
         appWiring.gitJaspr.renameStack(oldName, newName, targetOpts.target)
-        echo(
-            theme.success("Renamed stack '${theme.entity(oldName)}' to '${theme.entity(newName)}'.")
-        )
+        renderer.info { success("Renamed stack '${entity(oldName)}' to '${entity(newName)}'.") }
     }
 }
 
@@ -871,28 +865,28 @@ class StackDelete :
         val shortMessages = appWiring.gitClient.getShortMessages(listOf(ref))
         val message = shortMessages[ref]
         if (message != null) {
-            echo("Stack '${theme.entity(name)}' -> ${theme.commitSubject(message)}")
+            renderer.info { "Stack '${entity(name)}' -> ${commitSubject(message)}" }
         }
 
         // Prompt for confirmation
         val terminal = currentContext.terminal
         val input = terminal.prompt("Delete stack '${name}'? [y/n]")?.trim()?.lowercase()
         if (input != "y") {
-            echo(theme.warning("Aborted."))
+            renderer.warn { "Aborted." }
             return
         }
 
         val affectedBranches = gitJaspr.deleteStack(name, target)
-        echo(theme.success("Deleted stack '${theme.entity(name)}'."))
+        renderer.info { success("Deleted stack '${entity(name)}'.") }
         if (affectedBranches.isNotEmpty()) {
             for (branch in affectedBranches) {
-                echo("Unset upstream for local branch '${theme.entity(branch)}'.")
+                renderer.info { "Unset upstream for local branch '${entity(branch)}'." }
             }
         }
-        echo(
+        renderer.info {
             "Note: PRs in the stack (if any) were not removed. " +
-                "Run ${theme.command("jaspr clean")} to remove them."
-        )
+                "Run ${command("jaspr clean")} to remove them."
+        }
     }
 }
 
@@ -902,7 +896,7 @@ class PreviewTheme :
         help = "Preview the current theme with sample output",
     ) {
     override suspend fun doRun() {
-        echo("Using theme ${theme.entity(theme.name)}.")
+        renderer.info { "Using theme ${entity(name)}." }
         val ident = Ident("Ada Lovelace", "ada@example.com")
         val now = ZonedDateTime.now()
 
@@ -980,6 +974,9 @@ class Init : CliktCommand(help = "Generate a default config file", epilog = help
     private val renderer
         get() = cliContext.renderer
 
+    private val theme
+        get() = cliContext.theme
+
     private val show by
         option("--show").flag().help { "Display the example config without writing it" }
 
@@ -1003,18 +1000,20 @@ class Init : CliktCommand(help = "Generate a default config file", epilog = help
                 }
                 throw ProgramResult(1)
             }
-            echo("$configFile already exists.")
+            renderer.info { "${entity(configFile.absolutePath)} already exists." }
             val response =
                 currentContext.terminal
-                    .prompt("Overwrite? The existing file will be backed up to $backupFile. [y/N]")
+                    .prompt(
+                        "Overwrite? The existing file will be backed up to ${backupFile}. [y/N]"
+                    )
                     ?.trim()
                     ?.lowercase()
             if (response != "y" && response != "yes") {
-                echo("Aborted.")
+                renderer.info { "Aborted." }
                 return
             }
             configFile.renameTo(backupFile)
-            echo("Existing config backed up to $backupFile")
+            renderer.info { "Existing config backed up to $backupFile" }
             echo()
         }
 
@@ -1023,16 +1022,20 @@ class Init : CliktCommand(help = "Generate a default config file", epilog = help
         val content =
             if (oldConfig.exists()) {
                 migrateConfig(oldConfig).also {
-                    echo("Found old config: ${oldConfig.absolutePath} (github-token carried over)")
+                    renderer.info {
+                        "Found old config: ${oldConfig.absolutePath} (github-token carried over)"
+                    }
                 }
             } else {
                 readDefaultConfigResource()
             }
 
         configFile.writeText(content)
-        echo("Config file written to $configFile")
+        renderer.info { "Config file written to $configFile" }
         if (content.contains(TOKEN_PLACEHOLDER)) {
-            echo("Edit the file and add your GitHub personal access token to get started.")
+            renderer.info {
+                "Edit the file and add your GitHub personal access token to get started."
+            }
         }
     }
 
