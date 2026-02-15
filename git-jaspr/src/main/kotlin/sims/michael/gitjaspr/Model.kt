@@ -24,6 +24,7 @@ data class Config(
     @Serializable(with = LevelSerializer::class) val logLevel: Level = Level.INFO,
     @Serializable(with = FileSerializer::class) val logsDirectory: File? = null,
     val dontPushRegex: String = "^(dont[ -]?push)\\b.*$",
+    val showTips: Boolean = true,
 )
 
 @Serializable data class GitHubInfo(val host: String, val owner: String, val name: String)

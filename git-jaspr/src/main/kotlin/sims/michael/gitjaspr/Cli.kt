@@ -76,11 +76,12 @@ class CleanBehaviorOptions : OptionGroup() {
 
 // region Root Command
 
-/**
- * Wraps [Theme] and [Renderer] (UI concerns) alongside [AppWiring] (business-logic DI) in the Clikt
- * context.
- */
-class CliContext(val theme: Theme, val renderer: Renderer, appWiringFactory: () -> AppWiring) {
+class CliContext(
+    val theme: Theme,
+    val renderer: Renderer,
+    val tipProvider: TipProvider?,
+    appWiringFactory: () -> AppWiring,
+) {
     val appWiring by lazy(appWiringFactory)
 }
 
@@ -133,6 +134,9 @@ applicable.
         option().default("^(dont[ -]?push)\\b.*$").help {
             "Regular expression pattern (case-insensitive) to match commit subjects that should not be pushed."
         }
+
+    private val showTips by
+        option().flag("--no-show-tips", default = true).help { "Show tips after commands" }
 
     private val remoteName by
         option(
@@ -244,6 +248,7 @@ applicable.
                 logLevel,
                 logsDirectory.takeIf { logToFiles },
                 dontPushRegex,
+                showTips,
             )
         return DefaultAppWiring(token, config, gitClient, renderer)
     }
@@ -318,7 +323,11 @@ applicable.
             }
         }
         currentContext.obj =
-            CliContext(resolvedTheme, renderer) {
+            CliContext(
+                resolvedTheme,
+                renderer,
+                tipProvider = if (showTips) TipProvider() else null,
+            ) {
                 try {
                     buildAppWiring(renderer)
                 } catch (e: Exception) {
@@ -442,6 +451,9 @@ abstract class GitJasprSubcommand(
         runBlocking {
             try {
                 doRun()
+                cliContext.tipProvider?.getNextTip()?.let { tip ->
+                    renderer.info { muted("Tip: $tip") }
+                }
             } catch (e: GitJasprException) {
                 logger.debug("An error occurred", e)
                 renderer.error { e.message }
