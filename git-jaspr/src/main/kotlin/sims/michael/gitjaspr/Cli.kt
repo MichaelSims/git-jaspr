@@ -486,7 +486,7 @@ abstract class GitJasprSubcommand(
             throw ProgramResult(255)
         } finally {
             logger.trace("Closing appWiring")
-            appWiring.close()
+            withContext(Dispatchers.IO) { appWiring.close() }
         }
     }
 
@@ -906,61 +906,63 @@ class Edit : GitJasprSubcommand() {
         val target = targetOpts.target
         val workingDirectory = appWiring.gitClient.workingDirectory
 
-        val mergeBaseProcess =
-            ProcessBuilder("git", "merge-base", "HEAD", "$remoteName/$target")
-                .directory(workingDirectory)
-                .redirectErrorStream(true)
-                .start()
-
-        val mergeBase = mergeBaseProcess.inputStream.bufferedReader().readText().trim()
-        val mergeBaseExit = mergeBaseProcess.waitFor()
-
-        if (mergeBaseExit != 0 || mergeBase.isEmpty()) {
-            renderer.error {
-                "Could not determine merge base with ${entity("$remoteName/$target")}."
-            }
-            throw ProgramResult(255)
-        }
-
-        // Write a temporary script that prepends a helpful header to the rebase TODO list,
-        // then opens the user's editor. GIT_SEQUENCE_EDITOR replaces the editor for the TODO
-        // list, so the script must invoke the real editor after modifying the file.
-        val scriptFile = File.createTempFile("jaspr-edit-", ".sh")
-        try {
-            scriptFile.writeText(
-                """
-                #!/bin/sh
-                header_file=${'$'}(mktemp)
-                cat > "${'$'}header_file" << 'HEADER'
-                # Edit your stack by modifying the list below.
-                # To amend a commit, change 'pick' to 'edit', then:
-                #   1. Make your changes
-                #   2. Stage them with: git add <files>
-                #   3. Amend the commit: git commit --amend
-                #   4. Continue the rebase: git rebase --continue
-                #
-                HEADER
-                cat "${'$'}1" >> "${'$'}header_file"
-                mv "${'$'}header_file" "${'$'}1"
-                eval "${'$'}(git var GIT_EDITOR)" "${'$'}1"
-                """
-                    .trimIndent()
-            )
-            scriptFile.setExecutable(true)
-
-            val rebaseResult =
-                ProcessBuilder("git", "rebase", "-i", mergeBase)
+        withContext(Dispatchers.IO) {
+            val mergeBaseProcess =
+                ProcessBuilder("git", "merge-base", "HEAD", "$remoteName/$target")
                     .directory(workingDirectory)
-                    .inheritIO()
-                    .apply { environment()["GIT_SEQUENCE_EDITOR"] = scriptFile.absolutePath }
+                    .redirectErrorStream(true)
                     .start()
-                    .waitFor()
 
-            if (rebaseResult != 0) {
-                throw ProgramResult(rebaseResult)
+            val mergeBase = mergeBaseProcess.inputStream.bufferedReader().readText().trim()
+            val mergeBaseExit = mergeBaseProcess.waitFor()
+
+            if (mergeBaseExit != 0 || mergeBase.isEmpty()) {
+                renderer.error {
+                    "Could not determine merge base with ${entity("$remoteName/$target")}."
+                }
+                throw ProgramResult(255)
             }
-        } finally {
-            scriptFile.delete()
+
+            // Write a temporary script that prepends a helpful header to the rebase TODO list,
+            // then opens the user's editor. GIT_SEQUENCE_EDITOR replaces the editor for the TODO
+            // list, so the script must invoke the real editor after modifying the file.
+            val scriptFile = File.createTempFile("jaspr-edit-", ".sh")
+            try {
+                scriptFile.writeText(
+                    $$"""
+                    #!/bin/sh
+                    header_file=$(mktemp)
+                    cat > "$header_file" << 'HEADER'
+                    # Edit your stack by modifying the list below.
+                    # To amend a commit, change 'pick' to 'edit', then:
+                    #   1. Make your changes
+                    #   2. Stage them with: git add <files>
+                    #   3. Amend the commit: git commit --amend
+                    #   4. Continue the rebase: git rebase --continue
+                    #
+                    HEADER
+                    cat "$1" >> "$header_file"
+                    mv "$header_file" "$1"
+                    eval "$(git var GIT_EDITOR)" "$1"
+                    """
+                        .trimIndent()
+                )
+                scriptFile.setExecutable(true)
+
+                val rebaseResult =
+                    ProcessBuilder("git", "rebase", "-i", mergeBase)
+                        .directory(workingDirectory)
+                        .inheritIO()
+                        .apply { environment()["GIT_SEQUENCE_EDITOR"] = scriptFile.absolutePath }
+                        .start()
+                        .waitFor()
+
+                if (rebaseResult != 0) {
+                    throw ProgramResult(rebaseResult)
+                }
+            } finally {
+                scriptFile.delete()
+            }
         }
     }
 }
