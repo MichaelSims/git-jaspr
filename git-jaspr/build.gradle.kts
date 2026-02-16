@@ -116,8 +116,12 @@ apollo {
 }
 
 dependencies {
-    implementation(libs.clikt)
-    implementation(libs.clikt.markdown)
+    implementation(libs.clikt) {
+        exclude(group = "com.github.ajalt.mordant", module = "mordant-jvm-graal-ffi")
+    }
+    implementation(libs.clikt.markdown) {
+        exclude(group = "com.github.ajalt.mordant", module = "mordant-jvm-graal-ffi")
+    }
     implementation(libs.apollo.runtime)
     implementation(libs.apollo.engine.ktor)
     implementation(libs.ktor.client.cio)
