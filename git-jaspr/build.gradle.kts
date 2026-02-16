@@ -279,7 +279,7 @@ for (subCommand in subCommands) {
         mainClass.set("sims.michael.gitjaspr.Cli")
         classpath = sourceSets.main.get().runtimeClasspath
         outputs.upToDateWhen { false }
-        args(subCommand, "--log-level=${properties["jasprRunLogLevel"] as? String ?: "INFO"}")
+        args("--log-level=${properties["jasprRunLogLevel"] as? String ?: "INFO"}", subCommand)
         workingDir =
             file(properties["jasprRunWorkingDir"] as? String ?: project.rootDir.absolutePath)
     }
