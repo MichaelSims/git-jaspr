@@ -257,7 +257,20 @@ spotless {
 // Configure the various `jasprRun*` properties in `~/.gradle/gradle.properties` to control the
 // working directory, log level, etc.
 val subCommands =
-    listOf("status", "push", "merge", "auto-merge", "clean", "init", "install-commit-id-hook")
+    listOf(
+        "status",
+        "push",
+        "checkout",
+        "merge",
+        "auto-merge",
+        "clean",
+        "rebase",
+        "edit",
+        "stack",
+        "preview-theme",
+        "init",
+        "install-commit-id-hook",
+    )
 
 for (subCommand in subCommands) {
     val taskName = "jaspr-$subCommand"
