@@ -474,9 +474,15 @@ abstract class GitJasprSubcommand(
             logger.debug("An error occurred", e)
             renderer.error { e.message }
             throw ProgramResult(255)
+        } catch (e: ProgramResult) {
+            // Catch and rethrow to prevent the generic Exception handler from catching it
+            throw e
         } catch (e: Exception) {
             logger.logUnhandledException(e)
-            renderer.error { e.message.orEmpty() }
+            val errorMessage = e.message.orEmpty()
+            if (errorMessage.isNotEmpty()) {
+                renderer.error { errorMessage }
+            }
             throw ProgramResult(255)
         } finally {
             logger.trace("Closing appWiring")
