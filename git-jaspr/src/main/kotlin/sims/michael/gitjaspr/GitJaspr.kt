@@ -353,7 +353,7 @@ class GitJaspr(
 
         // Filter stack based on the dont-push pattern
         val (stack, excludedCommits) = filterStackByDontPushPattern(stackWithIds)
-        logExcludedCommits(excludedCommits)
+        showExcludedCommitsMessage(excludedCommits)
         if (stack.isEmpty()) {
             if (excludedCommits.isNotEmpty()) {
                 renderer.info {
@@ -530,7 +530,7 @@ class GitJaspr(
         val numCommitsBehind =
             gitClient.logRange(refSpec.localRef, "$remoteName/${refSpec.remoteRef}").size
         if (numCommitsBehind > 0) {
-            logMergeOutOfDateWarning(
+            showMergeOutOfDateWarning(
                 numCommitsBehind,
                 if (numCommitsBehind > 1) "commits" else "commit",
                 refSpec,
@@ -544,13 +544,13 @@ class GitJaspr(
                 count,
             )
         if (fullStack.isEmpty()) {
-            logStackIsEmptyWarning()
+            showStackIsEmptyWarning()
             return
         }
 
         // Filter stack based on the dont-push pattern
         val (stack, excludedCommits) = filterStackByDontPushPattern(fullStack)
-        logExcludedCommits(excludedCommits)
+        showExcludedCommitsMessage(excludedCommits)
 
         if (stack.isEmpty()) {
             renderer.warn {
@@ -636,7 +636,7 @@ class GitJaspr(
         return stack.subList(0, effective)
     }
 
-    private fun logExcludedCommits(excludedCommits: List<Commit>) {
+    private fun showExcludedCommitsMessage(excludedCommits: List<Commit>) {
         if (excludedCommits.isNotEmpty()) {
             val firstExcluded = excludedCommits.first()
             val lastExcluded = excludedCommits.last()
@@ -667,7 +667,7 @@ class GitJaspr(
                 count,
             )
         val (filteredStack, excludedCommits) = filterStackByDontPushOrDraft(fullStack)
-        logExcludedCommits(excludedCommits)
+        showExcludedCommitsMessage(excludedCommits)
 
         if (filteredStack.isEmpty()) {
             renderer.warn {
@@ -753,7 +753,7 @@ class GitJaspr(
                         .size
                 if (numCommitsBehind > 0) {
                     val commits = if (numCommitsBehind > 1) "commits" else "commit"
-                    logMergeOutOfDateWarning(numCommitsBehind, commits, tempRefSpec)
+                    showMergeOutOfDateWarning(numCommitsBehind, commits, tempRefSpec)
                     break
                 }
 
@@ -764,7 +764,7 @@ class GitJaspr(
                         tempRefSpec.remoteRef,
                     )
                 if (stack.isEmpty()) {
-                    logStackIsEmptyWarning()
+                    showStackIsEmptyWarning()
                     break
                 }
 
@@ -1507,9 +1507,13 @@ class GitJaspr(
 
     private data class FilteredStack(val included: List<Commit>, val excluded: List<Commit>)
 
-    private fun logStackIsEmptyWarning() = renderer.warn { "Stack is empty." }
+    private fun showStackIsEmptyWarning() = renderer.warn { "Stack is empty." }
 
-    private fun logMergeOutOfDateWarning(numCommitsBehind: Int, commits: String, refSpec: RefSpec) =
+    private fun showMergeOutOfDateWarning(
+        numCommitsBehind: Int,
+        commits: String,
+        refSpec: RefSpec,
+    ) =
         renderer.warn {
             "Cannot merge because your stack is out-of-date with the base branch " +
                 "($numCommitsBehind $commits behind ${refSpec.remoteRef})."
