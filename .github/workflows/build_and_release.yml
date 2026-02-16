@@ -198,7 +198,7 @@ jobs:
           envsubst < source/homebrew/jaspr.rb > jaspr.rb
 
       - name: 'Setup SSH for tap repo'
-        uses: webfactory/ssh-agent@v0.9.0
+        uses: webfactory/ssh-agent@v0.9.1
         with:
           ssh-private-key: ${{ secrets.HOMEBREW_TAP_DEPLOY_KEY }}
 
