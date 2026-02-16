@@ -34,7 +34,7 @@ class TipProvider(
     private val json = Json { ignoreUnknownKeys = true }
 
     init {
-        logger.info("Using state file {}", stateFile.absolutePath)
+        logger.debug("Using state file {}", stateFile.absolutePath)
     }
 
     /**
