@@ -173,6 +173,14 @@ class NativeImageMetadataTest {
                     }
                 }
             )
+
+            // Pack loose objects so that subsequent JGit operations exercise pack file reading
+            // (DeltaBaseCache, Pack, PackDirectory, etc.). Without this, the fake remote only has
+            // loose objects and the native-image tracing agent never captures metadata for pack
+            // file classes — causing a segfault in production when reading from real repositories.
+            repackObjects(localRepo)
+            repackObjects(remoteRepo)
+
             gitJaspr.push(stackName = "metadata-test")
             gitJaspr.getStatusString()
 
@@ -294,6 +302,17 @@ class NativeImageMetadataTest {
     private enum class TestMode {
         UNAUTHORIZED,
         RATE_LIMITED,
+    }
+
+    /** Packs loose objects in the given repo so JGit exercises its pack file reading code. */
+    private fun repackObjects(repoDir: File) {
+        val exitCode =
+            ProcessBuilder("git", "gc")
+                .directory(repoDir)
+                .redirectErrorStream(true)
+                .start()
+                .waitFor()
+        check(exitCode == 0) { "git gc failed in $repoDir with exit code $exitCode" }
     }
 
     private fun buildGitHubClient(
