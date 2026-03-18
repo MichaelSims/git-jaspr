@@ -90,7 +90,29 @@ class GitHubStubClient(
             val i =
                 prs.map(PullRequestAndState::pullRequest).indexOfFirst { it.id == pullRequest.id }
             require(i > -1) { "PR with ID ${pullRequest.id} was not found" }
+            val oldPr = prs[i].pullRequest
+            if (oldPr.baseRefName != pullRequest.baseRefName) {
+                validateHeadHasNewCommits(pullRequest)
+            }
             prs[i] = prs[i].copy(pullRequest = pullRequest)
+        }
+    }
+
+    /**
+     * Mimics GitHub's validation that rejects a base ref update when the head branch has no commits
+     * that aren't already in the new base branch.
+     */
+    private fun validateHeadHasNewCommits(pullRequest: PullRequest) {
+        val headRef = "$remoteName/${pullRequest.headRefName}"
+        val baseRef = "$remoteName/${pullRequest.baseRefName}"
+        if (localGit.refExists(headRef) && localGit.refExists(baseRef)) {
+            val newCommits = localGit.logRange(baseRef, headRef)
+            if (newCommits.isEmpty()) {
+                throw GitJasprException(
+                    "There are no new commits between base branch '${pullRequest.baseRefName}' " +
+                        "and head branch '${pullRequest.headRefName}'"
+                )
+            }
         }
     }
 
