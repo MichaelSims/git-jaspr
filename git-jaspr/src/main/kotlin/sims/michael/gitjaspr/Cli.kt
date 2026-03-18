@@ -88,6 +88,7 @@ class CliContext(
     val theme: Theme,
     val renderer: Renderer,
     val tipProvider: TipProvider?,
+    val logFilePath: String?,
     appWiringFactory: () -> AppWiring,
 ) {
     val appWiring by lazy(appWiringFactory)
@@ -316,7 +317,8 @@ applicable.
 
     override suspend fun run() {
         val logger = Cli.logger
-        val (loggingContext, _) = initLogging(logLevel, logsDirectory.takeIf { logToFiles })
+        val (loggingContext, logFilePath) =
+            initLogging(logLevel, logsDirectory.takeIf { logToFiles })
         if (currentContext.invokedSubcommand !is Init) {
             listOf(File(System.getenv("HOME")), workingDirectory)
                 .forEach(::migrateOldConfigIfNeeded)
@@ -337,6 +339,7 @@ applicable.
                 resolvedTheme,
                 renderer,
                 tipProvider = if (showTips) TipProvider() else null,
+                logFilePath = logFilePath,
             ) {
                 try {
                     buildAppWiring(renderer)
@@ -1152,6 +1155,24 @@ class PreviewTheme :
     }
 }
 
+/** Prints the path to today's telemetry log file. */
+class LogPath : SuspendingCliktCommand(name = "log-path") {
+    override fun help(context: Context) = "Print the path to today's log file"
+
+    override fun helpEpilog(context: Context) = helpEpilog
+
+    private val cliContext by requireObject<CliContext>()
+
+    override suspend fun run() {
+        val path = cliContext.logFilePath
+        if (path != null) {
+            echo(path)
+        } else {
+            echo("File logging is disabled.")
+        }
+    }
+}
+
 /** Generates a commented default config file in the user's home directory. */
 class Init : SuspendingCliktCommand() {
     override fun help(context: Context) = "Generate a default config file"
@@ -1289,6 +1310,7 @@ fun buildCommand(): SuspendingCliktCommand =
             Edit(),
             Stack().subcommands(StackList(), StackRename(), StackDelete()),
             PreviewTheme(),
+            LogPath(),
             Init(),
             InstallCommitIdHook(),
             NoOp(),
