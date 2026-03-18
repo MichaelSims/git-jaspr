@@ -31,7 +31,6 @@ import com.github.ajalt.clikt.parameters.types.int
 import com.github.ajalt.clikt.sources.ChainedValueSource
 import com.github.ajalt.clikt.sources.PropertiesValueSource
 import com.github.ajalt.clikt.sources.ValueSource.Companion.getKey
-import com.github.ajalt.mordant.terminal.Terminal
 import com.github.ajalt.mordant.terminal.prompt
 import java.io.File
 import java.lang.reflect.Proxy
@@ -89,6 +88,7 @@ class CliContext(
     val renderer: Renderer,
     val tipProvider: TipProvider?,
     val logFilePath: String?,
+    val useFzf: Boolean,
     appWiringFactory: () -> AppWiring,
 ) {
     val appWiring by lazy(appWiringFactory)
@@ -191,6 +191,11 @@ applicable.
 
     private val logToFiles: Boolean by logToFilesDelegate
     private val logsDirectory: File by logsDirectoryDelegate
+
+    private val useFzf by
+        option().flag("--no-fzf", default = true).help {
+            "Use fzf for interactive selection when available"
+        }
 
     private val remoteBranchPrefix by
         option(hidden = true)
@@ -340,6 +345,7 @@ applicable.
                 renderer,
                 tipProvider = if (showTips) TipProvider() else null,
                 logFilePath = logFilePath,
+                useFzf = useFzf,
             ) {
                 try {
                     buildAppWiring(renderer)
@@ -463,6 +469,9 @@ abstract class GitJasprSubcommand(
 
     val renderer
         get() = cliContext.renderer
+
+    val useFzf
+        get() = cliContext.useFzf
 
     abstract suspend fun doRun()
 
@@ -802,31 +811,66 @@ class Checkout : GitJasprSubcommand(helpText = "Check out an existing named stac
             } else {
                 val remoteName = config.remoteName
                 val refs = stacks.map { "${remoteName}/${it.name()}" }
-                val shortMessages = appWiring.gitClient.getShortMessages(refs)
-                val terminal = currentContext.terminal
-                val lines = buildList {
-                    add(theme.heading("Named stacks targeting ${theme.entity(target)}:"))
-                    for ((index, stack) in stacks.withIndex()) {
-                        val ref = "${remoteName}/${stack.name()}"
-                        val message =
-                            shortMessages[ref]?.let { " ${theme.commitSubject(it)}" }.orEmpty()
-                        add(
-                            "  ${theme.keyHint("${index + 1}.")} " +
-                                "[${theme.entity(stack.stackName)}]$message"
-                        )
-                    }
+                val commits = appWiring.gitClient.getCommits(refs)
+                when (val result = selectViaFzf(stacks, commits, remoteName, target)) {
+                    is FzfResult.Selected -> result.value
+                    is FzfResult.Cancelled -> throw ProgramResult(130)
+                    is FzfResult.NotAvailable ->
+                        selectViaPrompt(stacks, commits, remoteName, target)
                 }
-                withContext(Dispatchers.IO) { printPaged(lines) }
-                promptForSelection(terminal, stacks)
             }
 
         gitJaspr.checkoutNamedStack(selected)
     }
 
-    private fun promptForSelection(
-        terminal: Terminal,
+    private fun selectViaFzf(
         stacks: List<RemoteNamedStackRef>,
+        commits: Map<String, Commit?>,
+        remoteName: String,
+        target: String,
+    ): FzfResult<RemoteNamedStackRef> {
+        if (!useFzf) return FzfResult.NotAvailable
+        val prefix = stacks.first().prefix
+        return fzfSelect(
+            items = stacks,
+            displayLine = { stack ->
+                // Raw ANSI codes with full resets (\e[0m) instead of Mordant's specific resets
+                // (\e[39m, \e[22m) to work around an fzf rendering bug where the first line in
+                // --reverse mode renders incorrectly with specific reset codes.
+                val ref = "${remoteName}/${stack.name()}"
+                val commit = commits[ref]
+                val subject = commit?.shortMessage?.let { "  \u001b[97m$it\u001b[0m" }.orEmpty()
+                val author = commit?.author?.name?.let { "  \u001b[2m<$it>\u001b[0m" }.orEmpty()
+                "\u001b[36m${stack.stackName}\u001b[0m$subject$author"
+            },
+            header = "Named stacks targeting $target:",
+            previewCommand =
+                "git log --color=always --graph -20" +
+                    " --pretty=format:'%C(red)%h%Creset %s %C(green)(%ar) %C(bold blue)<%an>%Creset'" +
+                    " $remoteName/$prefix/$target/{1}",
+        )
+    }
+
+    private suspend fun selectViaPrompt(
+        stacks: List<RemoteNamedStackRef>,
+        commits: Map<String, Commit?>,
+        remoteName: String,
+        target: String,
     ): RemoteNamedStackRef {
+        val lines = buildList {
+            add(theme.heading("Named stacks targeting ${theme.entity(target)}:"))
+            for ((index, stack) in stacks.withIndex()) {
+                val ref = "${remoteName}/${stack.name()}"
+                val message =
+                    commits[ref]?.shortMessage?.let { " ${theme.commitSubject(it)}" }.orEmpty()
+                add(
+                    "  ${theme.keyHint("${index + 1}.")} " +
+                        "[${theme.entity(stack.stackName)}]$message"
+                )
+            }
+        }
+        withContext(Dispatchers.IO) { printPaged(lines) }
+        val terminal = currentContext.terminal
         while (true) {
             val input = terminal.prompt("Select a stack (1-${stacks.size})")
             val selection = input?.toIntOrNull()
@@ -1330,6 +1374,69 @@ private val remoteBranchCandidates =
     CompletionCandidates.Custom.fromStdout(
         "git branch -r --format='%(refname:short)' | sed 's|^[^/]*/||' | sort -u"
     )
+
+/** Result of attempting an fzf-based selection. */
+private sealed interface FzfResult<out T> {
+    /** fzf is not installed. */
+    data object NotAvailable : FzfResult<Nothing>
+
+    /** The user made a selection. */
+    data class Selected<T>(val value: T) : FzfResult<T>
+
+    /** The user canceled (Esc / Ctrl-C). */
+    data object Cancelled : FzfResult<Nothing>
+}
+
+/**
+ * Presents [items] in fzf for interactive fuzzy selection. Each item is displayed using
+ * [displayLine]; an optional [previewCommand] enables the fzf `--preview` pane.
+ */
+private fun <T> fzfSelect(
+    items: List<T>,
+    displayLine: (T) -> String,
+    header: String? = null,
+    previewCommand: String? = null,
+): FzfResult<T> {
+    if (items.isEmpty()) return FzfResult.Cancelled
+    val fzfPath =
+        try {
+            ProcessBuilder("which", "fzf").redirectErrorStream(true).start().let { proc ->
+                val path = proc.inputStream.bufferedReader().readLine()?.trim()
+                if (proc.waitFor() == 0) path else null
+            }
+        } catch (_: Exception) {
+            null
+        } ?: return FzfResult.NotAvailable
+
+    val displayLines = items.map(displayLine)
+    val command = buildList {
+        add(fzfPath)
+        add("--ansi")
+        add("--height=~${items.size + 2}")
+        add("--reverse")
+        if (header != null) {
+            add("--header=$header")
+        }
+        if (previewCommand != null) {
+            add("--preview=$previewCommand")
+        }
+    }
+    return try {
+        val process = ProcessBuilder(command).redirectError(ProcessBuilder.Redirect.INHERIT).start()
+        process.outputStream.bufferedWriter().use { writer ->
+            for (line in displayLines) {
+                writer.write(line)
+                writer.newLine()
+            }
+        }
+        val selected = process.inputStream.bufferedReader().readLine()?.trim()
+        if (process.waitFor() != 0) return FzfResult.Cancelled
+        val index = displayLines.indexOfFirst { it == selected }
+        if (index >= 0) FzfResult.Selected(items[index]) else FzfResult.Cancelled
+    } catch (_: Exception) {
+        FzfResult.NotAvailable
+    }
+}
 
 /** Pipes [lines] through the user's pager (`$PAGER`, defaulting to `less -RF`). */
 private fun printPaged(lines: List<String>) {

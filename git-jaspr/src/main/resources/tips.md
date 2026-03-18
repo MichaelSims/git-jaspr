@@ -12,7 +12,7 @@ Lines beginning with `- ` are parsed as individual tips.
 - Run `jaspr status` to see an overview of your stack — which PRs have passing checks, are approved, or need attention.
 - Keep your stack up to date with the target branch by running `jaspr rebase`. This fetches the latest changes and rebases your stack in one step.
 - After your PRs are merged, run `jaspr clean` to interactively remove leftover local and remote branches.
-- Working on multiple stacks? Use `jaspr checkout` to interactively switch between your named stacks.
+- Working on multiple stacks? Use `jaspr checkout` to interactively switch between your named stacks. If you have fzf installed, you'll get fuzzy search with a preview pane — scroll it with Shift+Up/Down.
 - Don't want to wait for checks to pass? Run `jaspr auto-merge` and jaspr will poll for check completion and merge automatically when ready.
 - Only want to push part of your stack? Use `jaspr push -c 3` to push just the bottom 3 commits, or `jaspr push -c -1` to exclude the top commit.
 - If you hit a merge conflict during `jaspr edit` or `jaspr rebase`, resolve the conflict, stage the files with `git add`, then run `git rebase --continue`.
