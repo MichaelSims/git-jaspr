@@ -568,6 +568,12 @@ class Push : GitJasprSubcommand(helpText = "Push commits and create/update PRs")
 
     override suspend fun doRun() {
         requireCountLocalExclusive(count, targetRef.local)
+        if (!appWiring.gitClient.isWorkingDirectoryClean()) {
+            throw GitJasprException(
+                "Your working directory has local changes. " +
+                    "Please commit or stash them and re-run the command."
+            )
+        }
         val jaspr = appWiring.gitJaspr
 
         fun promptForNameIfNecessary(): String? {
