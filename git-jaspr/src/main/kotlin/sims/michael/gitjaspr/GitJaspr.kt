@@ -507,7 +507,8 @@ class GitJaspr(
         // GH-assigned PR numbers for new PRs until after we create them.
         logger.trace("updateDescriptions second pass {} {}", stack, prsToMutate)
         val prs = ghClient.getPullRequests(stack).filterByMatchingTargetRef()
-        val prsNeedingBodyUpdate = prs.updateDescriptionsWithStackInfo(stack)
+        val prsNeedingBodyUpdate =
+            prs.updateDescriptionsWithStackInfo(stack, effectiveStackName.stackName)
         withContext(Dispatchers.IO) {
             for (pr in prsNeedingBodyUpdate) {
                 launch { ghClient.updatePullRequest(pr) }
@@ -1095,7 +1096,8 @@ class GitJaspr(
             .toList()
 
     private fun List<PullRequest>.updateDescriptionsWithStackInfo(
-        stack: List<Commit>
+        stack: List<Commit>,
+        stackName: String? = null,
     ): List<PullRequest> {
         val prsById = associateBy { checkNotNull(it.commitId) }
         val stackById = stack.associateBy(Commit::id)
@@ -1116,6 +1118,7 @@ class GitJaspr(
                     pullRequests = stackPrsReordered.reversed(),
                     existingPr,
                     remoteBranchNames,
+                    stackName,
                 )
             existingPr.copy(body = newBody)
         }
@@ -1128,6 +1131,7 @@ class GitJaspr(
         pullRequests: List<PullRequest> = emptyList(),
         existingPr: PullRequest? = null,
         remoteBranchNames: List<String>,
+        stackName: String? = null,
     ): String {
         val jasprStartComment = "<!-- jaspr start -->"
         return buildString {
@@ -1146,6 +1150,13 @@ class GitJaspr(
             }
             appendLine()
             if (pullRequests.isNotEmpty()) {
+                if (stackName != null) {
+                    appendLine(
+                        "To pull this stack into your working copy (triple click to select):"
+                    )
+                    appendLine("<kbd>jaspr checkout -n $stackName</kbd>")
+                    appendLine()
+                }
                 appendLine("**Stack**:")
                 for (pr in pullRequests) {
                     append("- #${pr.number}")

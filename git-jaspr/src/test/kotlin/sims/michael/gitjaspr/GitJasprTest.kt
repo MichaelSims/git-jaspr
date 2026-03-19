@@ -2416,6 +2416,9 @@ interface GitJasprTest {
                     <!-- jaspr start -->
                     ### 1
 
+                    To pull this stack into your working copy (triple click to select):
+                    <kbd>jaspr checkout -n test-stack</kbd>
+
                     **Stack**:
                     - %s
                     - %s
@@ -2427,6 +2430,9 @@ interface GitJasprTest {
                     """
                     <!-- jaspr start -->
                     ### 2
+
+                    To pull this stack into your working copy (triple click to select):
+                    <kbd>jaspr checkout -n test-stack</kbd>
 
                     **Stack**:
                     - %s
@@ -2441,6 +2447,9 @@ interface GitJasprTest {
                     ### 3
 
                     This is a body
+
+                    To pull this stack into your working copy (triple click to select):
+                    <kbd>jaspr checkout -n test-stack</kbd>
 
                     **Stack**:
                     - %s ⬅
@@ -2503,6 +2512,9 @@ interface GitJasprTest {
                     <!-- jaspr start -->
                     ### A
 
+                    To pull this stack into your working copy (triple click to select):
+                    <kbd>jaspr checkout -n test-stack</kbd>
+
                     **Stack**:
                     - %s
                     - %s ⬅
@@ -2521,6 +2533,9 @@ interface GitJasprTest {
                     """
                     <!-- jaspr start -->
                     ### B
+
+                    To pull this stack into your working copy (triple click to select):
+                    <kbd>jaspr checkout -n test-stack</kbd>
 
                     **Stack**:
                     - %s
@@ -2541,6 +2556,9 @@ interface GitJasprTest {
                     <!-- jaspr start -->
                     ### C
 
+                    To pull this stack into your working copy (triple click to select):
+                    <kbd>jaspr checkout -n test-stack</kbd>
+
                     **Stack**:
                     - %s
                     - %s
@@ -2560,6 +2578,9 @@ interface GitJasprTest {
                     <!-- jaspr start -->
                     ### D
 
+                    To pull this stack into your working copy (triple click to select):
+                    <kbd>jaspr checkout -n test-stack</kbd>
+
                     **Stack**:
                     - %s
                     - %s ⬅
@@ -2573,6 +2594,9 @@ interface GitJasprTest {
                     """
                     <!-- jaspr start -->
                     ### E
+
+                    To pull this stack into your working copy (triple click to select):
+                    <kbd>jaspr checkout -n test-stack</kbd>
 
                     **Stack**:
                     - %s
@@ -2593,6 +2617,9 @@ interface GitJasprTest {
                     <!-- jaspr start -->
                     ### one
 
+                    To pull this stack into your working copy (triple click to select):
+                    <kbd>jaspr checkout -n test-stack</kbd>
+
                     **Stack**:
                     - %s
                     - %s
@@ -2611,6 +2638,9 @@ interface GitJasprTest {
                     """
                     <!-- jaspr start -->
                     ### two
+
+                    To pull this stack into your working copy (triple click to select):
+                    <kbd>jaspr checkout -n test-stack</kbd>
 
                     **Stack**:
                     - %s ⬅
@@ -2690,6 +2720,9 @@ interface GitJasprTest {
                     <!-- jaspr start -->
                     ### A
 
+                    To pull this stack into your working copy (triple click to select):
+                    <kbd>jaspr checkout -n test-stack</kbd>
+
                     **Stack**:
                     - %s
                     - %s
@@ -2701,6 +2734,9 @@ interface GitJasprTest {
                     """
                     <!-- jaspr start -->
                     ### B
+
+                    To pull this stack into your working copy (triple click to select):
+                    <kbd>jaspr checkout -n test-stack</kbd>
 
                     **Stack**:
                     - %s
@@ -2714,6 +2750,9 @@ interface GitJasprTest {
                     <!-- jaspr start -->
                     ### C
 
+                    To pull this stack into your working copy (triple click to select):
+                    <kbd>jaspr checkout -n test-stack</kbd>
+
                     **Stack**:
                     - %s ⬅
                     - %s
@@ -2726,6 +2765,9 @@ interface GitJasprTest {
                     <!-- jaspr start -->
                     ### D
 
+                    To pull this stack into your working copy (triple click to select):
+                    <kbd>jaspr checkout -n test-stack</kbd>
+
                     **Stack**:
                     - %s ⬅
                     - %s
@@ -2737,6 +2779,9 @@ interface GitJasprTest {
                     """
                     <!-- jaspr start -->
                     ### E
+
+                    To pull this stack into your working copy (triple click to select):
+                    <kbd>jaspr checkout -n test-stack</kbd>
 
                     **Stack**:
                     - %s ⬅
