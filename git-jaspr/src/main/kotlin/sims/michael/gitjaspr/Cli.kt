@@ -948,6 +948,10 @@ class Rebase : GitJasprSubcommand() {
             }
 
         if (rebaseResult != 0) {
+            renderer.warn {
+                "Rebase stopped (exit code $rebaseResult). " +
+                    "Resolve any conflicts, stage the files, then run ${command("git rebase --continue")}."
+            }
             throw ProgramResult(rebaseResult)
         }
     }
