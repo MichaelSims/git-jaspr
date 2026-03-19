@@ -2338,7 +2338,7 @@ interface GitJasprTest {
 
     @Push
     @Test
-    fun `suggestStackName returns suggested name for new stack`() {
+    fun `suggestStackNames returns suggested names for new stack`() {
         withTestSetup(useFakeRemote) {
             createCommitsFrom(
                 testCase {
@@ -2353,14 +2353,14 @@ interface GitJasprTest {
                 }
             )
 
-            val suggested = gitJaspr.suggestStackName()
-            assertEquals("one", suggested)
+            val suggested = gitJaspr.suggestStackNames()
+            assertEquals(listOf("one", "two"), suggested)
         }
     }
 
     @Push
     @Test
-    fun `suggestStackName returns null for existing stack`() {
+    fun `suggestStackNames returns empty list for existing stack`() {
         withTestSetup(useFakeRemote) {
             createCommitsFrom(
                 testCase {
@@ -2378,9 +2378,9 @@ interface GitJasprTest {
             // Push with an explicit name to create an existing stack
             gitJaspr.push(stackName = "my-stack")
 
-            // suggestStackName should return null since the stack already has a name
-            val suggested = gitJaspr.suggestStackName()
-            assertEquals(null, suggested)
+            // suggestStackNames should return empty since the stack already has a name
+            val suggested = gitJaspr.suggestStackNames()
+            assertEquals(emptyList(), suggested)
         }
     }
 

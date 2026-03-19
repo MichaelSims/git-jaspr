@@ -570,10 +570,18 @@ class Push : GitJasprSubcommand(helpText = "Push commits and create/update PRs")
         requireCountLocalExclusive(count, targetRef.local)
         val jaspr = appWiring.gitJaspr
 
-        fun promptForNameIfNecessary(): String? =
-            jaspr.suggestStackName(targetRef.refSpec)?.let { suggested ->
-                promptForStackName(suggested)
+        fun promptForNameIfNecessary(): String? {
+            val candidates = jaspr.suggestStackNames(targetRef.refSpec)
+            if (candidates.isEmpty()) return null
+            if (useFzf && candidates.size > 1) {
+                when (val result = selectNameViaFzf(candidates)) {
+                    is FzfResult.Selected -> return result.value
+                    is FzfResult.Cancelled -> throw ProgramResult(130)
+                    is FzfResult.NotAvailable -> {} // fall through to prompt
+                }
             }
+            return promptForStackName(candidates.first())
+        }
 
         val effectiveName = name ?: promptForNameIfNecessary()
         jaspr.push(
@@ -603,6 +611,9 @@ class Push : GitJasprSubcommand(helpText = "Push commits and create/update PRs")
         val response = terminal.prompt("Continue? [y/N]")?.trim()?.lowercase()
         return response == "y" || response == "yes"
     }
+
+    private fun selectNameViaFzf(candidates: List<String>): FzfResult<String> =
+        fzfSelect(items = candidates, displayLine = { it }, header = "Select a stack name:")
 
     private fun promptForStackName(suggested: String): String {
         renderer.info {

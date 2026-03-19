@@ -236,8 +236,8 @@ class NativeImageMetadataTest {
                     }
                 }
             )
-            val suggested = gitJaspr.suggestStackName()
-            logger.info("Suggested stack name: {}", suggested)
+            val suggested = gitJaspr.suggestStackNames()
+            logger.info("Suggested stack names: {}", suggested)
         }
     }
 

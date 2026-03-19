@@ -1557,13 +1557,14 @@ class GitJaspr(
     }
 
     /**
-     * Returns a suggested stack name for the given [refSpec] if the stack needs a new name, or null
-     * if the stack already has an existing name on the remote. The suggestion is derived from the
-     * first commit's subject.
+     * Returns a list of suggested stack name candidates for the given [refSpec], or an empty list
+     * if the stack already has an existing name on the remote or is empty. Candidates are derived
+     * from progressive truncations of each commit's subject, with the first commit's candidates
+     * listed first.
      */
-    fun suggestStackName(
+    fun suggestStackNames(
         refSpec: RefSpec = RefSpec(DEFAULT_LOCAL_OBJECT, DEFAULT_TARGET_REF)
-    ): String? {
+    ): List<String> {
         val remoteName = config.remoteName
         gitClient.fetch(remoteName)
 
@@ -1580,16 +1581,18 @@ class GitJaspr(
                     .included
             }
 
-        if (stack.isEmpty()) return null
+        if (stack.isEmpty()) return emptyList()
 
         val existingName =
             (getExistingStackName(stack) as? Found)?.name?.let { existingBranchName ->
                 RemoteNamedStackRef.parse(existingBranchName, config.remoteNamedStackBranchPrefix)
                     ?.stackName
             }
-        if (existingName != null) return null
+        if (existingName != null) return emptyList()
 
-        return StackNameGenerator.generateName(stack.first().shortMessage)
+        return stack
+            .flatMap { commit -> StackNameGenerator.generateNameCandidates(commit.shortMessage) }
+            .distinct()
     }
 
     private fun refOrRefs(count: Int) = if (count == 1) "ref" else "refs"

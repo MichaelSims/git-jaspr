@@ -19,6 +19,27 @@ object StackNameGenerator {
             .trim('-')
             .let { string -> truncateAtWordBoundary(string, MAX_LENGTH) }
 
+    /**
+     * Generates a list of candidate stack names by progressively truncating the slugified subject
+     * at hyphen boundaries. The full name is first, followed by shorter variants down to a minimum
+     * of 2 segments.
+     */
+    fun generateNameCandidates(subject: String): List<String> {
+        val full = generateName(subject)
+        if (full.isEmpty()) return emptyList()
+        return buildList {
+            add(full)
+            var current = full
+            while (true) {
+                val lastHyphen = current.lastIndexOf('-')
+                if (lastHyphen < 0) break
+                current = current.substring(0, lastHyphen)
+                if (current.count { it == '-' } < 1) break // enforce minimum 2 segments
+                add(current)
+            }
+        }
+    }
+
     /** Generates a random 4-letter suffix for use in collision resolution. */
     fun generateSuffix(random: Random = Random.Default): String {
         val chars = "abcdefghijklmnopqrstuvwxyz"
