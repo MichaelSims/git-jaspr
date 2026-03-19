@@ -872,11 +872,12 @@ class Checkout : GitJasprSubcommand(helpText = "Check out an existing named stac
             add(theme.heading("Named stacks targeting ${theme.entity(target)}:"))
             for ((index, stack) in stacks.withIndex()) {
                 val ref = "${remoteName}/${stack.name()}"
-                val message =
-                    commits[ref]?.shortMessage?.let { " ${theme.commitSubject(it)}" }.orEmpty()
+                val commit = commits[ref]
+                val message = commit?.shortMessage?.let { " ${theme.commitSubject(it)}" }.orEmpty()
+                val author = commit?.author?.name?.let { " ${theme.muted("<$it>")}" }.orEmpty()
                 add(
                     "  ${theme.keyHint("${index + 1}.")} " +
-                        "[${theme.entity(stack.stackName)}]$message"
+                        "[${theme.entity(stack.stackName)}]$message$author"
                 )
             }
         }
