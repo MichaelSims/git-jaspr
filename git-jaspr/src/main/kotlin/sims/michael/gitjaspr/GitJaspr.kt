@@ -1,6 +1,8 @@
 package sims.michael.gitjaspr
 
-import java.nio.file.Files
+import java.io.File
+import java.io.RandomAccessFile
+import java.nio.channels.FileLock
 import java.time.ZonedDateTime
 import java.util.SortedSet
 import kotlin.text.RegexOption.IGNORE_CASE
@@ -680,67 +682,65 @@ class GitJaspr(
         // Use the topmost non-excluded commit as the localRef for auto-merge
         val adjustedLocalRef = filteredStack.last().hash
 
-        // We'll execute the auto-merge in a temporary clone after grabbing the current HEAD ref.
+        // We'll execute the auto-merge in a cached clone after grabbing the current HEAD ref.
         // This way the user can run this in the background or in another terminal and continue to
         // use their working copy without interfering with the auto-merge process.
         val currentRef = gitClient.log(refSpec.localRef, 1).first().hash
-        val tempRefSpec = refSpec.copy(localRef = adjustedLocalRef)
-        logger.trace("autoMerge refSpec: {}", tempRefSpec)
-
-        val tempDir =
-            withContext(Dispatchers.IO) {
-                Files.createTempDirectory("git-jaspr-automerge-").toFile()
-            }
-        logger.debug("Created temporary directory for auto-merge: {}", tempDir.absolutePath)
+        val autoMergeRefSpec = refSpec.copy(localRef = adjustedLocalRef)
+        logger.trace("autoMerge refSpec: {}", autoMergeRefSpec)
 
         val remoteUri =
             requireNotNull(gitClient.getRemoteUriOrNull(remoteName)) {
                 "Could not find remote URI for remote: $remoteName"
             }
 
-        val tempGit = OptimizedCliGitClient(tempDir, config.remoteBranchPrefix)
+        val cacheDir = getAutoMergeCacheDir()
+        val lockFile = RandomAccessFile(File("${cacheDir.absolutePath}.lock"), "rw")
+        val lock = acquireAutoMergeLock(lockFile)
+
         try {
-            renderer.info { "Cloning repository to temporary directory for auto-merge..." }
-            val cloneTime = measureTime {
+            val cacheDirGit = OptimizedCliGitClient(cacheDir, config.remoteBranchPrefix)
+            val isCached = cacheDir.resolve(".git").isDirectory
+            val setupTime = measureTime {
                 coroutineScope {
                     val heartbeat = launch {
                         delay(5.seconds)
                         while (isActive) {
-                            renderer.info { "Still cloning, please wait... (CTRL-C to cancel)" }
+                            renderer.info { "Still working, please wait... (CTRL-C to cancel)" }
                             delay(5.seconds)
                         }
                     }
                     withContext(Dispatchers.IO) {
-                        tempGit.clone(remoteUri, remoteName)
+                        if (isCached) {
+                            renderer.info { "Fetching latest changes into auto-merge cache..." }
+                            cacheDirGit.fetch(remoteName)
+                        } else {
+                            renderer.info { "Cloning repository into auto-merge cache..." }
+                            cacheDirGit.clone(remoteUri, remoteName)
+                        }
 
-                        // Add the original working directory as a remote so we can fetch unpushed
-                        // commits
-                        logger.debug("Adding local remote for unpushed commits")
-                        tempGit.addRemote("local", config.workingDirectory.absolutePath)
-                        tempGit.fetch("local")
+                        // Add/update the original working directory as a remote so we can fetch
+                        // unpushed commits
+                        if (cacheDirGit.getRemoteUriOrNull("local") == null) {
+                            logger.debug("Adding local remote for unpushed commits")
+                            cacheDirGit.addRemote("local", config.workingDirectory.absolutePath)
+                        }
+                        cacheDirGit.fetch("local")
 
-                        tempGit.checkout(currentRef)
+                        cacheDirGit.checkout(currentRef)
                     }
                     heartbeat.cancel()
                 }
             }
-            logger.debug("Cloned repository to temporary directory in {}", cloneTime)
-        } catch (e: Exception) {
-            logger.error(
-                "Failed to set up temporary clone for auto-merge in ${tempDir.absolutePath}",
-                e,
-            )
-            tempDir.deleteRecursively()
-            throw e
-        }
+            val verb = if (isCached) "Fetched" else "Cloned"
+            logger.debug("{} auto-merge cache in {}", verb, setupTime)
 
-        // Run the auto-merge loop
-        try {
-            val tempJaspr =
+            // Run the auto-merge loop
+            val cacheDirJaspr =
                 GitJaspr(
                     ghClient,
-                    tempGit,
-                    config.copy(workingDirectory = tempDir),
+                    cacheDirGit,
+                    config.copy(workingDirectory = cacheDir),
                     newUuid,
                     commitIdentOverride,
                     renderer,
@@ -749,36 +749,39 @@ class GitJaspr(
             var attemptsMade = 0
             while (attemptsMade < maxAttempts) {
                 val numCommitsBehind =
-                    tempGit
-                        .logRange(tempRefSpec.localRef, "$remoteName/${tempRefSpec.remoteRef}")
+                    cacheDirGit
+                        .logRange(
+                            autoMergeRefSpec.localRef,
+                            "$remoteName/${autoMergeRefSpec.remoteRef}",
+                        )
                         .size
                 if (numCommitsBehind > 0) {
                     val commits = if (numCommitsBehind > 1) "commits" else "commit"
-                    showMergeOutOfDateWarning(numCommitsBehind, commits, tempRefSpec)
+                    showMergeOutOfDateWarning(numCommitsBehind, commits, autoMergeRefSpec)
                     break
                 }
 
                 val stack =
-                    tempGit.getLocalCommitStack(
+                    cacheDirGit.getLocalCommitStack(
                         remoteName,
-                        tempRefSpec.localRef,
-                        tempRefSpec.remoteRef,
+                        autoMergeRefSpec.localRef,
+                        autoMergeRefSpec.remoteRef,
                     )
                 if (stack.isEmpty()) {
                     showStackIsEmptyWarning()
                     break
                 }
 
-                val statuses = tempJaspr.getRemoteCommitStatuses(stack)
+                val statuses = cacheDirJaspr.getRemoteCommitStatuses(stack)
                 if (statuses.all(RemoteCommitStatus::isMergeable)) {
-                    tempJaspr.merge(tempRefSpec)
+                    cacheDirJaspr.merge(autoMergeRefSpec)
 
                     // Since we merged from a separate directory, the local working copy will be
                     // out of date, so let's fetch the latest changes.
                     gitClient.fetch(remoteName)
                     break
                 }
-                print(tempJaspr.getStatusString(tempRefSpec))
+                print(cacheDirJaspr.getStatusString(autoMergeRefSpec))
 
                 if (statuses.any { status -> status.checksPass == false }) {
                     renderer.warn { "Checks are failing. Aborting auto-merge." }
@@ -795,21 +798,18 @@ class GitJaspr(
                 }
                 delay(pollingIntervalSeconds.seconds)
                 // Fetch the latest changes before we try again
-                tempGit.fetch(remoteName)
+                cacheDirGit.fetch(remoteName)
             }
-
-            // Either the merge was successful, or we exited the loop because the stack was not
-            // mergeable. Either way we delete the temp directory.
-            tempDir.deleteRecursively()
-            logger.debug("Cleaned up temporary directory: {}", tempDir.absolutePath)
         } catch (e: Exception) {
-            // Keep the temporary directory on exception for troubleshooting
             logger.error(
-                "Auto-merge failed with exception. Temporary directory has been retained for troubleshooting: {}",
-                tempDir.absolutePath,
+                "Auto-merge failed with exception. Cache directory: {}",
+                cacheDir.absolutePath,
                 e,
             )
             throw e
+        } finally {
+            lock.release()
+            lockFile.close()
         }
     }
 
@@ -1760,6 +1760,19 @@ class GitJaspr(
             commitIdentOverride,
             renderer,
         )
+
+    private fun getAutoMergeCacheDir(): File {
+        val jaspDir = config.workingDirectory.resolve(".git/jaspr")
+        jaspDir.mkdirs()
+        return jaspDir.resolve("automerge")
+    }
+
+    private fun acquireAutoMergeLock(lockFile: RandomAccessFile): FileLock =
+        lockFile.channel.tryLock()
+            ?: throw GitJasprException(
+                "Another auto-merge is already running for this repository. " +
+                    "If this is unexpected, check for stale processes."
+            )
 
     companion object {
         private val HEADER =
