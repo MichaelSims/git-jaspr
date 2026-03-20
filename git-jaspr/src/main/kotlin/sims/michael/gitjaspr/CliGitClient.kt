@@ -257,6 +257,8 @@ class CliGitClient(
         val command = buildList {
             add("git")
             add("commit")
+            // Allow empty so commits with no tree changes (e.g. --allow-empty) don't get rejected
+            add("--allow-empty")
             if (amend) {
                 add("--amend")
             }

@@ -268,7 +268,9 @@ class JGitClient(
 
         return useGit { git ->
             fun createCommitCommand(): CommitCommand {
-                val commitCommand = git.commit().setAmend(amend)
+                // Allow empty so commits with no tree changes (e.g. --allow-empty) don't get
+                // rejected
+                val commitCommand = git.commit().setAmend(amend).setAllowEmpty(true)
                 if (message != null || footerLines != null) {
                     val existingFullMessage: String?
                     val existingFooterLines: Map<String, String>?
