@@ -335,6 +335,8 @@ class GitJaspr(
             )
         }
 
+        installCommitIdHook()
+
         val remoteName = config.remoteName
         gitClient.fetch(remoteName)
 
@@ -1055,13 +1057,16 @@ class GitJaspr(
         val hooksDir = config.workingDirectory.resolve(".git").resolve("hooks")
         require(hooksDir.isDirectory)
         val hook = hooksDir.resolve(COMMIT_MSG_HOOK)
-        val source = checkNotNull(javaClass.getResourceAsStream("/$COMMIT_MSG_HOOK"))
+        val bundledContent =
+            checkNotNull(javaClass.getResourceAsStream("/$COMMIT_MSG_HOOK")).use { it.readBytes() }
+        if (hook.exists() && hook.canExecute() && hook.readBytes().contentEquals(bundledContent)) {
+            logger.trace("Commit-msg hook is already up-to-date")
+            return
+        }
         renderer.info {
             "Installing/overwriting ${entity(COMMIT_MSG_HOOK)} to ${entity(hook.toString())} and setting the executable bit"
         }
-        source.use { inStream ->
-            hook.outputStream().use { outStream -> inStream.copyTo(outStream) }
-        }
+        hook.writeBytes(bundledContent)
         check(hook.setExecutable(true)) { "Failed to set the executable bit on $hook" }
     }
 
@@ -1406,9 +1411,6 @@ class GitJaspr(
 
         renderer.warn {
             "Some commits in your local stack are missing commit IDs and are being amended to add them."
-        }
-        renderer.warn {
-            "Consider running ${command(InstallCommitIdHook().commandName)} to avoid this in the future."
         }
         val missing = commits.slice(indexOfFirstCommitMissingId until commits.size)
         val refName = "${missing.first().hash}^"

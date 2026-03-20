@@ -1249,6 +1249,32 @@ interface GitJasprTest {
     // region push tests
     @Push
     @Test
+    fun `push installs commit-id hook`() {
+        withTestSetup(useFakeRemote) {
+            createCommitsFrom(
+                testCase {
+                    repository {
+                        commit {
+                            title = "one"
+                            localRefs += "main"
+                            remoteRefs += "main"
+                        }
+                    }
+                }
+            )
+
+            val hook = localRepo.resolve(".git").resolve("hooks").resolve("commit-msg")
+            assertFalse(hook.exists())
+
+            push()
+
+            assertTrue(hook.exists())
+            assertTrue(hook.canExecute())
+        }
+    }
+
+    @Push
+    @Test
     fun `push fetches from remote`() {
         withTestSetup(useFakeRemote) {
             createCommitsFrom(
