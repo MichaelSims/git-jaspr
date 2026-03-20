@@ -386,39 +386,40 @@ private constructor(
     }
 
     private fun CommitData.create(): Commit {
-        val file = localRepo.resolve("${title.sanitize()}.txt")
-        file.writeText("Title: $title\n")
+        if (!empty) {
+            val file = localRepo.resolve("${title.sanitize()}.txt")
+            file.writeText("Title: $title\n")
+            localGit.add(file.name)
+        }
         val safeId = id
         val safeWillPassVerification = willPassVerification
-        return localGit
-            .add(file.name)
-            .commit(
-                message =
-                    if (body.isNotEmpty()) {
-                        title.trim() + "\n\n" + body.trim() + "\n"
-                    } else {
-                        title
-                    },
-                footerLines =
-                    buildMap {
-                        putAll(footerLines)
-                        if (safeId == null || safeId.isNotBlank()) {
-                            put(
-                                COMMIT_ID_LABEL,
-                                safeId
-                                    ?: title.also {
-                                        require(!it.contains("\\s+".toRegex())) {
-                                            "ID wasn't provided and title '$it' can\'t be used as it contains whitespace."
-                                        }
-                                    },
-                            )
-                        }
-                        if (safeWillPassVerification != null) {
-                            put("verify-result", if (safeWillPassVerification) "0" else "13")
-                        }
-                    },
-                committer = committer.toIdent(),
-            )
+        return localGit.commit(
+            message =
+                if (body.isNotEmpty()) {
+                    title.trim() + "\n\n" + body.trim() + "\n"
+                } else {
+                    title
+                },
+            footerLines =
+                buildMap {
+                    putAll(footerLines)
+                    if (safeId == null || safeId.isNotBlank()) {
+                        put(
+                            COMMIT_ID_LABEL,
+                            safeId
+                                ?: title.also {
+                                    require(!it.contains("\\s+".toRegex())) {
+                                        "ID wasn't provided and title '$it' can\'t be used as it contains whitespace."
+                                    }
+                                },
+                        )
+                    }
+                    if (safeWillPassVerification != null) {
+                        put("verify-result", if (safeWillPassVerification) "0" else "13")
+                    }
+                },
+            committer = committer.toIdent(),
+        )
     }
 
     private fun IdentData.toIdent(): Ident =
