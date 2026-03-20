@@ -326,9 +326,25 @@ class JGitClient(
     override fun cherryPick(commit: Commit, committer: Ident?, author: Ident?): Commit {
         logger.trace("cherryPick {} {} {}", commit, committer, author)
         return useGit { git ->
-            git.cherryPick().include(git.repository.resolve(commit.hash)).call()
-
             val r = git.repository
+            val headBefore = r.findRef(GitClient.HEAD).objectId
+            git.cherryPick().include(r.resolve(commit.hash)).call()
+            val headAfter = r.findRef(GitClient.HEAD).objectId
+
+            if (headBefore == headAfter) {
+                // JGit's cherry-pick reports Ok for empty commits but doesn't create a new commit.
+                // Clean up any leftover cherry-pick state and create the commit manually.
+                r.writeCherryPickHead(null)
+                r.writeMergeCommitMsg(null)
+                val sourceCommit = r.parseCommit(r.resolve(commit.hash))
+                git.commit()
+                    .setAllowEmpty(true)
+                    .setNoVerify(true)
+                    .setMessage(sourceCommit.fullMessage)
+                    .setAuthor(sourceCommit.authorIdent)
+                    .call()
+            }
+
             val headCommit = r.parseCommit(r.findRef(GitClient.HEAD).objectId).toCommit(git)
 
             val isUpdatingCommitter = committer != null && committer != headCommit.committer
