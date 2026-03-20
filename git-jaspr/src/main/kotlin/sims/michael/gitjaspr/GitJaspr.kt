@@ -9,9 +9,7 @@ import kotlin.text.RegexOption.IGNORE_CASE
 import kotlin.time.Duration.Companion.seconds
 import kotlin.time.measureTime
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.delay
-import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import org.slf4j.LoggerFactory
@@ -658,6 +656,7 @@ class GitJaspr(
         pollingIntervalSeconds: Int = 10,
         maxAttempts: Int = Int.MAX_VALUE,
         count: Int? = null,
+        theme: Theme = MonoTheme,
     ) {
         logger.trace("autoMerge {} {}", refSpec, pollingIntervalSeconds)
 
@@ -702,34 +701,26 @@ class GitJaspr(
             val cacheDirGit = OptimizedCliGitClient(cacheDir, config.remoteBranchPrefix)
             val isCached = cacheDir.resolve(".git").isDirectory
             val setupTime = measureTime {
-                coroutineScope {
-                    val heartbeat = launch {
-                        delay(5.seconds)
-                        while (isActive) {
-                            renderer.info { "Still working, please wait... (CTRL-C to cancel)" }
-                            delay(5.seconds)
-                        }
+                withContext(Dispatchers.IO) {
+                    cacheDirGit.showStderr = true
+                    if (isCached) {
+                        renderer.info { "Fetching latest changes into auto-merge cache..." }
+                        cacheDirGit.fetch(remoteName)
+                    } else {
+                        renderer.info { "Cloning repository into auto-merge cache..." }
+                        cacheDirGit.clone(remoteUri, remoteName)
                     }
-                    withContext(Dispatchers.IO) {
-                        if (isCached) {
-                            renderer.info { "Fetching latest changes into auto-merge cache..." }
-                            cacheDirGit.fetch(remoteName)
-                        } else {
-                            renderer.info { "Cloning repository into auto-merge cache..." }
-                            cacheDirGit.clone(remoteUri, remoteName)
-                        }
 
-                        // Add/update the original working directory as a remote so we can fetch
-                        // unpushed commits
-                        if (cacheDirGit.getRemoteUriOrNull("local") == null) {
-                            logger.debug("Adding local remote for unpushed commits")
-                            cacheDirGit.addRemote("local", config.workingDirectory.absolutePath)
-                        }
-                        cacheDirGit.fetch("local")
-
-                        cacheDirGit.checkout(currentRef)
+                    // Add/update the original working directory as a remote so we can fetch
+                    // unpushed commits
+                    if (cacheDirGit.getRemoteUriOrNull("local") == null) {
+                        logger.debug("Adding local remote for unpushed commits")
+                        cacheDirGit.addRemote("local", config.workingDirectory.absolutePath)
                     }
-                    heartbeat.cancel()
+                    cacheDirGit.fetch("local")
+                    cacheDirGit.showStderr = false
+
+                    cacheDirGit.checkout(currentRef)
                 }
             }
             val verb = if (isCached) "Fetched" else "Cloned"
@@ -781,7 +772,7 @@ class GitJaspr(
                     gitClient.fetch(remoteName)
                     break
                 }
-                print(cacheDirJaspr.getStatusString(autoMergeRefSpec))
+                print(cacheDirJaspr.getStatusString(autoMergeRefSpec, theme))
 
                 if (statuses.any { status -> status.checksPass == false }) {
                     renderer.warn { "Checks are failing. Aborting auto-merge." }

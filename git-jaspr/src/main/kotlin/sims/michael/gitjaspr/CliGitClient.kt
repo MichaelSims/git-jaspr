@@ -14,6 +14,9 @@ class CliGitClient(
 
     private val logger = LoggerFactory.getLogger(CliGitClient::class.java)
 
+    /** When true, git commands write their stderr (e.g. progress) directly to the terminal. */
+    var showStderr = false
+
     override fun init(): GitClient {
         logger.trace("init")
         require(workingDirectory.exists() || workingDirectory.mkdir()) {
@@ -590,6 +593,7 @@ class CliGitClient(
             .command(command)
             .destroyOnExit()
             .readOutput(true)
+            .apply { if (showStderr) redirectError(System.err) }
             .execute()
             .also(ProcessResult::requireZeroExitValue)
     }

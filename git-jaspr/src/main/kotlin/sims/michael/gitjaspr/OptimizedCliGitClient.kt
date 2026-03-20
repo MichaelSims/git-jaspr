@@ -14,6 +14,13 @@ class OptimizedCliGitClient
 private constructor(private val cliGitClient: CliGitClient, private val jGitClient: JGitClient) :
     GitClient by jGitClient {
 
+    /** When true, git commands write their stderr (e.g. progress) directly to the terminal. */
+    var showStderr: Boolean
+        get() = cliGitClient.showStderr
+        set(value) {
+            cliGitClient.showStderr = value
+        }
+
     override fun clone(uri: String, remoteName: String, bare: Boolean): GitClient {
         cliGitClient.clone(uri, remoteName, bare)
         return this
@@ -39,7 +46,7 @@ private constructor(private val cliGitClient: CliGitClient, private val jGitClie
         operator fun invoke(
             workingDirectory: File,
             remoteBranchPrefix: String = RemoteRefEncoding.DEFAULT_REMOTE_BRANCH_PREFIX,
-        ): GitClient {
+        ): OptimizedCliGitClient {
             val cliGitClient = CliGitClient(workingDirectory, remoteBranchPrefix)
             val jGitClient = JGitClient(workingDirectory, remoteBranchPrefix)
             return OptimizedCliGitClient(cliGitClient, jGitClient)
