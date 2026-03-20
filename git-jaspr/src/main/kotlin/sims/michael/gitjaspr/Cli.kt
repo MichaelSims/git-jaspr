@@ -670,7 +670,7 @@ class AutoMerge : GitJasprSubcommand(helpText = "Wait for checks then merge") {
 
     override suspend fun doRun() {
         requireCountLocalExclusive(count, targetRef.local)
-        appWiring.gitJaspr.autoMerge(targetRef.refSpec, interval, count = count)
+        appWiring.gitJaspr.autoMerge(targetRef.refSpec, interval, count = count, theme = theme)
     }
 }
 
