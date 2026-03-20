@@ -1275,6 +1275,34 @@ interface GitJasprTest {
 
     @Push
     @Test
+    fun `push handles empty commits without commit IDs`() {
+        withTestSetup(useFakeRemote) {
+            createCommitsFrom(
+                testCase {
+                    repository {
+                        commit {
+                            title = "one"
+                            remoteRefs += "main"
+                        }
+                        commit {
+                            title = "empty"
+                            id = "" // no commit-id footer
+                            empty = true
+                            localRefs += "development"
+                        }
+                    }
+                }
+            )
+
+            push()
+
+            val stack = localGit.getLocalCommitStack(remoteName, "HEAD", DEFAULT_TARGET_REF)
+            assertTrue(stack.all { it.id != null })
+        }
+    }
+
+    @Push
+    @Test
     fun `push fetches from remote`() {
         withTestSetup(useFakeRemote) {
             createCommitsFrom(

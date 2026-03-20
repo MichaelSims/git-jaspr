@@ -294,7 +294,7 @@ class CliGitClient(
     override fun cherryPick(commit: Commit, committer: Ident?, author: Ident?): Commit {
         logger.trace("cherryPick {} {} {}", commit, committer, author)
         val env = getIdentEnvironmentMap(committer, author)
-        executeCommand(listOf("git", "cherry-pick", commit.hash), env)
+        executeCommand(listOf("git", "cherry-pick", "--allow-empty", commit.hash), env)
         if (author != null && log("HEAD", 1).single().author != author) {
             logger.debug("Resetting author to {} after cherry-pick via commit --amend", author)
             executeCommand(listOf("git", "commit", "--amend", "--no-edit", "--reset-author"), env)
