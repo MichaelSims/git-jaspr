@@ -577,16 +577,23 @@ class Push : GitJasprSubcommand(helpText = "Push commits and create/update PRs")
         val jaspr = appWiring.gitJaspr
 
         fun promptForNameIfNecessary(): String? {
-            val candidates = jaspr.suggestStackNames(targetRef.refSpec)
-            if (candidates.isEmpty()) return null
-            if (useFzf && candidates.size > 1) {
-                when (val result = selectNameViaFzf(candidates)) {
+            val suggestions = jaspr.suggestStackNames(targetRef.refSpec)
+            if (suggestions.candidates.isEmpty()) return null
+            if (suggestions.ambiguousStackNames.isNotEmpty()) {
+                renderer.warn {
+                    "Commits exist in multiple stacks: " +
+                        suggestions.ambiguousStackNames.joinToString(", ") { entity(it) } +
+                        ". Select one to update it, or choose a new name."
+                }
+            }
+            if (useFzf && suggestions.candidates.size > 1) {
+                when (val result = selectNameViaFzf(suggestions.candidates)) {
                     is FzfResult.Selected -> return result.value
                     is FzfResult.Cancelled -> throw ProgramResult(130)
                     is FzfResult.NotAvailable -> {} // fall through to prompt
                 }
             }
-            return promptForStackName(candidates.first())
+            return promptForStackName(suggestions.candidates.first())
         }
 
         val effectiveName = name ?: promptForNameIfNecessary()

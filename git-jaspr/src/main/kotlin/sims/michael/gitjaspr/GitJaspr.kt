@@ -189,7 +189,17 @@ class GitJaspr(
             val numCommitsAhead: Int,
             val numCommitsBehind: Int,
         )
-        val stackName = (getExistingStackName(stack, remoteBranches, strategy) as? Found)?.name
+        val stackSearchResult = getExistingStackName(stack, remoteBranches, strategy)
+        if (stackSearchResult is MultipleStacksContainCommit) {
+            appendLine()
+            appendLine(
+                theme.warning(
+                    "Stack name could not be determined: commits exist in multiple stacks: " +
+                        stackSearchResult.stackNames.joinToString(", ") { theme.entity(it) }
+                )
+            )
+        }
+        val stackName = (stackSearchResult as? Found)?.name
         if (stackName != null) {
             val headStackCommit = stack.last().hash
             val trackingBranch = "$remoteName/$stackName"
@@ -232,6 +242,11 @@ class GitJaspr(
             }
         }
     }
+
+    data class StackNameSuggestions(
+        val candidates: List<String>,
+        val ambiguousStackNames: List<String> = emptyList(),
+    )
 
     private sealed class NamedStackSearchResult
 
@@ -404,8 +419,9 @@ class GitJaspr(
         val localRef = gitClient.log(filteredRefSpec.localRef, 1).single().hash
 
         // Determine the effective stack name
+        val stackSearchResult = getExistingStackName(stack)
         val existingStackName =
-            (getExistingStackName(stack) as? Found)?.name?.let { existingBranchName ->
+            (stackSearchResult as? Found)?.name?.let { existingBranchName ->
                 checkNotNull(
                     RemoteNamedStackRef.parse(
                         existingBranchName,
@@ -419,7 +435,13 @@ class GitJaspr(
                 RemoteNamedStackRef(stackName, targetRef, config.remoteNamedStackBranchPrefix)
             } else {
                 checkNotNull(existingStackName) {
-                    "No stack name provided and no existing stack name found on the remote."
+                    if (stackSearchResult is MultipleStacksContainCommit) {
+                        "No stack name provided and commits exist in multiple stacks: " +
+                            stackSearchResult.stackNames.joinToString(", ") +
+                            ". Use --name to specify which stack to push to."
+                    } else {
+                        "No stack name provided and no existing stack name found on the remote."
+                    }
                 }
             }
 
@@ -1568,7 +1590,7 @@ class GitJaspr(
      */
     fun suggestStackNames(
         refSpec: RefSpec = RefSpec(DEFAULT_LOCAL_OBJECT, DEFAULT_TARGET_REF)
-    ): List<String> {
+    ): StackNameSuggestions {
         val remoteName = config.remoteName
         gitClient.fetch(remoteName)
 
@@ -1585,18 +1607,27 @@ class GitJaspr(
                     .included
             }
 
-        if (stack.isEmpty()) return emptyList()
+        if (stack.isEmpty()) return StackNameSuggestions(emptyList())
 
-        val existingName =
-            (getExistingStackName(stack) as? Found)?.name?.let { existingBranchName ->
-                RemoteNamedStackRef.parse(existingBranchName, config.remoteNamedStackBranchPrefix)
-                    ?.stackName
-            }
-        if (existingName != null) return emptyList()
+        val searchResult = getExistingStackName(stack)
 
-        return stack
-            .flatMap { commit -> StackNameGenerator.generateNameCandidates(commit.shortMessage) }
-            .distinct()
+        if (searchResult is Found) return StackNameSuggestions(emptyList())
+
+        val commitBasedCandidates =
+            stack
+                .flatMap { commit ->
+                    StackNameGenerator.generateNameCandidates(commit.shortMessage)
+                }
+                .distinct()
+
+        return when (searchResult) {
+            is MultipleStacksContainCommit ->
+                StackNameSuggestions(
+                    candidates = searchResult.stackNames + commitBasedCandidates,
+                    ambiguousStackNames = searchResult.stackNames,
+                )
+            else -> StackNameSuggestions(commitBasedCandidates)
+        }
     }
 
     private fun refOrRefs(count: Int) = if (count == 1) "ref" else "refs"

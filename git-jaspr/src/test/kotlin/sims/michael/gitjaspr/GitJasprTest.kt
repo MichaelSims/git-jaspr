@@ -2112,7 +2112,7 @@ interface GitJasprTest {
             localGit.checkout(localGit.log("main", 2).last().hash)
 
             // Now that our HEAD commit is reachable by two stacks, this should be considered
-            // ambiguous, which displays the same as not finding a stack
+            // ambiguous — a warning is displayed with the conflicting stack names
             val detachedHeadActual = getAndPrintStatusString()
             assertEquals(
                 """
@@ -2120,7 +2120,10 @@ interface GitJasprTest {
                 |[✅✅✅✅✅✅] %s : %s : one
                 """
                     .trimMargin()
-                    .toStatusString(detachedHeadActual, null),
+                    .toStatusString(
+                        detachedHeadActual,
+                        ambiguousStackNames = listOf(secondStackName, stackName),
+                    ),
                 detachedHeadActual,
             )
         }
@@ -2408,7 +2411,7 @@ interface GitJasprTest {
             )
 
             val suggested = gitJaspr.suggestStackNames()
-            assertEquals(listOf("one", "two"), suggested)
+            assertEquals(listOf("one", "two"), suggested.candidates)
         }
     }
 
@@ -2434,7 +2437,7 @@ interface GitJasprTest {
 
             // suggestStackNames should return empty since the stack already has a name
             val suggested = gitJaspr.suggestStackNames()
-            assertEquals(emptyList(), suggested)
+            assertEquals(emptyList(), suggested.candidates)
         }
     }
 
@@ -4834,6 +4837,7 @@ interface GitJasprTest {
     private fun String.toStatusString(
         actual: String,
         namedStackInfo: NamedStackInfo? = null,
+        ambiguousStackNames: List<String> = emptyList(),
     ): String {
         // Extract commit hashes and URLs from the actual string and put them into the expected. I
         // can't predict what they will be, so I only want to validate that they are present.
@@ -4858,6 +4862,13 @@ interface GitJasprTest {
         val namedStackInfoString = buildString {
             // As above, this duplicates the string building logic defined in GitJaspr, but this is
             // so any changes to the rendering is done very deliberately.
+            if (ambiguousStackNames.isNotEmpty()) {
+                appendLine()
+                appendLine(
+                    "Stack name could not be determined: commits exist in multiple stacks: " +
+                        ambiguousStackNames.joinToString(", ")
+                )
+            }
             if (namedStackInfo != null) {
                 appendLine()
                 appendLine("Stack name: ${namedStackInfo.name}")
