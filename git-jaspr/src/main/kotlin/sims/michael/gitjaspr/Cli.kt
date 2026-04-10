@@ -1146,6 +1146,25 @@ class Top :
     }
 }
 
+class Nav : SuspendingCliktCommand(name = "nav") {
+    override fun help(context: Context) = "Navigation session management"
+
+    override suspend fun run() = Unit
+}
+
+class NavClear : GitJasprSubcommand(name = "clear", helpText = "Clear navigation state") {
+    override suspend fun doRun() {
+        val jaspr = appWiring.gitJaspr
+        val state = jaspr.readNavState()
+        if (state == null) {
+            renderer.info { "No navigation state to clear." }
+        } else {
+            jaspr.clearNavState()
+            renderer.info { "Navigation state cleared." }
+        }
+    }
+}
+
 // endregion
 
 class Stack : SuspendingCliktCommand(name = "stack") {
@@ -1485,6 +1504,7 @@ fun buildCommand(): SuspendingCliktCommand =
             Bottom(),
             Up(),
             Top(),
+            Nav().subcommands(NavClear()),
             PreviewTheme(),
             LogPath(),
             Init(),
