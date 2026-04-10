@@ -971,7 +971,7 @@ class Rebase : GitJasprSubcommand() {
         if (rebaseResult != 0) {
             renderer.warn {
                 "Rebase stopped (exit code $rebaseResult). " +
-                    "Resolve any conflicts, stage the files, then run ${command("git rebase --continue")}."
+                    "Resolve any conflicts, stage the files, then run ${command("jaspr continue")}."
             }
             throw ProgramResult(rebaseResult)
         }
@@ -1255,6 +1255,33 @@ class Fixup : GitJasprSubcommand(helpText = "Create a fixup commit targeting a s
                 "Invalid selection. Please enter a number between 1 and ${stack.size}."
             }
         }
+    }
+}
+
+class Continue :
+    GitJasprSubcommand(helpText = "Continue an in-progress operation (rebase or cherry-pick)") {
+    override suspend fun doRun() {
+        val workingDirectory = appWiring.gitClient.workingDirectory
+        val gitDir = workingDirectory.resolve(".git")
+
+        // Prefer rebase over cherry-pick since rebase is the higher-level operation
+        val command =
+            when {
+                gitDir.resolve("rebase-merge").exists() ||
+                    gitDir.resolve("rebase-apply").exists() -> listOf("git", "rebase", "--continue")
+                gitDir.resolve("CHERRY_PICK_HEAD").exists() ->
+                    listOf("git", "cherry-pick", "--continue")
+                else -> {
+                    renderer.info { "Nothing to continue." }
+                    return
+                }
+            }
+
+        val result =
+            withContext(Dispatchers.IO) {
+                ProcessBuilder(command).directory(workingDirectory).inheritIO().start().waitFor()
+            }
+        if (result != 0) throw ProgramResult(result)
     }
 }
 
@@ -1597,6 +1624,7 @@ fun buildCommand(): SuspendingCliktCommand =
             Top(),
             Nav().subcommands(NavClear()),
             Fixup(),
+            Continue(),
             PreviewTheme(),
             LogPath(),
             Init(),
