@@ -42,6 +42,11 @@ annotation class Checkout
 @Tag("stack")
 annotation class Stack
 
+@Target(AnnotationTarget.FUNCTION)
+@Retention(AnnotationRetention.RUNTIME)
+@Tag("nav")
+annotation class Nav
+
 @Target(AnnotationTarget.CLASS)
 @Retention(AnnotationRetention.RUNTIME)
 @Tag("functional")

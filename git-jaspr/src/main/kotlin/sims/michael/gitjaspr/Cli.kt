@@ -22,6 +22,7 @@ import com.github.ajalt.clikt.core.terminal
 import com.github.ajalt.clikt.output.MordantHelpFormatter
 import com.github.ajalt.clikt.parameters.arguments.argument
 import com.github.ajalt.clikt.parameters.arguments.convert
+import com.github.ajalt.clikt.parameters.arguments.optional
 import com.github.ajalt.clikt.parameters.groups.OptionGroup
 import com.github.ajalt.clikt.parameters.groups.provideDelegate
 import com.github.ajalt.clikt.parameters.options.*
@@ -1096,6 +1097,42 @@ class InstallHook : GitJasprSubcommand(helpText = "Install the jaspr commit-msg 
     }
 }
 
+// region Navigation commands
+class Down : GitJasprSubcommand(helpText = "Move down in the stack (toward the target branch)") {
+    private val targetOpts by TargetOptions()
+    private val n by argument("n").int().optional()
+
+    override suspend fun doRun() {
+        val jaspr = appWiring.gitJaspr
+        if (jaspr.isNavStateStale()) {
+            renderer.warn {
+                "Stale navigation state detected (you are on a branch). " +
+                    "Run ${command("jaspr nav clear")} to clear it, or it will be replaced."
+            }
+            jaspr.clearNavState()
+        }
+        jaspr.navigateDown(targetOpts.target, n ?: 1)
+    }
+}
+
+class Bottom : GitJasprSubcommand(helpText = "Move to the bottom of the stack") {
+    private val targetOpts by TargetOptions()
+
+    override suspend fun doRun() {
+        val jaspr = appWiring.gitJaspr
+        if (jaspr.isNavStateStale()) {
+            renderer.warn {
+                "Stale navigation state detected (you are on a branch). " +
+                    "Run ${command("jaspr nav clear")} to clear it, or it will be replaced."
+            }
+            jaspr.clearNavState()
+        }
+        jaspr.navigateToBottom(targetOpts.target)
+    }
+}
+
+// endregion
+
 class Stack : SuspendingCliktCommand(name = "stack") {
     override fun help(context: Context) = "Manage named stacks"
 
@@ -1429,6 +1466,8 @@ fun buildCommand(): SuspendingCliktCommand =
             Rebase(),
             Edit(),
             Stack().subcommands(StackList(), StackRename(), StackDelete()),
+            Down(),
+            Bottom(),
             PreviewTheme(),
             LogPath(),
             Init(),
