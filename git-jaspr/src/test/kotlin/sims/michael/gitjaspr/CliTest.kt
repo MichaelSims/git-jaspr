@@ -253,7 +253,7 @@ class CliTest {
             "git@host:owner/name.git",
             expected.remoteName,
             homeDirConfig = mapOf("logs-directory" to scratchDir.logsDir().absolutePath),
-            strings = listOf("install-commit-id-hook"),
+            strings = listOf("install-hook"),
         )
         assertTrue(
             scratchDir.repoDir().resolve(".git").resolve("hooks").resolve("commit-msg").canExecute()
@@ -371,7 +371,7 @@ class CliTest {
                         Stack().subcommands(StackList(), StackRename(), StackDelete()),
                         PreviewTheme(),
                         Init(),
-                        InstallCommitIdHook(),
+                        InstallHook(),
                     )
 
             val validOptionKeys = mutableSetOf<String>()

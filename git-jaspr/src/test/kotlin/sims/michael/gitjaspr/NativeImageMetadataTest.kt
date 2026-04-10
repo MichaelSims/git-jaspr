@@ -284,7 +284,7 @@ class NativeImageMetadataTest {
                         Stack().subcommands(StackList(), StackRename(), StackDelete()),
                         PreviewTheme(),
                         Init(),
-                        InstallCommitIdHook(),
+                        InstallHook(),
                         NoOp(),
                     )
                     .parse(listOf("--help"))

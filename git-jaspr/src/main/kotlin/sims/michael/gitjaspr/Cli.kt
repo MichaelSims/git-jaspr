@@ -1090,7 +1090,7 @@ class Edit : GitJasprSubcommand() {
     }
 }
 
-class InstallCommitIdHook : GitJasprSubcommand(helpText = "Install commit-id hook") {
+class InstallHook : GitJasprSubcommand(helpText = "Install the jaspr commit-msg hook") {
     override suspend fun doRun() {
         appWiring.gitJaspr.installCommitIdHook()
     }
@@ -1432,7 +1432,7 @@ fun buildCommand(): SuspendingCliktCommand =
             PreviewTheme(),
             LogPath(),
             Init(),
-            InstallCommitIdHook(),
+            InstallHook(),
             NoOp(),
         )
 
