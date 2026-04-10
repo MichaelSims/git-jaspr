@@ -138,7 +138,7 @@ carried over automatically.
 *--show*:::
 Display the example config without writing it.
 
-=== jaspr install-commit-id-hook
+=== jaspr install-hook
 
 Install the Git *commit-msg* hook that appends a *commit-id* trailer to new
 commits. Run this once per repository.
