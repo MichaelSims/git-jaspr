@@ -12,6 +12,8 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import kotlinx.serialization.encodeToString
+import kotlinx.serialization.json.Json
 import org.slf4j.LoggerFactory
 import sims.michael.gitjaspr.CommitParsers.getSubjectAndBodyFromFullMessage
 import sims.michael.gitjaspr.CommitParsers.trimFooters
@@ -31,6 +33,7 @@ class GitJaspr(
     private val newUuid: () -> String = { generateUuid() },
     private val commitIdentOverride: Ident? = null,
     private val renderer: Renderer = NoOpRenderer,
+    private val json: Json = Json { prettyPrint = true },
 ) {
 
     private val logger = LoggerFactory.getLogger(GitJaspr::class.java)
@@ -1784,11 +1787,36 @@ class GitJaspr(
             renderer,
         )
 
-    private fun getAutoMergeCacheDir(): File {
-        val jaspDir = config.workingDirectory.resolve(".git/jaspr")
-        jaspDir.mkdirs()
-        return jaspDir.resolve("automerge")
+    private fun getJasprDir(): File =
+        config.workingDirectory.resolve(".git/jaspr").also { it.mkdirs() }
+
+    private fun getAutoMergeCacheDir(): File = getJasprDir().resolve("automerge")
+
+    private val navStateFile
+        get() = getJasprDir().resolve("nav-state.json")
+
+    fun readNavState(): NavState? {
+        val file = navStateFile
+        if (!file.exists()) return null
+        return try {
+            json.decodeFromString<NavState>(file.readText())
+        } catch (e: Exception) {
+            logger.warn("Failed to read nav state, clearing", e)
+            clearNavState()
+            null
+        }
     }
+
+    fun writeNavState(state: NavState) {
+        navStateFile.writeText(json.encodeToString(state))
+    }
+
+    fun clearNavState() {
+        navStateFile.delete()
+    }
+
+    /** Returns true if HEAD is on a branch (not detached) and nav state exists */
+    fun isNavStateStale(): Boolean = !gitClient.isHeadDetached() && readNavState() != null
 
     private fun acquireAutoMergeLock(lockFile: RandomAccessFile): FileLock =
         lockFile.channel.tryLock()

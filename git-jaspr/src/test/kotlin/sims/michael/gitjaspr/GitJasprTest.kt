@@ -4,6 +4,7 @@ import java.util.MissingFormatArgumentException
 import kotlin.test.assertContains
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
+import kotlin.test.assertNull
 import org.junit.jupiter.api.*
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.slf4j.Logger
@@ -80,6 +81,43 @@ interface GitJasprTest {
         val actual = input.windowedPairs()
         assertEquals(expected, actual)
     }
+
+    // region nav state tests
+    @Test
+    fun `nav state round-trips through write and read`() {
+        withTestSetup(useFakeRemote) {
+            val state =
+                NavState(
+                    headBeforeDetach = "my-feature",
+                    headBeforeDetachSha = "abc123",
+                    divergePoint = "def456",
+                )
+            gitJaspr.writeNavState(state)
+            assertEquals(state, gitJaspr.readNavState())
+        }
+    }
+
+    @Test
+    fun `readNavState returns null when no state file exists`() {
+        withTestSetup(useFakeRemote) { assertNull(gitJaspr.readNavState()) }
+    }
+
+    @Test
+    fun `clearNavState removes state file`() {
+        withTestSetup(useFakeRemote) {
+            val state =
+                NavState(
+                    headBeforeDetach = "my-feature",
+                    headBeforeDetachSha = "abc123",
+                    divergePoint = "def456",
+                )
+            gitJaspr.writeNavState(state)
+            gitJaspr.clearNavState()
+            assertNull(gitJaspr.readNavState())
+        }
+    }
+
+    // endregion
 
     @Test
     fun `push fails unless workdir is clean`() {

@@ -111,6 +111,28 @@ fun RateLimitFields.toRateLimitInfo(): GitHubRateLimitInfo =
 private fun String.iso8601ToLocalDate(): LocalDateTime =
     Instant.parse(this).atZone(ZoneId.systemDefault()).toLocalDateTime()
 
+/**
+ * Ephemeral session state for stack navigation, persisted in `.git/jaspr/nav-state.json`. Exists
+ * only while the user is navigated to a mid-stack commit (detached HEAD).
+ */
+@Serializable
+data class NavState(
+    /** The branch name HEAD was on before detaching, restored when the session ends. */
+    val headBeforeDetach: String,
+    /**
+     * SHA that [headBeforeDetach] pointed to right before we entered deteached HEAD. Defines the
+     * top of the replay range.
+     */
+    val headBeforeDetachSha: String,
+    /**
+     * SHA that HEAD pointed to as of the last navigation operation. Updated on each `jaspr
+     * down`/`up` invocation. If the user creates additional commits between nav operations, this
+     * becomes a true diverge point — the merge base between HEAD and the original stack. The replay
+     * range for `jaspr up`/`top` is `divergePoint..headBeforeDetachSha`.
+     */
+    val divergePoint: String,
+)
+
 class GitJasprException(override val message: String) : RuntimeException(message) {
     constructor(message: String, cause: Throwable) : this(message) {
         initCause(cause)
