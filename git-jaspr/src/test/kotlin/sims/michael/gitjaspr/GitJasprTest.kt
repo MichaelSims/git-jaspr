@@ -268,6 +268,91 @@ interface GitJasprTest {
         }
     }
 
+    @Test
+    fun `up replays one commit via cherry-pick`() {
+        withTestSetup(useFakeRemote) {
+            createCommitsFrom(
+                testCase {
+                    repository {
+                        commit { title = "one" }
+                        commit { title = "two" }
+                        commit {
+                            title = "three"
+                            localRefs += "development"
+                        }
+                    }
+                    checkout = "development"
+                }
+            )
+            localGit.fetch(remoteName)
+            val stack = localGit.getLocalCommitStack(remoteName, GitClient.HEAD, DEFAULT_TARGET_REF)
+
+            // Navigate down 2, then up 1
+            gitJaspr.navigateDown(DEFAULT_TARGET_REF, 2)
+            assertEquals(stack[0].hash, localGit.log(GitClient.HEAD, 1).single().hash)
+
+            gitJaspr.navigateUp(1)
+
+            // Should still be detached, with "two" replayed on top
+            assertTrue(localGit.isHeadDetached())
+            assertEquals("two", localGit.log(GitClient.HEAD, 1).single().shortMessage)
+            assertNotNull(gitJaspr.readNavState())
+        }
+    }
+
+    @Test
+    fun `top replays all remaining commits and restores branch`() {
+        withTestSetup(useFakeRemote) {
+            createCommitsFrom(
+                testCase {
+                    repository {
+                        commit { title = "one" }
+                        commit { title = "two" }
+                        commit {
+                            title = "three"
+                            localRefs += "development"
+                        }
+                    }
+                    checkout = "development"
+                }
+            )
+            localGit.fetch(remoteName)
+
+            // Navigate to bottom, then back to top
+            gitJaspr.navigateToBottom(DEFAULT_TARGET_REF)
+            gitJaspr.navigateToTop()
+
+            // Should be back on the branch with all commits replayed
+            assertFalse(localGit.isHeadDetached())
+            assertEquals("development", localGit.getCurrentBranchName())
+            assertNull(gitJaspr.readNavState())
+
+            // Stack should still have 3 commits with the same messages
+            val newStack =
+                localGit.getLocalCommitStack(remoteName, GitClient.HEAD, DEFAULT_TARGET_REF)
+            assertEquals(3, newStack.size)
+            assertEquals(listOf("one", "two", "three"), newStack.map(Commit::shortMessage))
+        }
+    }
+
+    @Test
+    fun `up with no active session fails`() {
+        withTestSetup(useFakeRemote) {
+            createCommitsFrom(
+                testCase {
+                    repository {
+                        commit {
+                            title = "one"
+                            localRefs += "development"
+                        }
+                    }
+                    checkout = "development"
+                }
+            )
+            assertThrows<IllegalArgumentException> { gitJaspr.navigateUp(1) }
+        }
+    }
+
     // endregion
 
     @Test

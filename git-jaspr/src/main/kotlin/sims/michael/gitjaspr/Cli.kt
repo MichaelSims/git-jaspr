@@ -1131,6 +1131,21 @@ class Bottom : GitJasprSubcommand(helpText = "Move to the bottom of the stack") 
     }
 }
 
+class Up : GitJasprSubcommand(helpText = "Move up in the stack (replay commits toward the tip)") {
+    private val n by argument("n").int().optional()
+
+    override suspend fun doRun() {
+        appWiring.gitJaspr.navigateUp(n ?: 1)
+    }
+}
+
+class Top :
+    GitJasprSubcommand(helpText = "Move to the top of the stack (replay all remaining commits)") {
+    override suspend fun doRun() {
+        appWiring.gitJaspr.navigateToTop()
+    }
+}
+
 // endregion
 
 class Stack : SuspendingCliktCommand(name = "stack") {
@@ -1468,6 +1483,8 @@ fun buildCommand(): SuspendingCliktCommand =
             Stack().subcommands(StackList(), StackRename(), StackDelete()),
             Down(),
             Bottom(),
+            Up(),
+            Top(),
             PreviewTheme(),
             LogPath(),
             Init(),

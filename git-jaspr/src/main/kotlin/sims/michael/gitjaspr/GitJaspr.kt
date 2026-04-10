@@ -1880,6 +1880,89 @@ class GitJaspr(
         writeNavState(NavState(headBeforeDetach, headBeforeDetachSha, targetCommit.hash))
     }
 
+    /**
+     * Navigate up N commits by cherry-picking from the saved stack above the current HEAD. If all
+     * remaining commits are replayed, restores the source branch and ends the session.
+     */
+    fun navigateUp(n: Int) {
+        val state = requireActiveNavSession()
+
+        val commitsAbove = getCommitsAboveHead(state)
+        require(commitsAbove.isNotEmpty()) { "Already at the top of the stack." }
+        require(n <= commitsAbove.size) {
+            "Cannot move up $n commit(s) — only ${commitsAbove.size} commit(s) above current position."
+        }
+
+        val toReplay = commitsAbove.take(n)
+        for (commit in toReplay) {
+            gitClient.cherryPick(commit, commitIdentOverride)
+        }
+
+        val replayedAll = n == commitsAbove.size
+        if (replayedAll) {
+            endNavSession(state)
+        } else {
+            val newHead = gitClient.log(GitClient.HEAD, 1).single().hash
+            writeNavState(state.copy(divergePoint = newHead))
+        }
+    }
+
+    /** Navigate to the top of the stack by replaying all remaining commits. */
+    fun navigateToTop() {
+        val state = requireActiveNavSession()
+
+        val commitsAbove = getCommitsAboveHead(state)
+        require(commitsAbove.isNotEmpty()) { "Already at the top of the stack." }
+
+        for (commit in commitsAbove) {
+            gitClient.cherryPick(commit, commitIdentOverride)
+        }
+
+        endNavSession(state)
+    }
+
+    /**
+     * Returns the active nav session state, or throws with an appropriate message. Handles all
+     * combinations of detached/attached HEAD and present/absent nav state, including auto-clearing
+     * stale state.
+     */
+    private fun requireActiveNavSession(): NavState {
+        val state = readNavState()
+        val detached = gitClient.isHeadDetached()
+        return when {
+            // Active session — normal case
+            detached && state != null -> state
+            // Detached HEAD without jaspr nav state
+            detached -> throw IllegalArgumentException(DETACHED_HEAD_NO_NAV_STATE)
+            // On a branch — no active session. Clear stale state if present.
+            else -> {
+                if (state != null) clearNavState()
+                throw IllegalArgumentException(
+                    "No navigation session in progress (already at the top of the stack)."
+                )
+            }
+        }
+    }
+
+    /**
+     * Returns the commits from the saved stack that are above the current HEAD (i.e., the commits
+     * between divergePoint and headBeforeDetachSha, exclusive of divergePoint).
+     */
+    private fun getCommitsAboveHead(state: NavState): List<Commit> {
+        return gitClient.logRange(state.divergePoint, state.headBeforeDetachSha)
+    }
+
+    /**
+     * End the navigation session: update the original branch to the new tip, check it out, clear
+     * the state.
+     */
+    private fun endNavSession(state: NavState) {
+        val newTip = gitClient.log(GitClient.HEAD, 1).single().hash
+        gitClient.branch(state.headBeforeDetach, startPoint = newTip, force = true)
+        gitClient.checkout(state.headBeforeDetach)
+        clearNavState()
+    }
+
     private fun acquireAutoMergeLock(lockFile: RandomAccessFile): FileLock =
         lockFile.channel.tryLock()
             ?: throw GitJasprException(
