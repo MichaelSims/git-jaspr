@@ -4,6 +4,7 @@ import java.util.MissingFormatArgumentException
 import kotlin.test.assertContains
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
+import kotlin.test.assertNotNull
 import kotlin.test.assertNull
 import org.junit.jupiter.api.*
 import org.junit.jupiter.api.Assertions.assertTrue
@@ -21,6 +22,7 @@ import sims.michael.gitjaspr.testing.Clean
 import sims.michael.gitjaspr.testing.DEFAULT_COMMITTER
 import sims.michael.gitjaspr.testing.DontPush
 import sims.michael.gitjaspr.testing.Merge
+import sims.michael.gitjaspr.testing.Nav
 import sims.michael.gitjaspr.testing.PrBody
 import sims.michael.gitjaspr.testing.Push
 import sims.michael.gitjaspr.testing.Stack
@@ -83,6 +85,7 @@ interface GitJasprTest {
     }
 
     // region nav state tests
+    @Nav
     @Test
     fun `nav state round-trips through write and read`() {
         withTestSetup(useFakeRemote) {
@@ -97,11 +100,13 @@ interface GitJasprTest {
         }
     }
 
+    @Nav
     @Test
     fun `readNavState returns null when no state file exists`() {
         withTestSetup(useFakeRemote) { assertNull(gitJaspr.readNavState()) }
     }
 
+    @Nav
     @Test
     fun `clearNavState removes state file`() {
         withTestSetup(useFakeRemote) {
@@ -114,6 +119,152 @@ interface GitJasprTest {
             gitJaspr.writeNavState(state)
             gitJaspr.clearNavState()
             assertNull(gitJaspr.readNavState())
+        }
+    }
+
+    // endregion
+
+    // region navigation tests
+    @Nav
+    @Test
+    fun `down detaches HEAD and writes nav state`() {
+        withTestSetup(useFakeRemote) {
+            createCommitsFrom(
+                testCase {
+                    repository {
+                        commit { title = "one" }
+                        commit { title = "two" }
+                        commit {
+                            title = "three"
+                            localRefs += "development"
+                        }
+                    }
+                    checkout = "development"
+                }
+            )
+            localGit.fetch(remoteName)
+            val stack = localGit.getLocalCommitStack(remoteName, GitClient.HEAD, DEFAULT_TARGET_REF)
+            assertEquals(3, stack.size)
+
+            gitJaspr.navigateDown(DEFAULT_TARGET_REF, 1)
+
+            assertTrue(localGit.isHeadDetached())
+            assertEquals(stack[1].hash, localGit.log(GitClient.HEAD, 1).single().hash)
+
+            val state = gitJaspr.readNavState()
+            assertNotNull(state)
+            assertEquals("development", state.headBeforeDetach)
+            assertEquals(stack.last().hash, state.headBeforeDetachSha)
+            assertEquals(stack[1].hash, state.divergePoint)
+        }
+    }
+
+    @Nav
+    @Test
+    fun `down N navigates multiple commits`() {
+        withTestSetup(useFakeRemote) {
+            createCommitsFrom(
+                testCase {
+                    repository {
+                        commit { title = "one" }
+                        commit { title = "two" }
+                        commit {
+                            title = "three"
+                            localRefs += "development"
+                        }
+                    }
+                    checkout = "development"
+                }
+            )
+            localGit.fetch(remoteName)
+            val stack = localGit.getLocalCommitStack(remoteName, GitClient.HEAD, DEFAULT_TARGET_REF)
+
+            gitJaspr.navigateDown(DEFAULT_TARGET_REF, 2)
+
+            assertEquals(stack[0].hash, localGit.log(GitClient.HEAD, 1).single().hash)
+        }
+    }
+
+    @Nav
+    @Test
+    fun `down past bottom of stack fails`() {
+        withTestSetup(useFakeRemote) {
+            createCommitsFrom(
+                testCase {
+                    repository {
+                        commit { title = "one" }
+                        commit {
+                            title = "two"
+                            localRefs += "development"
+                        }
+                    }
+                    checkout = "development"
+                }
+            )
+            assertThrows<IllegalArgumentException> { gitJaspr.navigateDown(DEFAULT_TARGET_REF, 3) }
+        }
+    }
+
+    @Nav
+    @Test
+    fun `bottom navigates to first commit in stack`() {
+        withTestSetup(useFakeRemote) {
+            createCommitsFrom(
+                testCase {
+                    repository {
+                        commit { title = "one" }
+                        commit { title = "two" }
+                        commit {
+                            title = "three"
+                            localRefs += "development"
+                        }
+                    }
+                    checkout = "development"
+                }
+            )
+            localGit.fetch(remoteName)
+            val stack = localGit.getLocalCommitStack(remoteName, GitClient.HEAD, DEFAULT_TARGET_REF)
+
+            gitJaspr.navigateToBottom(DEFAULT_TARGET_REF)
+
+            assertTrue(localGit.isHeadDetached())
+            assertEquals(stack.first().hash, localGit.log(GitClient.HEAD, 1).single().hash)
+        }
+    }
+
+    @Nav
+    @Test
+    fun `down within active nav session updates diverge point`() {
+        withTestSetup(useFakeRemote) {
+            createCommitsFrom(
+                testCase {
+                    repository {
+                        commit { title = "one" }
+                        commit { title = "two" }
+                        commit {
+                            title = "three"
+                            localRefs += "development"
+                        }
+                    }
+                    checkout = "development"
+                }
+            )
+            localGit.fetch(remoteName)
+            val stack = localGit.getLocalCommitStack(remoteName, GitClient.HEAD, DEFAULT_TARGET_REF)
+
+            gitJaspr.navigateDown(DEFAULT_TARGET_REF, 1)
+            val firstState = gitJaspr.readNavState()
+
+            gitJaspr.navigateDown(DEFAULT_TARGET_REF, 1)
+            val secondState = gitJaspr.readNavState()
+
+            // Source branch and saved tip should be preserved from first navigation
+            assertNotNull(firstState)
+            assertNotNull(secondState)
+            assertEquals(firstState.headBeforeDetach, secondState.headBeforeDetach)
+            assertEquals(firstState.headBeforeDetachSha, secondState.headBeforeDetachSha)
+            // Diverge point should have moved down
+            assertEquals(stack[0].hash, secondState.divergePoint)
         }
     }
 

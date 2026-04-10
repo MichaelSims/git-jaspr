@@ -1818,6 +1818,68 @@ class GitJaspr(
     /** Returns true if HEAD is on a branch (not detached) and nav state exists */
     fun isNavStateStale(): Boolean = !gitClient.isHeadDetached() && readNavState() != null
 
+    /**
+     * Navigate down N commits in the stack (toward the target branch). Detaches HEAD and writes nav
+     * state.
+     */
+    fun navigateDown(targetRef: String, n: Int) {
+        val remoteName = config.remoteName
+        gitClient.fetch(remoteName)
+        val stack = gitClient.getLocalCommitStack(remoteName, GitClient.HEAD, targetRef)
+        require(stack.isNotEmpty()) { "Stack is empty." }
+
+        val existingState = readNavState()
+        val currentIndex =
+            if (existingState != null && gitClient.isHeadDetached()) {
+                // Already in a nav session — find the current position
+                val headHash = gitClient.log(GitClient.HEAD, 1).single().hash
+                stack
+                    .indexOfFirst { it.hash == headHash }
+                    .also { index -> require(index >= 0) { "Current HEAD is not in the stack." } }
+            } else {
+                // Not in a session — HEAD is at the tip
+                stack.lastIndex
+            }
+
+        val targetIndex = currentIndex - n
+        require(targetIndex >= 0) {
+            "Cannot move down $n commit(s) — only $currentIndex commit(s) below current position."
+        }
+
+        val targetCommit = stack[targetIndex]
+        val headBeforeDetach =
+            existingState?.headBeforeDetach
+                ?: gitClient.getCurrentBranchName().also {
+                    require(it.isNotEmpty()) { DETACHED_HEAD_NO_NAV_STATE }
+                }
+        val headBeforeDetachSha =
+            existingState?.headBeforeDetachSha ?: gitClient.log(GitClient.HEAD, 1).single().hash
+
+        gitClient.checkout(targetCommit.hash)
+        writeNavState(NavState(headBeforeDetach, headBeforeDetachSha, targetCommit.hash))
+    }
+
+    /** Navigate to the bottom of the stack (first commit above the target branch). */
+    fun navigateToBottom(targetRef: String) {
+        val remoteName = config.remoteName
+        gitClient.fetch(remoteName)
+        val stack = gitClient.getLocalCommitStack(remoteName, GitClient.HEAD, targetRef)
+        require(stack.isNotEmpty()) { "Stack is empty." }
+
+        val existingState = readNavState()
+        val headBeforeDetach =
+            existingState?.headBeforeDetach
+                ?: gitClient.getCurrentBranchName().also {
+                    require(it.isNotEmpty()) { DETACHED_HEAD_NO_NAV_STATE }
+                }
+        val headBeforeDetachSha =
+            existingState?.headBeforeDetachSha ?: gitClient.log(GitClient.HEAD, 1).single().hash
+        val targetCommit = stack.first()
+
+        gitClient.checkout(targetCommit.hash)
+        writeNavState(NavState(headBeforeDetach, headBeforeDetachSha, targetCommit.hash))
+    }
+
     private fun acquireAutoMergeLock(lockFile: RandomAccessFile): FileLock =
         lockFile.channel.tryLock()
             ?: throw GitJasprException(
@@ -1826,6 +1888,10 @@ class GitJaspr(
             )
 
     companion object {
+        private const val DETACHED_HEAD_NO_NAV_STATE =
+            "HEAD is detached but no jaspr navigation state was found. " +
+                "Check out a branch pointing to a commit with a jaspr ID before navigating."
+
         private val HEADER =
             """
             | ┌─────────── commit pushed
