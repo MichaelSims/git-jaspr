@@ -344,9 +344,10 @@ class GitJaspr(
     ) {
         logger.trace("push {}", refSpec)
 
-        if (!gitClient.isWorkingDirectoryClean()) {
+        if (gitClient.hasUncommittedChangesToTrackedFiles()) {
             throw GitJasprException(
-                "Your working directory has local changes. Please commit or stash them and re-run the command."
+                "Your working directory has uncommitted changes to tracked files. " +
+                    "Please commit or stash them and re-run the command."
             )
         }
 

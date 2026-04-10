@@ -29,7 +29,7 @@ interface GitClient {
 
     fun logRange(since: String, until: String): List<Commit>
 
-    fun isWorkingDirectoryClean(): Boolean
+    fun hasUncommittedChangesToTrackedFiles(): Boolean
 
     fun getLocalCommitStack(
         remoteName: String,

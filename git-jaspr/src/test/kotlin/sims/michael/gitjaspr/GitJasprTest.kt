@@ -102,6 +102,26 @@ interface GitJasprTest {
         }
     }
 
+    @Push
+    @Test
+    fun `push succeeds with untracked files in working directory`() {
+        withTestSetup(useFakeRemote) {
+            createCommitsFrom(
+                testCase {
+                    repository {
+                        commit {
+                            title = "some_commit"
+                            localRefs += "development"
+                        }
+                    }
+                }
+            )
+            // Create an untracked file — this should not block push
+            localRepo.resolve("untracked-file.txt").writeText("This file is not tracked by git.\n")
+            push()
+        }
+    }
+
     @Test
     fun `getRemoteCommitStatuses produces expected result`() {
         withTestSetup(useFakeRemote) {

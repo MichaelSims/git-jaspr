@@ -99,9 +99,12 @@ class CliGitClient(
             .also { logger.trace("getParents {} {}", commit, it) }
     }
 
-    override fun isWorkingDirectoryClean(): Boolean {
-        logger.trace("isWorkingDirectoryClean")
-        return executeCommand(listOf("git", "status", "-s")).output.lines.isEmpty()
+    override fun hasUncommittedChangesToTrackedFiles(): Boolean {
+        logger.trace("hasUncommittedChangesToTrackedFiles")
+        return executeCommand(listOf("git", "status", "-s", "--untracked-files=no"))
+            .output
+            .lines
+            .isNotEmpty()
     }
 
     override fun getLocalCommitStack(

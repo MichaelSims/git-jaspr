@@ -232,7 +232,7 @@ class CliGitClientTest : GitClientTest {
     }
 
     @Test
-    fun `isWorkingDirectoryClean returns expected value`() {
+    fun `hasUncommittedChangesToTrackedFiles returns expected value`() {
         withTestSetup {
             createCommitsFrom(
                 testCase {
@@ -263,7 +263,34 @@ class CliGitClientTest : GitClientTest {
             check(readme.exists())
             readme.appendText("This is a change")
             val git = CliGitClient(localGit.workingDirectory)
-            assertFalse(git.isWorkingDirectoryClean())
+            assertTrue(git.hasUncommittedChangesToTrackedFiles())
+        }
+    }
+
+    @Test
+    fun `hasUncommittedChangesToTrackedFiles ignores untracked files`() {
+        withTestSetup {
+            createCommitsFrom(
+                testCase {
+                    repository {
+                        commit {
+                            title = "one"
+                            localRefs += "main"
+                        }
+                    }
+                }
+            )
+
+            val git = CliGitClient(localGit.workingDirectory)
+            assertFalse(git.hasUncommittedChangesToTrackedFiles())
+
+            // Create an untracked file — should still have no uncommitted changes
+            localRepo.resolve("untracked-file.txt").writeText("Not tracked by git")
+            assertFalse(git.hasUncommittedChangesToTrackedFiles())
+
+            // Modify a tracked file — now it should have uncommitted changes
+            localRepo.resolve("README.txt").appendText("Modified")
+            assertTrue(git.hasUncommittedChangesToTrackedFiles())
         }
     }
 
@@ -780,7 +807,7 @@ class CliGitClientTest : GitClientTest {
                 mapOf("Co-authored-by" to "Michael Sims"),
                 DEFAULT_COMMITTER,
             )
-            assertTrue(git.isWorkingDirectoryClean())
+            assertFalse(git.hasUncommittedChangesToTrackedFiles())
         }
     }
 

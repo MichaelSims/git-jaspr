@@ -123,9 +123,12 @@ class JGitClient(
         commits.map { revCommit -> revCommit.toCommit(git) }.reversed()
     }
 
-    override fun isWorkingDirectoryClean(): Boolean {
-        logger.trace("isWorkingDirectoryClean")
-        return useGit { git -> git.status().call().isClean }
+    override fun hasUncommittedChangesToTrackedFiles(): Boolean {
+        logger.trace("hasUncommittedChangesToTrackedFiles")
+        return useGit { git ->
+            val call = git.status().call()
+            call.run { added + changed + removed + modified + missing + conflicting }.isNotEmpty()
+        }
     }
 
     override fun getLocalCommitStack(

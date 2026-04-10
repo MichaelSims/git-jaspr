@@ -221,7 +221,7 @@ class WorktreeSupportTest {
             assertTrue(branches.contains("worktree-branch"), "Should see worktree-branch")
 
             // JGit correctly reports working directory status
-            assertTrue(jgit.isWorkingDirectoryClean())
+            assertFalse(jgit.hasUncommittedChangesToTrackedFiles())
         } finally {
             tempDir.deleteRecursively()
         }
