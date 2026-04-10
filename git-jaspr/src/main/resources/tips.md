@@ -15,6 +15,6 @@ Lines beginning with `- ` are parsed as individual tips.
 - Working on multiple stacks? Use `jaspr checkout` to interactively switch between your named stacks. If you have fzf installed, you'll get fuzzy search with a preview pane — scroll it with Shift+Up/Down.
 - Don't want to wait for checks to pass? Run `jaspr auto-merge` and jaspr will poll for check completion and merge automatically when ready.
 - Only want to push part of your stack? Use `jaspr push -c 3` to push just the bottom 3 commits, or `jaspr push -c -1` to exclude the top commit.
-- If you hit a merge conflict during `jaspr edit` or `jaspr rebase`, resolve the conflict, stage the files with `git add`, then run `git rebase --continue`.
+- If you hit a merge conflict during `jaspr edit` or `jaspr rebase`, resolve the conflict, stage the files with `git add`, then run `jaspr continue` (or `git rebase --continue`).
 - Have a work-in-progress commit you never want to accidentally push? Start it with `dont push` (or `dont-push` / `dontpush`) and jaspr will skip it.
 - Run `jaspr init` to generate a config file with all available options and documentation. Per-repo config (`.jaspr.properties`) overrides your user-wide config (`~/.jaspr.properties`).
