@@ -568,9 +568,9 @@ class Push : GitJasprSubcommand(helpText = "Push commits and create/update PRs")
 
     override suspend fun doRun() {
         requireCountLocalExclusive(count, targetRef.local)
-        if (!appWiring.gitClient.isWorkingDirectoryClean()) {
+        if (appWiring.gitClient.hasUncommittedChangesToTrackedFiles()) {
             throw GitJasprException(
-                "Your working directory has local changes. " +
+                "Your working directory has uncommitted changes to tracked files. " +
                     "Please commit or stash them and re-run the command."
             )
         }
