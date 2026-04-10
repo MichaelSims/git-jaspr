@@ -419,6 +419,30 @@ class CliTest {
         logger.info("Temp dir created in {}", dir.toStringWithClickableURI())
         return dir
     }
+
+    @TestFactory
+    fun `isGitVersionAtLeast parses version strings correctly`(): List<DynamicTest> {
+        val minVersion = "2.44.0"
+        data class Case(val input: String, val expected: Boolean)
+        return listOf(
+                Case("git version 2.44.0", true), // Exact match
+                Case("git version 2.44.1", true), // Newer patch
+                Case("git version 2.51.2", true), // Newer minor
+                Case("git version 3.0.0", true), // Newer major
+                Case("git version 2.43.9", false), // Older minor
+                Case("git version 1.99.99", false), // Older major
+                Case("git version 2.43.99", false), // Just below threshold
+                Case("git version 2.44.0.windows.1", true), // Windows suffix
+                Case("git version 2.39.5 (Apple Git-154)", false), // macOS Xcode format
+                Case("not a version string", false), // Garbage input
+                Case("", false), // Empty
+            )
+            .map { (input, expected) ->
+                dynamicTest("\"$input\" -> $expected") {
+                    assertEquals(expected, isGitVersionAtLeast(input, minVersion))
+                }
+            }
+    }
 }
 
 private fun getEffectiveConfigFromCli(

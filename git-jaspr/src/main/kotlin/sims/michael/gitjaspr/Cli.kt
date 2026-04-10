@@ -947,9 +947,22 @@ class Rebase : GitJasprSubcommand() {
                     throw ProgramResult(fetchResult)
                 }
 
-                ProcessBuilder("git", "rebase", "$remoteName/$target")
+                val rebaseArgs = buildList {
+                    add("git")
+                    add("rebase")
+                    add("--autosquash")
+                    if (!gitSupportsNonInteractiveAutosquash(workingDirectory)) {
+                        add("--interactive")
+                    }
+                    add("$remoteName/$target")
+                }
+
+                ProcessBuilder(rebaseArgs)
                     .directory(workingDirectory)
                     .inheritIO()
+                    // GIT_SEQUENCE_EDITOR=true is needed when --interactive is used to prevent
+                    // the editor from opening. It's harmless when --interactive is absent.
+                    .apply { environment()["GIT_SEQUENCE_EDITOR"] = "true" }
                     .start()
                     .waitFor()
             }
@@ -962,6 +975,40 @@ class Rebase : GitJasprSubcommand() {
             throw ProgramResult(rebaseResult)
         }
     }
+}
+
+private const val GIT_AUTOSQUASH_MIN_VERSION = "2.44.0"
+
+/** Returns true if the installed git version supports `--autosquash` without `--interactive`. */
+private fun gitSupportsNonInteractiveAutosquash(workingDirectory: File): Boolean {
+    val versionOutput =
+        ProcessBuilder("git", "--version")
+            .directory(workingDirectory)
+            .redirectErrorStream(true)
+            .start()
+            .inputStream
+            .bufferedReader()
+            .readText()
+            .trim()
+    return isGitVersionAtLeast(versionOutput, GIT_AUTOSQUASH_MIN_VERSION)
+}
+
+/** Packs a major.minor.patch version into a single comparable integer. */
+private fun versionNumber(parts: List<Int>) = parts[0] * 1_000_000 + parts[1] * 1_000 + parts[2]
+
+private fun parseVersionParts(version: String) =
+    version.split(".").take(3).mapNotNull { it.toIntOrNull() }
+
+/**
+ * Parses a `git --version` output string and returns true if the version is at least [minVersion].
+ *
+ * Expected format: `"git version 2.51.2"` (may have additional suffix like `".windows.1"`).
+ * [minVersion] is a dotted version string like `"2.44.0"`.
+ */
+internal fun isGitVersionAtLeast(gitVersionOutput: String, minVersion: String): Boolean {
+    val actual = parseVersionParts(gitVersionOutput.removePrefix("git version "))
+    if (actual.size < 3) return false
+    return versionNumber(actual) >= versionNumber(parseVersionParts(minVersion))
 }
 
 class Edit : GitJasprSubcommand() {
