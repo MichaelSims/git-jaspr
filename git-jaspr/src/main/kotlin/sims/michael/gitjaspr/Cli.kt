@@ -1167,6 +1167,97 @@ class NavClear : GitJasprSubcommand(name = "clear", helpText = "Clear navigation
 
 // endregion
 
+class Fixup : GitJasprSubcommand(helpText = "Create a fixup commit targeting a stack commit") {
+    private val targetOpts by TargetOptions()
+
+    override suspend fun doRun() {
+        val gitClient = appWiring.gitClient
+        val remoteName = appWiring.config.remoteName
+        val workingDirectory = gitClient.workingDirectory
+
+        // Check for staged changes
+        val hasStagedChanges =
+            withContext(Dispatchers.IO) {
+                ProcessBuilder("git", "diff", "--cached", "--quiet")
+                    .directory(workingDirectory)
+                    .start()
+                    .waitFor() != 0
+            }
+        if (!hasStagedChanges) {
+            renderer.error {
+                "No staged changes. Stage the changes you want to fix up, then run ${command("jaspr fixup")} again."
+            }
+            throw ProgramResult(1)
+        }
+
+        gitClient.fetch(remoteName)
+        val stack = gitClient.getLocalCommitStack(remoteName, GitClient.HEAD, targetOpts.target)
+        if (stack.isEmpty()) {
+            renderer.error { "Stack is empty." }
+            throw ProgramResult(1)
+        }
+
+        val fzfResult =
+            if (!useFzf) {
+                FzfResult.NotAvailable
+            } else {
+                fzfSelect(
+                    items = stack,
+                    displayLine = { commit ->
+                        "\u001b[33m${commit.hash.take(7)}\u001b[0m \u001b[97m${commit.shortMessage}\u001b[0m"
+                    },
+                    header = "Select commit to fix up:",
+                )
+            }
+        val selected =
+            when (fzfResult) {
+                is FzfResult.Selected -> fzfResult.value
+                is FzfResult.Cancelled -> throw ProgramResult(130)
+                is FzfResult.NotAvailable -> selectFixupViaPrompt(stack)
+            }
+
+        val result =
+            withContext(Dispatchers.IO) {
+                ProcessBuilder("git", "commit", "--fixup=${selected.hash}")
+                    .directory(workingDirectory)
+                    .inheritIO()
+                    .start()
+                    .waitFor()
+            }
+        if (result != 0) throw ProgramResult(result)
+
+        renderer.info {
+            "Fixup commit created targeting ${entity(selected.hash.take(7))} " +
+                "(${entity(selected.shortMessage)}). " +
+                "Run ${command("jaspr rebase")} to fold it in."
+        }
+    }
+
+    private suspend fun selectFixupViaPrompt(stack: List<Commit>): Commit {
+        val lines = buildList {
+            add(theme.heading("Commits in stack:"))
+            for ((index, commit) in stack.withIndex()) {
+                add(
+                    "  ${theme.keyHint("${index + 1}.")} " +
+                        "${theme.muted(commit.hash.take(7))} ${theme.commitSubject(commit.shortMessage)}"
+                )
+            }
+        }
+        withContext(Dispatchers.IO) { printPaged(lines) }
+        val terminal = currentContext.terminal
+        while (true) {
+            val input = terminal.prompt("Select commit to fix up (1-${stack.size})")
+            val selection = input?.toIntOrNull()
+            if (selection != null && selection in 1..stack.size) {
+                return stack[selection - 1]
+            }
+            renderer.error {
+                "Invalid selection. Please enter a number between 1 and ${stack.size}."
+            }
+        }
+    }
+}
+
 class Stack : SuspendingCliktCommand(name = "stack") {
     override fun help(context: Context) = "Manage named stacks"
 
@@ -1505,6 +1596,7 @@ fun buildCommand(): SuspendingCliktCommand =
             Up(),
             Top(),
             Nav().subcommands(NavClear()),
+            Fixup(),
             PreviewTheme(),
             LogPath(),
             Init(),
