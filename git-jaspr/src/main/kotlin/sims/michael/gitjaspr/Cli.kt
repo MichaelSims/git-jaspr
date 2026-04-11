@@ -1012,7 +1012,7 @@ internal fun isGitVersionAtLeast(gitVersionOutput: String, minVersion: String): 
     return versionNumber(actual) >= versionNumber(parseVersionParts(minVersion))
 }
 
-class Edit : GitJasprSubcommand() {
+class Edit(name: String? = null) : GitJasprSubcommand(name = name) {
     // language=Markdown
     override fun help(context: Context) =
         """
@@ -1058,11 +1058,15 @@ class Edit : GitJasprSubcommand() {
                     header_file=$(mktemp)
                     cat > "$header_file" << 'HEADER'
                     # Edit your stack by modifying the list below.
-                    # To amend a commit, change 'pick' to 'edit', then:
-                    #   1. Make your changes
-                    #   2. Stage them with: git add <files>
-                    #   3. Amend the commit: git commit --amend
-                    #   4. Continue the rebase: git rebase --continue
+                    #
+                    # Reorder:  Move lines up or down to change commit order.
+                    # Drop:     Delete a line to remove that commit.
+                    # Squash:   Change 'pick' to 's' to merge into the previous commit.
+                    # Edit:     Change 'pick' to 'e', then:
+                    #             1. Make your changes
+                    #             2. Stage them: git add <files>
+                    #             3. Amend: git commit --amend
+                    #             4. Continue: jaspr continue
                     #
                     HEADER
                     cat "$1" >> "$header_file"
@@ -1617,6 +1621,7 @@ fun buildCommand(): SuspendingCliktCommand =
             Clean(),
             Rebase(),
             Edit(),
+            Edit(name = "reorder"),
             Stack().subcommands(StackList(), StackRename(), StackDelete()),
             Down(),
             Bottom(),
