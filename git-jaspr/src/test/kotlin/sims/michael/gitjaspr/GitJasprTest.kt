@@ -6188,6 +6188,55 @@ interface GitJasprTest {
 
     @Stack
     @Test
+    fun `getAllNamedStacks with mineOnly filters by current user`() {
+        withTestSetup(useFakeRemote) {
+            val otherAuthor = Ident("Other Person", "other@example.com")
+
+            // Push a stack as the default committer (Frank Grimes)
+            createCommitsFrom(
+                testCase {
+                    repository {
+                        commit {
+                            title = "my_commit"
+                            localRefs += "development"
+                        }
+                    }
+                    checkout = "development"
+                }
+            )
+            push(stackName = "my-stack")
+
+            // Push a stack with a different committer
+            createCommitsFrom(
+                testCase {
+                    repository {
+                        commit {
+                            title = "other_commit"
+                            committer {
+                                name = otherAuthor.name
+                                email = otherAuthor.email
+                            }
+                            localRefs += "development"
+                        }
+                    }
+                    checkout = "development"
+                }
+            )
+            push(stackName = "other-stack")
+
+            // Without filter: both stacks
+            val allStacks = gitJaspr.getAllNamedStacks()
+            assertEquals(2, allStacks.size)
+
+            // With mineOnly: only the stack authored by the current user (DEFAULT_COMMITTER)
+            val myStacks = gitJaspr.getAllNamedStacks(mineOnly = true)
+            assertEquals(1, myStacks.size)
+            assertEquals("my-stack", myStacks.single().stackName)
+        }
+    }
+
+    @Stack
+    @Test
     fun `rename stack changes remote branch name`() {
         withTestSetup(useFakeRemote) {
             createCommitsFrom(

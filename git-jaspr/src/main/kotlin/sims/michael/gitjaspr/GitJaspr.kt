@@ -1615,7 +1615,7 @@ class GitJaspr(
     }
 
     /** Get the current user's commit author identity that would be used for new commits. */
-    private fun getCurrentUserIdent(): Ident {
+    fun getCurrentUserIdent(): Ident {
         val name = gitClient.getConfigValue("user.name") ?: System.getenv("USER") ?: "unknown"
         val email = gitClient.getConfigValue("user.email") ?: "unknown@unknown.com"
         return Ident(name, email)
@@ -1685,14 +1685,24 @@ class GitJaspr(
     fun getNamedStacks(targetRef: String) = getAllNamedStacks().filter { it.targetRef == targetRef }
 
     /** Returns all named stacks on the remote, sorted by stack name. */
-    fun getAllNamedStacks(): List<RemoteNamedStackRef> {
-        gitClient.fetch(config.remoteName, prune = true)
-        return gitClient
-            .getRemoteBranches(config.remoteName)
-            .mapNotNull { branch ->
-                RemoteNamedStackRef.parse(branch.name, config.remoteNamedStackBranchPrefix)
-            }
-            .sortedBy(RemoteNamedStackRef::stackName)
+    fun getAllNamedStacks(mineOnly: Boolean = false): List<RemoteNamedStackRef> {
+        val remoteName = config.remoteName
+        gitClient.fetch(remoteName, prune = true)
+        val allStacks =
+            gitClient
+                .getRemoteBranches(remoteName)
+                .mapNotNull { branch ->
+                    RemoteNamedStackRef.parse(branch.name, config.remoteNamedStackBranchPrefix)
+                }
+                .sortedBy(RemoteNamedStackRef::stackName)
+        if (!mineOnly) return allStacks
+
+        val userIdent = getCurrentUserIdent()
+        val refs = allStacks.map { ref -> "$remoteName/${ref.name()}" }
+        val commits = gitClient.getCommits(refs)
+        return allStacks.filter { stack ->
+            commits["$remoteName/${stack.name()}"]?.author == userIdent
+        }
     }
 
     /**

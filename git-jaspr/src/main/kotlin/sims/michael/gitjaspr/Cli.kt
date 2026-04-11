@@ -1297,29 +1297,39 @@ class Stack : SuspendingCliktCommand(name = "stack") {
 
 class StackList : GitJasprSubcommand(name = "list", helpText = "List all named stacks") {
 
+    private val mine by
+        option("--mine").flag().help { "Show only stacks authored by the current user" }
+
     override suspend fun doRun() {
         val gitJaspr = appWiring.gitJaspr
         val config = appWiring.config
-        val allStacks = gitJaspr.getAllNamedStacks()
+        val stacks = gitJaspr.getAllNamedStacks(mineOnly = mine)
 
-        if (allStacks.isEmpty()) {
-            renderer.info { "No named stacks found." }
+        if (stacks.isEmpty()) {
+            renderer.info { if (mine) "No matching stacks found." else "No named stacks found." }
             return
         }
 
         val remoteName = config.remoteName
-        val refs = allStacks.map { ref -> "${remoteName}/${ref.name()}" }
-        val shortMessages = appWiring.gitClient.getShortMessages(refs)
+        val refs = stacks.map { ref -> "${remoteName}/${ref.name()}" }
+        val commits = appWiring.gitClient.getCommits(refs)
 
-        val stacksByTarget = allStacks.groupBy(RemoteNamedStackRef::targetRef)
+        val stacksByTarget = stacks.groupBy(RemoteNamedStackRef::targetRef)
         val lines = buildList {
-            for ((targetRef, stacks) in stacksByTarget) {
+            for ((targetRef, targetStacks) in stacksByTarget) {
                 add(theme.heading("Stacks targeting ${theme.entity(targetRef)}:"))
-                for (stack in stacks) {
+                for (stack in targetStacks) {
                     val ref = "${remoteName}/${stack.name()}"
+                    val commit = commits[ref]
                     val message =
-                        shortMessages[ref]?.let { " ${theme.commitSubject(it)}" }.orEmpty()
-                    add("  [${theme.entity(stack.stackName)}]$message")
+                        commit?.shortMessage?.let { " ${theme.commitSubject(it)}" }.orEmpty()
+                    val author =
+                        if (!mine) {
+                            commit?.author?.name?.let { " ${theme.muted("<$it>")}" }.orEmpty()
+                        } else {
+                            ""
+                        }
+                    add("  [${theme.entity(stack.stackName)}]$message$author")
                 }
                 add("")
             }
