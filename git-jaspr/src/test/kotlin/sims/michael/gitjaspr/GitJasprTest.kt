@@ -4270,6 +4270,85 @@ interface GitJasprTest {
 
     @Clean
     @Test
+    fun `clean also removes matching local branches`() {
+        withTestSetup(useFakeRemote) {
+            // Set up orphaned remote branches (no open PRs pointing to them)
+            createCommitsFrom(
+                testCase {
+                    repository {
+                        commit {
+                            title = "a"
+                            willPassVerification = true
+                            remoteRefs += buildRemoteRef("a")
+                        }
+                        commit {
+                            title = "b"
+                            willPassVerification = true
+                            localRefs += "development"
+                            remoteRefs += buildRemoteRef("b")
+                        }
+                    }
+                }
+            )
+
+            // Create a local branch tracking one of the orphaned remote branches
+            val orphanedRef = buildRemoteRef("b")
+            localGit.branch("my-local-branch", startPoint = "$remoteName/$orphanedRef")
+            localGit.setUpstreamBranchForLocalBranch("my-local-branch", remoteName, orphanedRef)
+
+            // Verify the local branch exists before clean
+            assertTrue("my-local-branch" in localGit.getBranchNames())
+
+            gitJaspr.executeCleanPlan(
+                gitJaspr.getCleanPlan(cleanAbandonedPrs = false, cleanAllCommits = false)
+            )
+
+            // The local branch should have been removed along with the remote
+            assertFalse("my-local-branch" in localGit.getBranchNames())
+        }
+    }
+
+    @Clean
+    @Test
+    fun `clean does not remove local branch with divergent tip`() {
+        withTestSetup(useFakeRemote) {
+            createCommitsFrom(
+                testCase {
+                    repository {
+                        commit {
+                            title = "a"
+                            willPassVerification = true
+                            remoteRefs += buildRemoteRef("a")
+                        }
+                        commit {
+                            title = "b"
+                            willPassVerification = true
+                            localRefs += "development"
+                            remoteRefs += buildRemoteRef("b")
+                        }
+                    }
+                }
+            )
+
+            // Create a local branch tracking the orphaned remote, then add a local commit
+            val orphanedRef = buildRemoteRef("b")
+            localGit.branch("my-diverged-branch", startPoint = "$remoteName/$orphanedRef")
+            localGit.setUpstreamBranchForLocalBranch("my-diverged-branch", remoteName, orphanedRef)
+            localGit.checkout("my-diverged-branch")
+            localGit.commit("local-only commit")
+            localGit.checkout("development")
+
+            gitJaspr.executeCleanPlan(
+                gitJaspr.getCleanPlan(cleanAbandonedPrs = false, cleanAllCommits = false)
+            )
+
+            // The diverged local branch should NOT be deleted (tip doesn't match remote)
+            assertTrue("my-diverged-branch" in localGit.getBranchNames())
+        }
+    }
+
+    @Clean
+    @Test
     fun `getOrphanedBranches prunes stale tracking branches`() {
         withTestSetup(useFakeRemote) {
             createCommitsFrom(
