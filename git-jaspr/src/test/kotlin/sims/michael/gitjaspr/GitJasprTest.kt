@@ -27,6 +27,7 @@ import sims.michael.gitjaspr.testing.PrBody
 import sims.michael.gitjaspr.testing.Push
 import sims.michael.gitjaspr.testing.Stack
 import sims.michael.gitjaspr.testing.Status
+import sims.michael.gitjaspr.testing.Sync
 
 interface GitJasprTest {
 
@@ -350,6 +351,340 @@ interface GitJasprTest {
                 }
             )
             assertThrows<IllegalArgumentException> { gitJaspr.navigateUp(1) }
+        }
+    }
+
+    // endregion
+
+    // region sync tests
+    @Sync
+    @Test
+    fun `sync rebases two non-overlapping branches`() {
+        withTestSetup(useFakeRemote) {
+            // Two independent stacks behind main. Main advances with "advance_main".
+            createCommitsFrom(
+                testCase {
+                    repository {
+                        commit {
+                            title = "fork_point"
+                            id = "" // No jaspr ID for the shared base
+                            branch {
+                                commit {
+                                    title = "advance_main"
+                                    id = ""
+                                    remoteRefs += "main"
+                                }
+                            }
+                            branch {
+                                commit {
+                                    title = "A"
+                                    localRefs += "branch_a"
+                                }
+                            }
+                        }
+                        commit {
+                            title = "B"
+                            localRefs += "branch_b"
+                        }
+                    }
+                    checkout = "branch_b"
+                }
+            )
+            localGit.fetch(remoteName)
+
+            val results = gitJaspr.sync(DEFAULT_TARGET_REF)
+
+            assertTrue(
+                results.all { it.success },
+                "All branches should sync successfully: $results",
+            )
+            // Both branches should now be rebased on top of advance_main
+            for (branchName in listOf("branch_a", "branch_b")) {
+                val stack = localGit.getLocalCommitStack(remoteName, branchName, DEFAULT_TARGET_REF)
+                assertTrue(stack.isNotEmpty(), "$branchName should have commits above main")
+            }
+        }
+    }
+
+    @Sync
+    @Test
+    fun `sync rebases overlapping branches without duplicating commits`() {
+        withTestSetup(useFakeRemote) {
+            // Stack: fork_point -> A -> B -> C
+            // branch_a at A, branch_c at C (checked out)
+            // Main advances past fork_point
+            createCommitsFrom(
+                testCase {
+                    repository {
+                        commit {
+                            title = "fork_point"
+                            id = ""
+                            branch {
+                                commit {
+                                    title = "advance_main"
+                                    id = ""
+                                    remoteRefs += "main"
+                                }
+                            }
+                        }
+                        commit {
+                            title = "A"
+                            localRefs += "branch_a"
+                        }
+                        commit { title = "B" }
+                        commit {
+                            title = "C"
+                            localRefs += "branch_c"
+                        }
+                    }
+                    checkout = "branch_c"
+                }
+            )
+            localGit.fetch(remoteName)
+
+            val results = gitJaspr.sync(DEFAULT_TARGET_REF)
+
+            assertTrue(
+                results.all { it.success },
+                "All branches should sync successfully: $results",
+            )
+
+            // branch_a should have: advance_main -> A'
+            val stackA = localGit.getLocalCommitStack(remoteName, "branch_a", DEFAULT_TARGET_REF)
+            assertEquals(1, stackA.size)
+            assertEquals("A", stackA[0].shortMessage)
+
+            // branch_c should have: advance_main -> A' -> B' -> C'
+            val stackC = localGit.getLocalCommitStack(remoteName, "branch_c", DEFAULT_TARGET_REF)
+            assertEquals(3, stackC.size)
+            assertEquals(listOf("A", "B", "C"), stackC.map(Commit::shortMessage))
+
+            // Crucially: A' in branch_a should be the SAME commit as A' in branch_c
+            assertEquals(stackA[0].hash, stackC[0].hash)
+        }
+    }
+
+    @Sync
+    @Test
+    fun `sync skips conflicting non-checked-out branch`() {
+        withTestSetup(useFakeRemote) {
+            // branch_a will conflict, branch_b (checked out) will not
+            createCommitsFrom(
+                testCase {
+                    repository {
+                        commit {
+                            title = "fork_point"
+                            id = ""
+                            localRefs += "fork_ref"
+                            branch {
+                                commit {
+                                    title = "advance_main"
+                                    id = ""
+                                    remoteRefs += "main"
+                                }
+                            }
+                        }
+                        commit {
+                            title = "B"
+                            localRefs += "branch_b"
+                        }
+                    }
+                    checkout = "branch_b"
+                }
+            )
+            // Create branch_a that modifies the same file as advance_main to cause a conflict
+            localGit.checkout("fork_ref")
+            val conflictFile = localRepo.resolve("advance_main.txt")
+            conflictFile.writeText("conflicting content from branch_a\n")
+            localGit.add("advance_main.txt")
+            localGit.commit(
+                "A_conflicting",
+                footerLines = mapOf(COMMIT_ID_LABEL to "A_conflicting"),
+            )
+            localGit.branch("branch_a", force = true)
+            localGit.checkout("branch_b")
+            localGit.fetch(remoteName)
+
+            val results = gitJaspr.sync(DEFAULT_TARGET_REF)
+
+            val failed = results.filter { !it.success }
+            val succeeded = results.filter { it.success }
+            assertTrue(failed.any { it.branch == "branch_a" }, "branch_a should fail: $results")
+            assertTrue(
+                succeeded.any { it.branch == "branch_b" },
+                "branch_b should succeed: $results",
+            )
+        }
+    }
+
+    @Sync
+    @Test
+    fun `sync handles conflict on checked-out branch`() {
+        withTestSetup(useFakeRemote) {
+            // branch_a (not checked out) will succeed
+            // branch_b (checked out) will conflict
+            createCommitsFrom(
+                testCase {
+                    repository {
+                        commit {
+                            title = "fork_point"
+                            id = ""
+                            localRefs += "fork_ref"
+                            branch {
+                                commit {
+                                    title = "advance_main"
+                                    id = ""
+                                    remoteRefs += "main"
+                                }
+                            }
+                            branch {
+                                commit {
+                                    title = "A"
+                                    localRefs += "branch_a"
+                                }
+                            }
+                        }
+                    }
+                }
+            )
+            // Create branch_b with a conflicting commit
+            localGit.checkout("fork_ref")
+            val conflictFile = localRepo.resolve("advance_main.txt")
+            conflictFile.writeText("conflicting content from branch_b\n")
+            localGit.add("advance_main.txt")
+            localGit.commit(
+                "B_conflicting",
+                footerLines = mapOf(COMMIT_ID_LABEL to "B_conflicting"),
+            )
+            localGit.branch("branch_b", force = true)
+            localGit.checkout("branch_b")
+            localGit.fetch(remoteName)
+
+            val results = gitJaspr.sync(DEFAULT_TARGET_REF)
+
+            val failed = results.filter { !it.success }
+            val succeeded = results.filter { it.success }
+            assertTrue(succeeded.any { it.branch == "branch_a" })
+            assertTrue(failed.any { it.branch == "branch_b" })
+        }
+    }
+
+    @Sync
+    @Test
+    fun `sync skips dependent branch when ancestor conflicts`() {
+        withTestSetup(useFakeRemote) {
+            // branch_a at A (will conflict), branch_b at A -> B (depends on A, should be skipped)
+            createCommitsFrom(
+                testCase {
+                    repository {
+                        commit {
+                            title = "fork_point"
+                            id = ""
+                            localRefs += "fork_ref"
+                            branch {
+                                commit {
+                                    title = "advance_main"
+                                    id = ""
+                                    remoteRefs += "main"
+                                }
+                            }
+                        }
+                    }
+                }
+            )
+            // Create conflicting commit A on branch_a
+            localGit.checkout("fork_ref")
+            val conflictFile = localRepo.resolve("advance_main.txt")
+            conflictFile.writeText("conflicting content\n")
+            localGit.add("advance_main.txt")
+            localGit.commit(
+                "A_conflicting",
+                footerLines = mapOf(COMMIT_ID_LABEL to "A_conflicting"),
+            )
+            localGit.branch("branch_a", force = true)
+            // Create B on top of A → branch_b
+            localGit.commit(
+                "B_depends_on_A",
+                footerLines = mapOf(COMMIT_ID_LABEL to "B_depends_on_A"),
+            )
+            localGit.branch("branch_b", force = true)
+            localGit.checkout("branch_b")
+            localGit.fetch(remoteName)
+
+            val results = gitJaspr.sync(DEFAULT_TARGET_REF)
+
+            val failed = results.filter { !it.success }
+            assertTrue(failed.any { it.branch == "branch_a" }, "branch_a should fail: $results")
+            assertTrue(
+                failed.any { it.branch == "branch_b" },
+                "branch_b should be skipped (depends on branch_a): $results",
+            )
+        }
+    }
+
+    @Sync
+    @Test
+    fun `sync does nothing when branches are already up to date`() {
+        withTestSetup(useFakeRemote) {
+            createCommitsFrom(
+                testCase {
+                    repository {
+                        commit {
+                            title = "A"
+                            localRefs += "development"
+                        }
+                    }
+                    checkout = "development"
+                }
+            )
+            localGit.fetch(remoteName)
+
+            val results = gitJaspr.sync(DEFAULT_TARGET_REF)
+
+            assertTrue(results.all { it.success })
+        }
+    }
+
+    @Sync
+    @Test
+    fun `sync ignores branches without jaspr commit IDs`() {
+        withTestSetup(useFakeRemote) {
+            createCommitsFrom(
+                testCase {
+                    repository {
+                        commit {
+                            title = "fork_point"
+                            id = ""
+                            localRefs += "fork_ref"
+                            branch {
+                                commit {
+                                    title = "advance_main"
+                                    id = ""
+                                    remoteRefs += "main"
+                                }
+                            }
+                        }
+                        commit {
+                            title = "A"
+                            localRefs += "jaspr_branch"
+                        }
+                    }
+                    checkout = "jaspr_branch"
+                }
+            )
+            // Create a non-jaspr branch (commit without footer)
+            localGit.checkout("fork_ref")
+            localGit.commit("plain commit without id")
+            localGit.branch("plain_branch", force = true)
+            localGit.checkout("jaspr_branch")
+            localGit.fetch(remoteName)
+
+            val results = gitJaspr.sync(DEFAULT_TARGET_REF)
+
+            // Only jaspr_branch should be in results, not plain_branch
+            val branchNames = results.map(GitJaspr.SyncBranchResult::branch)
+            assertTrue("jaspr_branch" in branchNames)
+            assertFalse("plain_branch" in branchNames)
         }
     }
 

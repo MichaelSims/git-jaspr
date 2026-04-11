@@ -47,6 +47,11 @@ annotation class Stack
 @Tag("nav")
 annotation class Nav
 
+@Target(AnnotationTarget.FUNCTION)
+@Retention(AnnotationRetention.RUNTIME)
+@Tag("sync")
+annotation class Sync
+
 @Target(AnnotationTarget.CLASS)
 @Retention(AnnotationRetention.RUNTIME)
 @Tag("functional")

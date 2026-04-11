@@ -978,6 +978,29 @@ class Rebase : GitJasprSubcommand() {
     }
 }
 
+class Sync :
+    GitJasprSubcommand(helpText = "Rebase all local jaspr stacks onto the latest target branch") {
+    private val targetOpts by TargetOptions()
+
+    override suspend fun doRun() {
+        val results = appWiring.gitJaspr.sync(targetOpts.target)
+        val succeeded = results.count { it.success }
+        val failed = results.count { !it.success }
+        if (failed > 0) {
+            renderer.warn {
+                "Sync complete: $succeeded succeeded, $failed failed. " +
+                    "Failed branches: ${results.filter { !it.success }.joinToString(", ") { entity(it.branch) }}"
+            }
+        } else if (succeeded > 0) {
+            renderer.info {
+                success(
+                    "Sync complete: $succeeded ${if (succeeded == 1) "branch" else "branches"} rebased."
+                )
+            }
+        }
+    }
+}
+
 private const val GIT_AUTOSQUASH_MIN_VERSION = "2.44.0"
 
 /** Returns true if the installed git version supports `--autosquash` without `--interactive`. */
@@ -1640,6 +1663,7 @@ fun buildCommand(): SuspendingCliktCommand =
             Nav().subcommands(NavClear()),
             Fixup(),
             Continue(),
+            Sync(),
             PreviewTheme(),
             LogPath(),
             Init(),

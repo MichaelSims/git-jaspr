@@ -2046,6 +2046,327 @@ class GitJaspr(
         clearNavState()
     }
 
+    /** Result of syncing a single branch. */
+    data class SyncBranchResult(val branch: String, val success: Boolean, val message: String)
+
+    /**
+     * Rebases all local jaspr-managed branches onto the latest target ref. Uses a temporary
+     * worktree for branches other than the current one, with topological ordering and commit
+     * mapping to avoid duplicating shared commits. The current branch is rebased last in the main
+     * working copy.
+     *
+     * @return list of results for each branch attempted
+     */
+    fun sync(targetRef: String): List<SyncBranchResult> {
+        val remoteName = config.remoteName
+        gitClient.fetch(remoteName)
+
+        val currentBranch = gitClient.getCurrentBranchName()
+        val targetBase = "$remoteName/$targetRef"
+
+        // Find all local branches with jaspr commit-IDs above the target
+        data class BranchStack(val branch: String, val commits: List<Commit>)
+
+        val branchStacks = buildList {
+            for (branch in gitClient.getBranchNames()) {
+                val commits = gitClient.getLocalCommitStack(remoteName, branch, targetRef)
+                val hasJasprCommits = commits.any { commit -> commit.id != null }
+                if (hasJasprCommits) {
+                    add(BranchStack(branch, commits))
+                }
+            }
+        }
+
+        if (branchStacks.isEmpty()) {
+            renderer.info { "No jaspr-managed branches to sync." }
+            return emptyList()
+        }
+
+        // Check which branches actually need rebasing
+        val targetBaseHash = gitClient.log(targetBase, 1).singleOrNull()?.hash
+        val branchesNeedingRebase = branchStacks.filter { (_, commits) ->
+            // A branch needs rebase if the target base is not already the parent of its first
+            // commit
+            commits.isNotEmpty() &&
+                gitClient.getParents(commits.first()).none { parent ->
+                    parent.hash == targetBaseHash
+                }
+        }
+
+        if (branchesNeedingRebase.isEmpty()) {
+            renderer.info { "All branches are already up to date." }
+            return branchStacks.map { SyncBranchResult(it.branch, true, "Already up to date") }
+        }
+
+        // Sort by stack depth (shallowest first) for topological ordering
+        val sorted = branchesNeedingRebase.sortedBy { it.commits.size }
+
+        // Separate the current branch from others
+        val otherBranches = sorted.filter { it.branch != currentBranch }
+        val currentBranchStack = sorted.find { it.branch == currentBranch }
+
+        val results = mutableListOf<SyncBranchResult>()
+        val commitMap = mutableMapOf<String, String>() // oldHash -> newHash
+        val skippedCommits = mutableSetOf<String>() // commits whose branches conflicted
+
+        // Rebase non-current branches in a worktree
+        if (otherBranches.isNotEmpty()) {
+            val worktreeDir = getJasprDir().resolve("sync-worktree")
+            try {
+                // Create detached worktree
+                worktreeDir.deleteRecursively()
+                val addResult =
+                    ProcessBuilder("git", "worktree", "add", "--detach", worktreeDir.absolutePath)
+                        .directory(config.workingDirectory)
+                        .redirectErrorStream(true)
+                        .start()
+                        .let { proc ->
+                            proc.inputStream.bufferedReader().readText()
+                            proc.waitFor()
+                        }
+                check(addResult == 0) { "Failed to create worktree" }
+
+                for ((branch, commits) in otherBranches) {
+                    // Check if any of this branch's commits are in a skipped set
+                    val hasSkippedAncestor = commits.any { it.hash in skippedCommits }
+                    if (hasSkippedAncestor) {
+                        renderer.warn {
+                            "Skipping ${entity(branch)} — depends on a conflicted branch"
+                        }
+                        results.add(
+                            SyncBranchResult(
+                                branch,
+                                false,
+                                "Skipped (depends on conflicted branch)",
+                            )
+                        )
+                        commits.forEach { skippedCommits.add(it.hash) }
+                        continue
+                    }
+
+                    val result =
+                        rebaseBranchInWorktree(worktreeDir, branch, commits, targetBase, commitMap)
+                    results.add(result)
+                    if (!result.success) {
+                        commits.forEach { skippedCommits.add(it.hash) }
+                    }
+                }
+            } finally {
+                // Clean up the worktree
+                ProcessBuilder("git", "worktree", "remove", "--force", worktreeDir.absolutePath)
+                    .directory(config.workingDirectory)
+                    .redirectErrorStream(true)
+                    .start()
+                    .let { proc ->
+                        proc.inputStream.bufferedReader().readText()
+                        proc.waitFor()
+                    }
+            }
+        }
+
+        // Rebase the current branch last
+        if (currentBranchStack != null) {
+            val hasSkippedAncestor = currentBranchStack.commits.any { it.hash in skippedCommits }
+            if (hasSkippedAncestor) {
+                renderer.warn {
+                    "Skipping ${entity(currentBranch)} — depends on a conflicted branch"
+                }
+                results.add(
+                    SyncBranchResult(currentBranch, false, "Skipped (depends on conflicted branch)")
+                )
+            } else {
+                // If some commits are already mapped from worktree rebases of shallower branches,
+                // use cherry-pick to maintain shared commit identity. Otherwise use normal rebase.
+                val hasMappedCommits = currentBranchStack.commits.any { it.hash in commitMap }
+                val result =
+                    if (hasMappedCommits) {
+                        rebaseCurrentBranchViaCherryPick(
+                            currentBranch,
+                            currentBranchStack.commits,
+                            targetBase,
+                            commitMap,
+                        )
+                    } else {
+                        val rebaseResult = rebaseCurrentBranch(targetBase)
+                        SyncBranchResult(
+                            currentBranch,
+                            rebaseResult == 0,
+                            if (rebaseResult == 0) "Rebased"
+                            else "Conflict (exit code $rebaseResult)",
+                        )
+                    }
+                results.add(result)
+            }
+        }
+
+        // Add results for branches that didn't need rebasing
+        val attemptedBranches = results.map(SyncBranchResult::branch).toSet()
+        for ((branch, _) in branchStacks) {
+            if (branch !in attemptedBranches) {
+                results.add(SyncBranchResult(branch, true, "Already up to date"))
+            }
+        }
+
+        return results
+    }
+
+    /**
+     * Rebases a single branch in the worktree using cherry-pick, respecting the commit map to avoid
+     * duplicating commits that were already rebased as part of a shallower branch.
+     */
+    private fun rebaseBranchInWorktree(
+        worktreeDir: File,
+        branch: String,
+        commits: List<Commit>,
+        targetBase: String,
+        commitMap: MutableMap<String, String>,
+    ): SyncBranchResult {
+        logger.trace("rebaseBranchInWorktree {} ({} commits)", branch, commits.size)
+
+        // Find the deepest commit that has already been mapped (rebased by an earlier branch)
+        var newBase = targetBase
+        var commitsToReplay = commits
+        for (i in commits.indices.reversed()) {
+            val mapped = commitMap[commits[i].hash]
+            if (mapped != null) {
+                newBase = mapped
+                commitsToReplay = commits.subList(i + 1, commits.size)
+                break
+            }
+        }
+
+        if (commitsToReplay.isEmpty()) {
+            // All commits were already rebased by a shallower branch, just update the ref
+            val tip = commitMap[commits.last().hash]
+            if (tip != null) {
+                gitBranchForce(config.workingDirectory, branch, tip)
+                renderer.info {
+                    "Updated ${entity(branch)} (all commits shared with earlier branch)"
+                }
+            }
+            return SyncBranchResult(branch, true, "Rebased (shared commits)")
+        }
+
+        // Checkout the new base in the worktree
+        val checkoutResult = gitCommand(worktreeDir, "checkout", "--detach", newBase)
+        if (checkoutResult != 0) {
+            return SyncBranchResult(branch, false, "Failed to checkout base")
+        }
+
+        // Cherry-pick each commit
+        for (commit in commitsToReplay) {
+            val cpResult = gitCommand(worktreeDir, "cherry-pick", "--allow-empty", commit.hash)
+            if (cpResult != 0) {
+                // Abort the cherry-pick and bail
+                gitCommand(worktreeDir, "cherry-pick", "--abort")
+                renderer.warn {
+                    "Conflict rebasing ${entity(branch)} at commit ${entity(commit.hash.take(7))} (${commit.shortMessage})"
+                }
+                return SyncBranchResult(branch, false, "Conflict at ${commit.hash.take(7)}")
+            }
+            // Record the mapping: old hash -> new hash in worktree
+            val newHash = gitOutput(worktreeDir, "rev-parse", "HEAD")
+            commitMap[commit.hash] = newHash
+        }
+
+        // Update the branch ref in the main repo to point at the new tip
+        val newTip = gitOutput(worktreeDir, "rev-parse", "HEAD")
+        gitBranchForce(config.workingDirectory, branch, newTip)
+        renderer.info { "Rebased ${entity(branch)}" }
+        return SyncBranchResult(branch, true, "Rebased")
+    }
+
+    /** Rebases the current branch onto the target using normal git rebase with autosquash. */
+    private fun rebaseCurrentBranch(targetBase: String): Int {
+        val workingDirectory = config.workingDirectory
+        val rebaseArgs = buildList {
+            add("git")
+            add("rebase")
+            add("--autosquash")
+            add(targetBase)
+        }
+        return ProcessBuilder(rebaseArgs)
+            .directory(workingDirectory)
+            .inheritIO()
+            .apply { environment()["GIT_SEQUENCE_EDITOR"] = "true" }
+            .start()
+            .waitFor()
+    }
+
+    /**
+     * Rebases the current branch using cherry-pick to maintain shared commit identity with branches
+     * that were already rebased in the worktree.
+     */
+    private fun rebaseCurrentBranchViaCherryPick(
+        branch: String,
+        commits: List<Commit>,
+        targetBase: String,
+        commitMap: Map<String, String>,
+    ): SyncBranchResult {
+        val workingDirectory = config.workingDirectory
+
+        // Find the deepest mapped commit and determine what to replay
+        var newBase = targetBase
+        var commitsToReplay = commits
+        for (i in commits.indices.reversed()) {
+            val mapped = commitMap[commits[i].hash]
+            if (mapped != null) {
+                newBase = mapped
+                commitsToReplay = commits.subList(i + 1, commits.size)
+                break
+            }
+        }
+
+        // Detach HEAD at the new base
+        gitCommand(workingDirectory, "checkout", "--detach", newBase)
+
+        // Cherry-pick remaining commits
+        for (commit in commitsToReplay) {
+            val result = gitCommand(workingDirectory, "cherry-pick", "--allow-empty", commit.hash)
+            if (result != 0) {
+                gitCommand(workingDirectory, "cherry-pick", "--abort")
+                // Try to get back on the branch
+                gitCommand(workingDirectory, "checkout", branch)
+                renderer.warn {
+                    "Conflict rebasing ${entity(branch)} at commit " +
+                        "${entity(commit.hash.take(7))} (${commit.shortMessage})"
+                }
+                return SyncBranchResult(branch, false, "Conflict at ${commit.hash.take(7)}")
+            }
+        }
+
+        // Update branch and check it out
+        val newTip = gitOutput(workingDirectory, "rev-parse", "HEAD")
+        gitBranchForce(workingDirectory, branch, newTip)
+        gitCommand(workingDirectory, "checkout", branch)
+        renderer.info { "Rebased ${entity(branch)}" }
+        return SyncBranchResult(branch, true, "Rebased")
+    }
+
+    /** Run a git command in a directory and return the exit code. */
+    private fun gitCommand(dir: File, vararg args: String): Int =
+        ProcessBuilder(listOf("git") + args).directory(dir).redirectErrorStream(true).start().let {
+            proc ->
+            proc.inputStream.bufferedReader().readText()
+            proc.waitFor()
+        }
+
+    /** Run a git command and return trimmed stdout. */
+    @Suppress("SameParameterValue")
+    private fun gitOutput(dir: File, vararg args: String): String =
+        ProcessBuilder(listOf("git") + args).directory(dir).redirectErrorStream(true).start().let {
+            proc ->
+            val output = proc.inputStream.bufferedReader().readText().trim()
+            check(proc.waitFor() == 0) { "git ${args.toList()} failed: $output" }
+            output
+        }
+
+    /** Force-update a branch ref to point at a specific commit. */
+    private fun gitBranchForce(dir: File, branch: String, commit: String) {
+        val result = gitCommand(dir, "branch", "-f", branch, commit)
+        check(result == 0) { "Failed to update branch $branch to $commit" }
+    }
+
     private fun acquireAutoMergeLock(lockFile: RandomAccessFile): FileLock =
         lockFile.channel.tryLock()
             ?: throw GitJasprException(
