@@ -1804,21 +1804,44 @@ class GitJaspr(
             throw GitJasprException("Named stack '$name' not found (looking for $stackRef).")
         }
 
+        // Identify local branches to delete before the remote push (tracking refs must be intact)
+        val currentBranch = gitClient.getCurrentBranchName()
+        val localBranchesToDelete = buildList {
+            for (localBranch in gitClient.getBranchNames()) {
+                if (localBranch == currentBranch) continue
+                val upstreamName = gitClient.getUpstreamBranchName(localBranch, remoteName)
+                if (upstreamName != stackRef) continue
+                val localTip = gitClient.log(localBranch, 1).singleOrNull()?.hash
+                val remoteTip = gitClient.log("$remoteName/$stackRef", 1).singleOrNull()?.hash
+                if (localTip != null && localTip == remoteTip) {
+                    add(localBranch)
+                }
+            }
+        }
+
         // Force-delete the remote branch
         gitClient.push(listOf(RefSpec(FORCE_PUSH_PREFIX, stackRef)), remoteName)
         renderer.info { "Deleted remote stack branch ${entity(stackRef)}" }
-
-        // Unset upstream tracking for any local branches that pointed to the deleted ref
-        val affectedBranches = mutableListOf<String>()
-        for (localBranch in gitClient.getBranchNames()) {
-            val upstreamName = gitClient.getUpstreamBranchName(localBranch, remoteName)
-            if (upstreamName == stackRef) {
-                gitClient.setUpstreamBranchForLocalBranch(localBranch, remoteName, null)
-                affectedBranches.add(localBranch)
-                renderer.info { "Unset upstream for local branch '${entity(localBranch)}'" }
+        if (localBranchesToDelete.isNotEmpty()) {
+            gitClient.deleteBranches(localBranchesToDelete)
+            for (branch in localBranchesToDelete) {
+                renderer.info { "Deleted local branch '${entity(branch)}'" }
             }
         }
-        return affectedBranches
+
+        // Unset upstream for any remaining local branches that tracked the deleted ref
+        // (e.g. current branch, or branches with divergent tips that weren't deleted)
+        val remainingBranches = buildList {
+            for (localBranch in gitClient.getBranchNames()) {
+                val upstreamName = gitClient.getUpstreamBranchName(localBranch, remoteName)
+                if (upstreamName == stackRef) {
+                    gitClient.setUpstreamBranchForLocalBranch(localBranch, remoteName, null)
+                    add(localBranch)
+                    renderer.info { "Unset upstream for local branch '${entity(localBranch)}'" }
+                }
+            }
+        }
+        return localBranchesToDelete + remainingBranches
     }
 
     /** Intended for tests */
