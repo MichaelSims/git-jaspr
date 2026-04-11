@@ -862,13 +862,48 @@ class GitJaspr(
     fun executeCleanPlan(plan: CleanPlan) {
         logger.trace("executeCleanPlan")
         val branchesToDelete = plan.allBranches()
+
+        // Identify matching local branches before deleting remotes (we need tracking refs intact)
+        val localBranchesToDelete = findMatchingLocalBranches(branchesToDelete.toSet())
+
         renderer.info {
-            "Deleting ${branchesToDelete.size} ${branchOrBranches(branchesToDelete.size)}"
+            "Deleting ${branchesToDelete.size} remote ${branchOrBranches(branchesToDelete.size)}"
         }
         gitClient.push(
             branchesToDelete.map { name -> RefSpec(FORCE_PUSH_PREFIX, name) },
             config.remoteName,
         )
+
+        if (localBranchesToDelete.isNotEmpty()) {
+            gitClient.deleteBranches(localBranchesToDelete)
+            renderer.info {
+                "Removed ${localBranchesToDelete.size} local " +
+                    "${branchOrBranches(localBranchesToDelete.size)}: " +
+                    localBranchesToDelete.joinToString(", ")
+            }
+        }
+    }
+
+    /**
+     * Finds local branches whose upstream matches any of the given remote branch names and whose
+     * tip equals the remote tracking ref tip. Skips the current branch.
+     */
+    private fun findMatchingLocalBranches(remoteBranchNames: Set<String>): List<String> {
+        val remoteName = config.remoteName
+        val currentBranch = gitClient.getCurrentBranchName()
+        return buildList {
+            for (localBranch in gitClient.getBranchNames()) {
+                if (localBranch == currentBranch) continue
+                val upstream = gitClient.getUpstreamBranchName(localBranch, remoteName) ?: continue
+                if (upstream !in remoteBranchNames) continue
+                val localTip = gitClient.log(localBranch, 1).singleOrNull()?.hash ?: continue
+                val trackingRef = "$remoteName/$upstream"
+                val remoteTip = gitClient.log(trackingRef, 1).singleOrNull()?.hash
+                if (localTip == remoteTip) {
+                    add(localBranch)
+                }
+            }
+        }
     }
 
     /** Returns short commit messages for the given branch names, prefixed with the remote name. */
