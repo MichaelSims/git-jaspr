@@ -6,6 +6,7 @@ import org.junit.jupiter.api.Assertions.*
 import org.junit.jupiter.api.Test
 import org.slf4j.LoggerFactory
 import org.zeroturnaround.exec.ProcessExecutor
+import sims.michael.gitjaspr.githubtests.GitHubStubClient
 import sims.michael.gitjaspr.testing.DEFAULT_COMMITTER
 import sims.michael.gitjaspr.testing.toStringWithClickableURI
 
@@ -300,6 +301,67 @@ class WorktreeSupportTest {
             assertTrue(worktreeGit.refExists("main"))
             assertTrue(worktreeGit.refExists("worktree-branch"))
             assertFalse(worktreeGit.refExists("nonexistent-branch"))
+        } finally {
+            tempDir.deleteRecursively()
+        }
+    }
+
+    @Test
+    fun `installCommitIdHook installs hook in main repo when run from worktree`() {
+        val tempDir = createTempDir()
+        try {
+            // Create the main repository with a remote (required by GitJaspr config)
+            val mainRepoDir = tempDir.resolve("main-repo")
+            val mainGit = CliGitClient(mainRepoDir).init()
+            mainRepoDir.resolve("README.txt").writeText("Test repo")
+            mainGit.add("README.txt").commit("Initial commit", committer = DEFAULT_COMMITTER)
+            ProcessExecutor()
+                .directory(mainRepoDir)
+                .command("git", "remote", "add", "origin", "https://github.com/test/test.git")
+                .execute()
+
+            // Create a worktree
+            val worktreeDir = tempDir.resolve("worktree")
+            ProcessExecutor()
+                .directory(mainRepoDir)
+                .command("git", "worktree", "add", worktreeDir.absolutePath, "-b", "wt-branch")
+                .destroyOnExit()
+                .execute()
+
+            // Verify .git is a file in the worktree (not a directory)
+            assertTrue(worktreeDir.resolve(".git").isFile)
+
+            // Create a GitJaspr pointed at the worktree
+            val worktreeGit = CliGitClient(worktreeDir)
+            val gitJaspr =
+                GitJaspr(
+                    ghClient =
+                        GitHubStubClient(
+                            remoteBranchPrefix = "jaspr",
+                            remoteName = "origin",
+                            localGit = worktreeGit,
+                        ),
+                    gitClient = worktreeGit,
+                    config =
+                        Config(
+                            workingDirectory = worktreeDir,
+                            remoteName = "origin",
+                            gitHubInfo = GitHubInfo("github.com", "test", "test"),
+                        ),
+                )
+
+            gitJaspr.installCommitIdHook()
+
+            // Hook should be in the MAIN repo's hooks dir, not the worktree
+            val mainHook = mainRepoDir.resolve(".git/hooks/commit-msg")
+            assertTrue(mainHook.exists(), "Hook should exist in main repo's .git/hooks")
+            assertTrue(mainHook.canExecute(), "Hook should be executable")
+
+            // Worktree should NOT have a hooks dir (it's a file-based .git)
+            assertFalse(
+                worktreeDir.resolve(".git/hooks").exists(),
+                "Worktree should not have its own hooks dir",
+            )
         } finally {
             tempDir.deleteRecursively()
         }
