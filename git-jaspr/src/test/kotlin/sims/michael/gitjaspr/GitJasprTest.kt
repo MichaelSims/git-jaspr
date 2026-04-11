@@ -6432,6 +6432,99 @@ interface GitJasprTest {
         }
     }
 
+    @Stack
+    @Test
+    fun `delete stack also removes matching local branch`() {
+        withTestSetup(useFakeRemote) {
+            createCommitsFrom(
+                testCase {
+                    repository {
+                        commit { title = "one" }
+                        commit {
+                            title = "two"
+                            localRefs += "development"
+                        }
+                    }
+                    checkout = "development"
+                }
+            )
+            push(stackName = "my-stack")
+
+            // Use checkout to create a local branch tracking the named stack
+            checkout("my-stack")
+            // Switch back to development so my-stack isn't the current branch
+            localGit.checkout("development")
+
+            assertTrue("my-stack" in localGit.getBranchNames())
+
+            deleteStack("my-stack")
+
+            assertFalse("my-stack" in localGit.getBranchNames())
+        }
+    }
+
+    @Stack
+    @Test
+    fun `delete stack preserves diverged local branch and unsets upstream`() {
+        withTestSetup(useFakeRemote) {
+            createCommitsFrom(
+                testCase {
+                    repository {
+                        commit { title = "one" }
+                        commit {
+                            title = "two"
+                            localRefs += "development"
+                        }
+                    }
+                    checkout = "development"
+                }
+            )
+            push(stackName = "my-stack")
+
+            // Create a local branch tracking the stack, then add a local-only commit
+            checkout("my-stack")
+            localGit.commit("local-only commit")
+            localGit.checkout("development")
+
+            assertTrue("my-stack" in localGit.getBranchNames())
+
+            deleteStack("my-stack")
+
+            // Branch should still exist (diverged tip) but upstream should be unset
+            assertTrue("my-stack" in localGit.getBranchNames())
+            assertNull(localGit.getUpstreamBranchName("my-stack", remoteName))
+        }
+    }
+
+    @Stack
+    @Test
+    fun `delete stack skips current branch and unsets upstream`() {
+        withTestSetup(useFakeRemote) {
+            createCommitsFrom(
+                testCase {
+                    repository {
+                        commit { title = "one" }
+                        commit {
+                            title = "two"
+                            localRefs += "development"
+                        }
+                    }
+                    checkout = "development"
+                }
+            )
+            push(stackName = "my-stack")
+
+            // Check out the stack branch so it's the current branch
+            checkout("my-stack")
+
+            deleteStack("my-stack")
+
+            // Current branch should still exist but upstream should be unset
+            assertEquals("my-stack", localGit.getCurrentBranchName())
+            assertNull(localGit.getUpstreamBranchName("my-stack", remoteName))
+        }
+    }
+
     // endregion
 
     private fun isNamedStackBranch(branch: RemoteBranch): Boolean {
