@@ -368,6 +368,136 @@ interface GitJasprTest {
         }
     }
 
+    @Nav
+    @Test
+    fun `new commit during nav session is inserted into stack`() {
+        withTestSetup(useFakeRemote) {
+            // Stack: A -> B -> C -> D on "development"
+            createCommitsFrom(
+                testCase {
+                    repository {
+                        commit { title = "A" }
+                        commit { title = "B" }
+                        commit { title = "C" }
+                        commit {
+                            title = "D"
+                            localRefs += "development"
+                        }
+                    }
+                    checkout = "development"
+                }
+            )
+
+            // Nav down 2: HEAD at B
+            gitJaspr.navigateDown(DEFAULT_TARGET_REF, 2)
+            assertEquals("B", localGit.log(GitClient.HEAD, 1).single().shortMessage)
+
+            // Create a new commit E on top of B
+            localRepo.resolve("new_file.txt").writeText("inserted commit\n")
+            localGit.add("new_file.txt")
+            localGit.commit("E", footerLines = mapOf(COMMIT_ID_LABEL to "E"))
+
+            // Nav up 1: reconciliation detects E, cherry-picks C
+            gitJaspr.navigateUp(1, DEFAULT_TARGET_REF)
+            assertEquals("C", localGit.log(GitClient.HEAD, 1).single().shortMessage)
+
+            // Nav up 1: cherry-picks D, restores branch
+            gitJaspr.navigateUp(1, DEFAULT_TARGET_REF)
+            assertFalse(localGit.isHeadDetached())
+            assertEquals("development", localGit.getCurrentBranchName())
+            assertNull(gitJaspr.readNavState())
+
+            // Final stack should be A -> B -> E -> C -> D
+            val finalStack =
+                localGit.getLocalCommitStack(remoteName, GitClient.HEAD, DEFAULT_TARGET_REF)
+            assertEquals(listOf("A", "B", "E", "C", "D"), finalStack.map(Commit::shortMessage))
+        }
+    }
+
+    @Nav
+    @Test
+    fun `hard reset during nav session moves removed commits to replay queue`() {
+        withTestSetup(useFakeRemote) {
+            // Stack: A -> B -> C -> D on "development"
+            createCommitsFrom(
+                testCase {
+                    repository {
+                        commit { title = "A" }
+                        commit { title = "B" }
+                        commit { title = "C" }
+                        commit {
+                            title = "D"
+                            localRefs += "development"
+                        }
+                    }
+                    checkout = "development"
+                }
+            )
+
+            // Nav down 2: HEAD at B
+            gitJaspr.navigateDown(DEFAULT_TARGET_REF, 2)
+            assertEquals("B", localGit.log(GitClient.HEAD, 1).single().shortMessage)
+
+            // Hard reset to A (removing B from materialized commits)
+            localGit.reset("HEAD~1")
+
+            // Nav up 1: reconciliation detects B is missing, prepends to replay queue.
+            // Replay queue was [C, D], now [B, C, D]. Cherry-picks B.
+            gitJaspr.navigateUp(1, DEFAULT_TARGET_REF)
+            assertEquals("B", localGit.log(GitClient.HEAD, 1).single().shortMessage)
+
+            // Nav to top: cherry-picks C and D, restores branch
+            gitJaspr.navigateToTop(DEFAULT_TARGET_REF)
+            assertFalse(localGit.isHeadDetached())
+
+            // Final stack should be A -> B -> C -> D (same order, new SHAs)
+            val finalStack =
+                localGit.getLocalCommitStack(remoteName, GitClient.HEAD, DEFAULT_TARGET_REF)
+            assertEquals(listOf("A", "B", "C", "D"), finalStack.map(Commit::shortMessage))
+        }
+    }
+
+    @Nav
+    @Test
+    fun `amend during nav session updates SHA in stack`() {
+        withTestSetup(useFakeRemote) {
+            // Stack: A -> B -> C on "development"
+            createCommitsFrom(
+                testCase {
+                    repository {
+                        commit { title = "A" }
+                        commit { title = "B" }
+                        commit {
+                            title = "C"
+                            localRefs += "development"
+                        }
+                    }
+                    checkout = "development"
+                }
+            )
+
+            // Nav down 1: HEAD at B
+            gitJaspr.navigateDown(DEFAULT_TARGET_REF, 1)
+
+            // Amend B (fix a typo — same commit ID, different SHA)
+            localRepo.resolve("amend_fix.txt").writeText("amended content\n")
+            localGit.add("amend_fix.txt")
+            localGit.commit("B", footerLines = mapOf(COMMIT_ID_LABEL to "B"), amend = true)
+
+            // Nav down 1: reconciliation should detect the amended SHA
+            gitJaspr.navigateDown(DEFAULT_TARGET_REF, 1)
+            assertEquals("A", localGit.log(GitClient.HEAD, 1).single().shortMessage)
+
+            // Nav up 1: should cherry-pick the amended B, not the original
+            gitJaspr.navigateUp(1, DEFAULT_TARGET_REF)
+            val replayedB = localGit.log(GitClient.HEAD, 1).single()
+            assertEquals("B", replayedB.shortMessage)
+
+            // The replayed B should contain the amended content
+            assertTrue(localRepo.resolve("amend_fix.txt").readText().contains("amended content"))
+        }
+    }
+
     // endregion
 
     // region sync tests
