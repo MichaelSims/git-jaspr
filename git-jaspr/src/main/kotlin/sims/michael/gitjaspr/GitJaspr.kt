@@ -2252,6 +2252,42 @@ class GitJaspr(
         return head.shortMessage
     }
 
+    /**
+     * Unsplit: restore the original commit from before the split, absorbing all current working
+     * tree and index changes into it. If a nav session is active, re-inserts the restored commit
+     * into the nav stack.
+     *
+     * @return the short message of the restored commit (for display)
+     */
+    fun unsplit(): String {
+        val splitState = requireNotNull(readSplitState()) { "No split in progress." }
+
+        gitClient.resetSoft(splitState.unsplitSha)
+        gitClient.add(".")
+        gitClient.commit(amend = true)
+
+        val restoredCommit = gitClient.log(GitClient.HEAD, 1).single()
+
+        // If in a nav session, re-insert the restored commit into the stack
+        val navState = readNavState()
+        if (navState != null && gitClient.isHeadDetached()) {
+            val entry =
+                StackEntry(
+                    sha = restoredCommit.hash,
+                    commitId =
+                        checkNotNull(restoredCommit.id) {
+                            "Restored commit has no jaspr commit ID."
+                        },
+                )
+            val newStack =
+                navState.stack.toMutableList().apply { add(navState.cursorIndex + 1, entry) }
+            writeNavState(navState.copy(stack = newStack, cursorIndex = navState.cursorIndex + 1))
+        }
+
+        clearSplitState()
+        return restoredCommit.shortMessage
+    }
+
     /** Result of syncing a single branch. */
     data class SyncBranchResult(val branch: String, val success: Boolean, val message: String)
 

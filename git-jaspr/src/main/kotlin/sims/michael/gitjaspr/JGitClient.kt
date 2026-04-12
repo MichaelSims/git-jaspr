@@ -220,6 +220,16 @@ class JGitClient(
         }
     }
 
+    override fun resetSoft(refName: String) = apply {
+        logger.trace("resetSoft {}", refName)
+        useGit { git ->
+            git.reset()
+                .setRef(git.repository.resolve(refName).name)
+                .setMode(ResetCommand.ResetType.SOFT)
+                .call()
+        }
+    }
+
     override fun branch(name: String, startPoint: String, force: Boolean): Commit? {
         logger.trace("branch {} start {} force {}", name, startPoint, force)
         val old = if (refExists(name)) log(name, maxCount = 1).single() else null

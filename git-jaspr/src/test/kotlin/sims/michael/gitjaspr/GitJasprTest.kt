@@ -849,6 +849,112 @@ interface GitJasprTest {
         }
     }
 
+    @Nav
+    @Test
+    fun `unsplit restores original commit`() {
+        withTestSetup(useFakeRemote) {
+            createCommitsFrom(
+                testCase {
+                    repository {
+                        commit { title = "A" }
+                        commit {
+                            title = "B"
+                            localRefs += "development"
+                        }
+                    }
+                    checkout = "development"
+                }
+            )
+
+            // Split B, then immediately unsplit
+            gitJaspr.split()
+            assertEquals("A", localGit.log(GitClient.HEAD, 1).single().shortMessage)
+
+            val subject = gitJaspr.unsplit()
+            assertEquals("B", subject)
+            assertEquals("B", localGit.log(GitClient.HEAD, 1).single().shortMessage)
+            assertNull(gitJaspr.readSplitState())
+        }
+    }
+
+    @Nav
+    @Test
+    fun `unsplit absorbs working tree changes into original commit`() {
+        withTestSetup(useFakeRemote) {
+            createCommitsFrom(
+                testCase {
+                    repository {
+                        commit { title = "A" }
+                        commit {
+                            title = "B"
+                            localRefs += "development"
+                        }
+                    }
+                    checkout = "development"
+                }
+            )
+
+            // Split B
+            gitJaspr.split()
+
+            // Modify the working tree — remove B's file, add a new one
+            localRepo.resolve("B.txt").delete()
+            localRepo.resolve("new_file.txt").writeText("new content\n")
+
+            // Unsplit: absorb changes back into B
+            gitJaspr.unsplit()
+
+            val head = localGit.log(GitClient.HEAD, 1).single()
+            assertEquals("B", head.shortMessage)
+            assertEquals("B", head.id) // commit-id preserved
+
+            // The working tree should reflect the modifications
+            assertFalse(localRepo.resolve("B.txt").exists())
+            assertTrue(localRepo.resolve("new_file.txt").exists())
+        }
+    }
+
+    @Nav
+    @Test
+    fun `unsplit during nav session re-inserts commit into stack`() {
+        withTestSetup(useFakeRemote) {
+            // Stack: A -> B -> C -> D on "development"
+            createCommitsFrom(
+                testCase {
+                    repository {
+                        commit { title = "A" }
+                        commit { title = "B" }
+                        commit { title = "C" }
+                        commit {
+                            title = "D"
+                            localRefs += "development"
+                        }
+                    }
+                    checkout = "development"
+                }
+            )
+
+            // Nav down 2: HEAD at B
+            gitJaspr.navigateDown(DEFAULT_TARGET_REF, 2)
+
+            // Split B
+            gitJaspr.split()
+            val navAfterSplit = gitJaspr.readNavState()
+            assertNotNull(navAfterSplit)
+            assertEquals(listOf("A", "C", "D"), navAfterSplit.stack.map(StackEntry::commitId))
+
+            // Unsplit B
+            gitJaspr.unsplit()
+            val navAfterUnsplit = gitJaspr.readNavState()
+            assertNotNull(navAfterUnsplit)
+            assertEquals(
+                listOf("A", "B", "C", "D"),
+                navAfterUnsplit.stack.map(StackEntry::commitId),
+            )
+            assertEquals(1, navAfterUnsplit.cursorIndex)
+        }
+    }
+
     // endregion
 
     // endregion
