@@ -1195,6 +1195,15 @@ class NavClear : GitJasprSubcommand(name = "clear", helpText = "Clear navigation
     }
 }
 
+class Drop : GitJasprSubcommand(helpText = "Drop the top N commits from the stack (default 1)") {
+    private val targetOpts by TargetOptions()
+    private val n by argument("n").int().optional()
+
+    override suspend fun doRun() {
+        appWiring.gitJaspr.drop(n ?: 1, targetOpts.target)
+    }
+}
+
 // endregion
 
 class Fixup : GitJasprSubcommand(helpText = "Create a fixup commit targeting a stack commit") {
@@ -1664,6 +1673,7 @@ fun buildCommand(): SuspendingCliktCommand =
             Up(),
             Top(),
             Nav().subcommands(NavClear()),
+            Drop(),
             Fixup(),
             Continue(),
             Sync(),

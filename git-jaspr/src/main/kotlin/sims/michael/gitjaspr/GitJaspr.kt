@@ -2099,6 +2099,45 @@ class GitJaspr(
         clearNavState()
     }
 
+    /**
+     * Drop [n] commits from the top of the current stack.
+     *
+     * When a nav session is active, the dropped commits are removed from the nav stack and the
+     * cursor is adjusted. When no session is active, this is equivalent to `git reset --hard
+     * HEAD~n`.
+     */
+    fun drop(n: Int, targetRef: String? = null) {
+        require(n > 0) { "Must drop at least 1 commit." }
+
+        val state = readNavState()
+        if (state != null && gitClient.isHeadDetached()) {
+            val reconciled = if (targetRef != null) reconcile(state, targetRef) else state
+            require(n <= reconciled.cursorIndex + 1) {
+                "Cannot drop $n commit(s) — only ${reconciled.cursorIndex + 1} commit(s) at or below current position."
+            }
+
+            // Remove the top n entries from below the cursor
+            val newStack =
+                reconciled.stack.toMutableList().apply {
+                    val removeFrom = reconciled.cursorIndex - n + 1
+                    repeat(n) { removeAt(removeFrom) }
+                }
+            val newCursor = reconciled.cursorIndex - n
+
+            gitClient.reset("HEAD~$n")
+
+            if (newStack.isEmpty()) {
+                // Dropped everything — end the session
+                clearNavState()
+            } else {
+                writeNavState(reconciled.copy(stack = newStack, cursorIndex = newCursor))
+            }
+        } else {
+            // No nav session — just hard reset
+            gitClient.reset("HEAD~$n")
+        }
+    }
+
     /** Result of syncing a single branch. */
     data class SyncBranchResult(val branch: String, val success: Boolean, val message: String)
 
