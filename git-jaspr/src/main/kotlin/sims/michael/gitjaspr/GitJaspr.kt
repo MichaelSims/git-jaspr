@@ -2107,6 +2107,16 @@ class GitJaspr(
     }
 
     /**
+     * Finish the navigation session, updating the original branch to the current HEAD without
+     * replaying any remaining commits from the replay queue. Commits above the cursor are
+     * discarded.
+     */
+    fun finishNavSession() {
+        val state = requireActiveNavSession()
+        endNavSession(state)
+    }
+
+    /**
      * End the navigation session: update the original branch to the new tip, check it out, clear
      * the state.
      */

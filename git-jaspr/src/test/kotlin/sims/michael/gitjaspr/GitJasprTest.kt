@@ -607,6 +607,44 @@ interface GitJasprTest {
         }
     }
 
+    @Nav
+    @Test
+    fun `finish ends session keeping only commits below cursor`() {
+        withTestSetup(useFakeRemote) {
+            // Stack: A -> B -> C -> D on "development"
+            createCommitsFrom(
+                testCase {
+                    repository {
+                        commit { title = "A" }
+                        commit { title = "B" }
+                        commit { title = "C" }
+                        commit {
+                            title = "D"
+                            localRefs += "development"
+                        }
+                    }
+                    checkout = "development"
+                }
+            )
+
+            // Nav down 2: HEAD at B, replay queue is [C, D]
+            gitJaspr.navigateDown(DEFAULT_TARGET_REF, 2)
+            assertEquals("B", localGit.log(GitClient.HEAD, 1).single().shortMessage)
+
+            // Finish: discard C and D, update "development" to B
+            gitJaspr.finishNavSession()
+
+            assertFalse(localGit.isHeadDetached())
+            assertEquals("development", localGit.getCurrentBranchName())
+            assertNull(gitJaspr.readNavState())
+
+            // Stack should now be just A -> B
+            val finalStack =
+                localGit.getLocalCommitStack(remoteName, GitClient.HEAD, DEFAULT_TARGET_REF)
+            assertEquals(listOf("A", "B"), finalStack.map(Commit::shortMessage))
+        }
+    }
+
     // endregion
 
     // region sync tests

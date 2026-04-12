@@ -1205,6 +1205,16 @@ class NavClear : GitJasprSubcommand(name = "clear", helpText = "Clear navigation
     }
 }
 
+class NavFinish :
+    GitJasprSubcommand(
+        name = "finish",
+        helpText = "End navigation session, keeping only commits below the cursor",
+    ) {
+    override suspend fun doRun() {
+        appWiring.gitJaspr.finishNavSession()
+    }
+}
+
 class Drop : GitJasprSubcommand(helpText = "Drop the top N commits from the stack (default 1)") {
     private val targetOpts by TargetOptions()
     private val n by argument("n").int().optional()
@@ -1682,7 +1692,7 @@ fun buildCommand(): SuspendingCliktCommand =
             Bottom(),
             Up(),
             Top(),
-            Nav().subcommands(NavClear()),
+            Nav().subcommands(NavClear(), NavFinish()),
             Drop(),
             Fixup(),
             Continue(),
