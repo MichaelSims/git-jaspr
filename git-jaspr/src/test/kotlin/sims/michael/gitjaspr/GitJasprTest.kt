@@ -957,6 +957,200 @@ interface GitJasprTest {
 
     // endregion
 
+    // region fold tests
+
+    @Nav
+    @Test
+    fun `fold down merges current commit into parent`() {
+        withTestSetup(useFakeRemote) {
+            // Stack: A -> B -> C -> D on "development"
+            createCommitsFrom(
+                testCase {
+                    repository {
+                        commit { title = "A" }
+                        commit { title = "B" }
+                        commit { title = "C" }
+                        commit {
+                            title = "D"
+                            localRefs += "development"
+                        }
+                    }
+                    checkout = "development"
+                }
+            )
+
+            // Nav down 2: HEAD at B
+            gitJaspr.navigateDown(DEFAULT_TARGET_REF, 2)
+            assertEquals("B", localGit.log(GitClient.HEAD, 1).single().shortMessage)
+
+            // Fold B down into A
+            val survivor = gitJaspr.fold("down")
+            assertEquals("A", survivor)
+
+            // HEAD should be at A (which now contains B's changes)
+            val head = localGit.log(GitClient.HEAD, 1).single()
+            assertEquals("A", head.shortMessage)
+            assertEquals("A", head.id)
+
+            // A should contain B's file
+            assertTrue(localRepo.resolve("B.txt").exists())
+
+            // Nav state: B removed, cursor at 0 (A)
+            val state = gitJaspr.readNavState()
+            assertNotNull(state)
+            assertEquals(listOf("A", "C", "D"), state.stack.map(StackEntry::commitId))
+            assertEquals(0, state.cursorIndex)
+        }
+    }
+
+    @Nav
+    @Test
+    fun `fold down at top of stack works without nav session`() {
+        withTestSetup(useFakeRemote) {
+            createCommitsFrom(
+                testCase {
+                    repository {
+                        commit { title = "A" }
+                        commit {
+                            title = "B"
+                            localRefs += "development"
+                        }
+                    }
+                    checkout = "development"
+                }
+            )
+
+            // Fold B into A (no nav session, on branch)
+            val survivor = gitJaspr.fold("down")
+            assertEquals("A", survivor)
+
+            // Should still be on the branch
+            assertFalse(localGit.isHeadDetached())
+
+            // A should contain B's file
+            assertTrue(localRepo.resolve("B.txt").exists())
+        }
+    }
+
+    @Nav
+    @Test
+    fun `fold up merges current commit into the commit above`() {
+        withTestSetup(useFakeRemote) {
+            // Stack: A -> B -> C -> D on "development"
+            createCommitsFrom(
+                testCase {
+                    repository {
+                        commit { title = "A" }
+                        commit { title = "B" }
+                        commit { title = "C" }
+                        commit {
+                            title = "D"
+                            localRefs += "development"
+                        }
+                    }
+                    checkout = "development"
+                }
+            )
+
+            // Nav down 2: HEAD at B
+            gitJaspr.navigateDown(DEFAULT_TARGET_REF, 2)
+
+            // Fold B up into C (C survives with B's changes absorbed)
+            val survivor = gitJaspr.fold("up")
+            assertEquals("C", survivor)
+
+            // HEAD should be at C (which now contains B's changes)
+            val head = localGit.log(GitClient.HEAD, 1).single()
+            assertEquals("C", head.shortMessage)
+            assertEquals("C", head.id)
+
+            // C should contain B's file
+            assertTrue(localRepo.resolve("B.txt").exists())
+
+            // Nav state: B removed, C at cursor position
+            val state = gitJaspr.readNavState()
+            assertNotNull(state)
+            assertEquals(listOf("A", "C", "D"), state.stack.map(StackEntry::commitId))
+            assertEquals(1, state.cursorIndex)
+        }
+    }
+
+    @Nav
+    @Test
+    fun `fold down at bottom of stack fails`() {
+        withTestSetup(useFakeRemote) {
+            createCommitsFrom(
+                testCase {
+                    repository {
+                        commit { title = "A" }
+                        commit { title = "B" }
+                        commit {
+                            title = "C"
+                            localRefs += "development"
+                        }
+                    }
+                    checkout = "development"
+                }
+            )
+
+            // Nav to bottom: HEAD at A
+            gitJaspr.navigateToBottom(DEFAULT_TARGET_REF)
+            assertThrows<IllegalArgumentException> { gitJaspr.fold("down") }
+        }
+    }
+
+    @Nav
+    @Test
+    fun `fold up at top of replay queue fails`() {
+        withTestSetup(useFakeRemote) {
+            createCommitsFrom(
+                testCase {
+                    repository {
+                        commit { title = "A" }
+                        commit {
+                            title = "B"
+                            localRefs += "development"
+                        }
+                    }
+                    checkout = "development"
+                }
+            )
+
+            // Nav down 1: HEAD at A, B is the only commit above
+            gitJaspr.navigateDown(DEFAULT_TARGET_REF, 1)
+
+            // Nav up 1: replays B, now at top — nothing above
+            gitJaspr.navigateUp(1, DEFAULT_TARGET_REF)
+
+            // Fold up should fail since there's nothing above the cursor
+            assertThrows<IllegalArgumentException> { gitJaspr.fold("up") }
+        }
+    }
+
+    @Nav
+    @Test
+    fun `fold up without nav session fails`() {
+        withTestSetup(useFakeRemote) {
+            createCommitsFrom(
+                testCase {
+                    repository {
+                        commit { title = "A" }
+                        commit {
+                            title = "B"
+                            localRefs += "development"
+                        }
+                    }
+                    checkout = "development"
+                }
+            )
+
+            // No nav session — fold up should fail
+            assertThrows<IllegalArgumentException> { gitJaspr.fold("up") }
+        }
+    }
+
+    // endregion
+
     // endregion
 
     // region sync tests
