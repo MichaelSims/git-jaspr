@@ -176,6 +176,11 @@ class CliGitClient(
         return apply { executeCommand(listOf("git", "reset", refName)) }
     }
 
+    override fun resetSoft(refName: String): GitClient {
+        logger.trace("resetSoft {}", refName)
+        return apply { executeCommand(listOf("git", "reset", "--soft", refName)) }
+    }
+
     override fun branch(name: String, startPoint: String, force: Boolean): Commit? {
         logger.trace("branch {} start {} force {}", name, startPoint, force)
         val old =

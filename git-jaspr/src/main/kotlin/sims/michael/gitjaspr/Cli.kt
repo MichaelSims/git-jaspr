@@ -1283,6 +1283,16 @@ class Split : GitJasprSubcommand(helpText = "Split the HEAD commit into working 
     }
 }
 
+class Unsplit :
+    GitJasprSubcommand(
+        helpText = "Restore the original commit, absorbing all working tree changes"
+    ) {
+    override suspend fun doRun() {
+        val subject = appWiring.gitJaspr.unsplit()
+        renderer.info { "Commit ${entity(subject)} restored with your changes." }
+    }
+}
+
 // endregion
 
 class Fixup : GitJasprSubcommand(helpText = "Create a fixup commit targeting a stack commit") {
@@ -1752,6 +1762,7 @@ fun buildCommand(): SuspendingCliktCommand =
             Edit(name = "reorder"),
             Fixup(),
             Split(),
+            Unsplit(),
             Continue(),
             // Navigation
             Down(),
