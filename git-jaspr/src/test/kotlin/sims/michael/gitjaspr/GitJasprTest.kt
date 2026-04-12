@@ -574,6 +574,39 @@ interface GitJasprTest {
         }
     }
 
+    @Nav
+    @Test
+    fun `active nav session is detectable for edit guard`() {
+        withTestSetup(useFakeRemote) {
+            createCommitsFrom(
+                testCase {
+                    repository {
+                        commit { title = "A" }
+                        commit {
+                            title = "B"
+                            localRefs += "development"
+                        }
+                    }
+                    checkout = "development"
+                }
+            )
+
+            // Before nav: no session
+            assertNull(gitJaspr.readNavState())
+            assertFalse(localGit.isHeadDetached())
+
+            // Navigate down: session is active
+            gitJaspr.navigateDown(DEFAULT_TARGET_REF, 1)
+            assertNotNull(gitJaspr.readNavState())
+            assertTrue(localGit.isHeadDetached())
+
+            // Navigate to top: session ends
+            gitJaspr.navigateToTop(DEFAULT_TARGET_REF)
+            assertNull(gitJaspr.readNavState())
+            assertFalse(localGit.isHeadDetached())
+        }
+    }
+
     // endregion
 
     // region sync tests
