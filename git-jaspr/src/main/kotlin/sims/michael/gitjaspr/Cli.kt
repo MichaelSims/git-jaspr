@@ -1053,7 +1053,7 @@ class Edit(name: String? = null) : GitJasprSubcommand(name = name) {
             renderer.error {
                 "Cannot edit while a navigation session is active. " +
                     "Run ${command("jaspr top")} to return to the branch first, " +
-                    "or ${command("jaspr nav clear")} to discard the session."
+                    "or ${command("jaspr nav cancel")} to discard the session."
             }
             throw ProgramResult(1)
         }
@@ -1144,7 +1144,7 @@ class Down : GitJasprSubcommand(helpText = "Move down in the stack (toward the t
         if (jaspr.isNavStateStale()) {
             renderer.warn {
                 "Stale navigation state detected (you are on a branch). " +
-                    "Run ${command("jaspr nav clear")} to clear it, or it will be replaced."
+                    "Run ${command("jaspr nav cancel")} to clear it, or it will be replaced."
             }
             jaspr.clearNavState()
         }
@@ -1160,7 +1160,7 @@ class Bottom : GitJasprSubcommand(helpText = "Move to the bottom of the stack") 
         if (jaspr.isNavStateStale()) {
             renderer.warn {
                 "Stale navigation state detected (you are on a branch). " +
-                    "Run ${command("jaspr nav clear")} to clear it, or it will be replaced."
+                    "Run ${command("jaspr nav cancel")} to clear it, or it will be replaced."
             }
             jaspr.clearNavState()
         }
@@ -1192,15 +1192,36 @@ class Nav : SuspendingCliktCommand(name = "nav") {
     override suspend fun run() = Unit
 }
 
-class NavClear : GitJasprSubcommand(name = "clear", helpText = "Clear navigation state") {
+class NavCancel :
+    GitJasprSubcommand(
+        name = "cancel",
+        helpText = "Cancel navigation session and restore the original branch",
+    ) {
     override suspend fun doRun() {
         val jaspr = appWiring.gitJaspr
         val state = jaspr.readNavState()
         if (state == null) {
-            renderer.info { "No navigation state to clear." }
-        } else {
+            renderer.info { "No navigation session to cancel." }
+            return
+        }
+        if (!appWiring.gitClient.isHeadDetached()) {
+            // Stale state — just clean it up
             jaspr.clearNavState()
-            renderer.info { "Navigation state cleared." }
+            renderer.info { "Stale navigation state cleared." }
+            return
+        }
+        val orphanedShas = jaspr.cancelNavSession()
+        renderer.info {
+            "Navigation session cancelled. Restored ${entity(state.headBeforeDetach)}."
+        }
+        if (orphanedShas.isNotEmpty()) {
+            renderer.warn { "The following commits are now orphaned (not on any branch):" }
+            for (sha in orphanedShas) {
+                renderer.warn { "  ${entity(sha.take(7))}" }
+            }
+            renderer.warn {
+                "To recover them, use ${command("git checkout <sha>")} before they are garbage collected."
+            }
         }
     }
 }
@@ -1211,7 +1232,15 @@ class NavFinish :
         helpText = "End navigation session, keeping only commits below the cursor",
     ) {
     override suspend fun doRun() {
-        appWiring.gitJaspr.finishNavSession()
+        val discarded = appWiring.gitJaspr.finishNavSession()
+        if (discarded.isNotEmpty()) {
+            val count = discarded.size
+            val commits = if (count == 1) "commit" else "commits"
+            renderer.warn { "Discarded $count $commits from the replay queue:" }
+            for (entry in discarded) {
+                renderer.warn { "  ${entity(entry.commitId)}" }
+            }
+        }
     }
 }
 
@@ -1699,7 +1728,7 @@ fun buildCommand(): SuspendingCliktCommand =
             Bottom(),
             Top(),
             Drop(),
-            Nav().subcommands(NavClear(), NavFinish()),
+            Nav().subcommands(NavCancel(), NavFinish()),
             // Configuration
             Init(),
             InstallHook(),

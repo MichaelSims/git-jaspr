@@ -632,16 +632,95 @@ interface GitJasprTest {
             assertEquals("B", localGit.log(GitClient.HEAD, 1).single().shortMessage)
 
             // Finish: discard C and D, update "development" to B
-            gitJaspr.finishNavSession()
+            val discarded = gitJaspr.finishNavSession()
 
             assertFalse(localGit.isHeadDetached())
             assertEquals("development", localGit.getCurrentBranchName())
             assertNull(gitJaspr.readNavState())
 
+            // Should report C and D as discarded
+            assertEquals(listOf("C", "D"), discarded.map(StackEntry::commitId))
+
             // Stack should now be just A -> B
             val finalStack =
                 localGit.getLocalCommitStack(remoteName, GitClient.HEAD, DEFAULT_TARGET_REF)
             assertEquals(listOf("A", "B"), finalStack.map(Commit::shortMessage))
+        }
+    }
+
+    @Nav
+    @Test
+    fun `cancel restores original branch and reports orphaned commits`() {
+        withTestSetup(useFakeRemote) {
+            // Stack: A -> B -> C on "development"
+            createCommitsFrom(
+                testCase {
+                    repository {
+                        commit { title = "A" }
+                        commit { title = "B" }
+                        commit {
+                            title = "C"
+                            localRefs += "development"
+                        }
+                    }
+                    checkout = "development"
+                }
+            )
+            localGit.fetch(remoteName)
+            val originalStack =
+                localGit.getLocalCommitStack(remoteName, GitClient.HEAD, DEFAULT_TARGET_REF)
+            val originalTipHash = originalStack.last().hash
+
+            // Nav down 2: HEAD at A
+            gitJaspr.navigateDown(DEFAULT_TARGET_REF, 2)
+
+            // Create a new commit while navigating
+            localRepo.resolve("new_file.txt").writeText("new content\n")
+            localGit.add("new_file.txt")
+            localGit.commit("NEW", footerLines = mapOf(COMMIT_ID_LABEL to "NEW"))
+            val newCommitHash = localGit.log(GitClient.HEAD, 1).single().hash
+
+            // Cancel: restore "development" to its original position
+            val orphaned = gitJaspr.cancelNavSession()
+
+            assertFalse(localGit.isHeadDetached())
+            assertEquals("development", localGit.getCurrentBranchName())
+            assertNull(gitJaspr.readNavState())
+
+            // Branch should be back at the original tip
+            assertEquals(originalTipHash, localGit.log(GitClient.HEAD, 1).single().hash)
+
+            // The new commit should be reported as orphaned
+            assertContains(orphaned, newCommitHash)
+        }
+    }
+
+    @Nav
+    @Test
+    fun `cancel with no changes reports no orphaned commits`() {
+        withTestSetup(useFakeRemote) {
+            createCommitsFrom(
+                testCase {
+                    repository {
+                        commit { title = "A" }
+                        commit { title = "B" }
+                        commit {
+                            title = "C"
+                            localRefs += "development"
+                        }
+                    }
+                    checkout = "development"
+                }
+            )
+
+            // Nav down 1: HEAD at B, no new commits
+            gitJaspr.navigateDown(DEFAULT_TARGET_REF, 1)
+
+            val orphaned = gitJaspr.cancelNavSession()
+
+            assertFalse(localGit.isHeadDetached())
+            assertEquals("development", localGit.getCurrentBranchName())
+            assertTrue(orphaned.isEmpty())
         }
     }
 
