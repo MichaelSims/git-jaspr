@@ -2108,12 +2108,42 @@ class GitJaspr(
 
     /**
      * Finish the navigation session, updating the original branch to the current HEAD without
-     * replaying any remaining commits from the replay queue. Commits above the cursor are
-     * discarded.
+     * replaying any remaining commits from the replay queue.
+     *
+     * @return the stack entries above the cursor that were discarded (empty if the cursor was at
+     *   the top)
      */
-    fun finishNavSession() {
+    fun finishNavSession(): List<StackEntry> {
         val state = requireActiveNavSession()
+        val discarded = state.stack.subList(state.cursorIndex + 1, state.stack.size).toList()
         endNavSession(state)
+        return discarded
+    }
+
+    /**
+     * Cancel the navigation session, restoring the original branch to its position before the
+     * session started. Any commits created during the session that are not reachable from the
+     * restored branch become orphaned.
+     *
+     * @return the SHAs of commits that were below the cursor but are not part of the original
+     *   branch (i.e., commits created or cherry-picked during the session)
+     */
+    fun cancelNavSession(): List<String> {
+        val state = requireActiveNavSession()
+
+        // Walk from the original branch tip to build the set of SHAs that will remain
+        // reachable after we restore the branch. We walk enough commits to cover the stack.
+        val originalShas =
+            gitClient.log(state.headBeforeDetach, state.stack.size + 1).map(Commit::hash).toSet()
+
+        // Walk from current HEAD to find commits that are NOT in the original branch.
+        // These will be orphaned when we restore it. Stop at the first original commit.
+        val headLog = gitClient.log(GitClient.HEAD, state.stack.size + 1)
+        val orphanedShas = headLog.takeWhile { it.hash !in originalShas }.map(Commit::hash)
+
+        gitClient.checkout(state.headBeforeDetach)
+        clearNavState()
+        return orphanedShas
     }
 
     /**
