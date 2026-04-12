@@ -1048,6 +1048,16 @@ class Edit(name: String? = null) : GitJasprSubcommand(name = name) {
     private val targetOpts by TargetOptions()
 
     override suspend fun doRun() {
+        val jaspr = appWiring.gitJaspr
+        if (jaspr.readNavState() != null && appWiring.gitClient.isHeadDetached()) {
+            renderer.error {
+                "Cannot edit while a navigation session is active. " +
+                    "Run ${command("jaspr top")} to return to the branch first, " +
+                    "or ${command("jaspr nav clear")} to discard the session."
+            }
+            throw ProgramResult(1)
+        }
+
         val config = appWiring.config
         val remoteName = config.remoteName
         val target = targetOpts.target
