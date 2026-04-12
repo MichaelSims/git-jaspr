@@ -111,26 +111,26 @@ fun RateLimitFields.toRateLimitInfo(): GitHubRateLimitInfo =
 private fun String.iso8601ToLocalDate(): LocalDateTime =
     Instant.parse(this).atZone(ZoneId.systemDefault()).toLocalDateTime()
 
+/** A commit in a navigation stack, identified by its jaspr Commit-Id. */
+@Serializable data class StackEntry(val sha: String, val commitId: String)
+
 /**
  * Ephemeral session state for stack navigation, persisted in `.git/jaspr/nav-state.json`. Exists
  * only while the user is navigated to a mid-stack commit (detached HEAD).
+ *
+ * The [stack] is ordered bottom-to-top (index 0 is closest to the target branch). [cursorIndex]
+ * points at the commit HEAD is currently on. Entries at `0..cursorIndex` are materialized in git;
+ * entries at `cursorIndex+1..lastIndex` form the replay queue that gets cherry-picked on `jaspr up`
+ * / `jaspr top`.
  */
 @Serializable
 data class NavState(
     /** The branch name HEAD was on before detaching, restored when the session ends. */
     val headBeforeDetach: String,
-    /**
-     * SHA that [headBeforeDetach] pointed to right before we entered deteached HEAD. Defines the
-     * top of the replay range.
-     */
-    val headBeforeDetachSha: String,
-    /**
-     * SHA that HEAD pointed to as of the last navigation operation. Updated on each `jaspr
-     * down`/`up` invocation. If the user creates additional commits between nav operations, this
-     * becomes a true diverge point — the merge base between HEAD and the original stack. The replay
-     * range for `jaspr up`/`top` is `divergePoint..headBeforeDetachSha`.
-     */
-    val divergePoint: String,
+    /** The full stack, bottom-to-top. Each entry carries the latest known SHA for its Commit-Id. */
+    val stack: List<StackEntry>,
+    /** Index into [stack] of the commit HEAD is currently on. */
+    val cursorIndex: Int,
 )
 
 class GitJasprException(override val message: String) : RuntimeException(message) {

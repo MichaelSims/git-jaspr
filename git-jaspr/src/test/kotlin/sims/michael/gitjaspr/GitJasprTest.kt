@@ -93,8 +93,12 @@ interface GitJasprTest {
             val state =
                 NavState(
                     headBeforeDetach = "my-feature",
-                    headBeforeDetachSha = "abc123",
-                    divergePoint = "def456",
+                    stack =
+                        listOf(
+                            StackEntry(sha = "abc123", commitId = "id-1"),
+                            StackEntry(sha = "def456", commitId = "id-2"),
+                        ),
+                    cursorIndex = 0,
                 )
             gitJaspr.writeNavState(state)
             assertEquals(state, gitJaspr.readNavState())
@@ -114,8 +118,12 @@ interface GitJasprTest {
             val state =
                 NavState(
                     headBeforeDetach = "my-feature",
-                    headBeforeDetachSha = "abc123",
-                    divergePoint = "def456",
+                    stack =
+                        listOf(
+                            StackEntry(sha = "abc123", commitId = "id-1"),
+                            StackEntry(sha = "def456", commitId = "id-2"),
+                        ),
+                    cursorIndex = 0,
                 )
             gitJaspr.writeNavState(state)
             gitJaspr.clearNavState()
@@ -155,8 +163,9 @@ interface GitJasprTest {
             val state = gitJaspr.readNavState()
             assertNotNull(state)
             assertEquals("development", state.headBeforeDetach)
-            assertEquals(stack.last().hash, state.headBeforeDetachSha)
-            assertEquals(stack[1].hash, state.divergePoint)
+            assertEquals(3, state.stack.size)
+            assertEquals(1, state.cursorIndex)
+            assertEquals(stack[1].hash, state.stack[1].sha)
         }
     }
 
@@ -235,7 +244,7 @@ interface GitJasprTest {
 
     @Nav
     @Test
-    fun `down within active nav session updates diverge point`() {
+    fun `down within active nav session updates cursor index`() {
         withTestSetup(useFakeRemote) {
             createCommitsFrom(
                 testCase {
@@ -259,13 +268,18 @@ interface GitJasprTest {
             gitJaspr.navigateDown(DEFAULT_TARGET_REF, 1)
             val secondState = gitJaspr.readNavState()
 
-            // Source branch and saved tip should be preserved from first navigation
+            // Source branch and stack should be preserved from first navigation
             assertNotNull(firstState)
             assertNotNull(secondState)
             assertEquals(firstState.headBeforeDetach, secondState.headBeforeDetach)
-            assertEquals(firstState.headBeforeDetachSha, secondState.headBeforeDetachSha)
-            // Diverge point should have moved down
-            assertEquals(stack[0].hash, secondState.divergePoint)
+            assertEquals(
+                firstState.stack.map(StackEntry::commitId),
+                secondState.stack.map(StackEntry::commitId),
+            )
+            // Cursor should have moved down
+            assertEquals(1, firstState.cursorIndex)
+            assertEquals(0, secondState.cursorIndex)
+            assertEquals(stack[0].hash, localGit.log(GitClient.HEAD, 1).single().hash)
         }
     }
 
