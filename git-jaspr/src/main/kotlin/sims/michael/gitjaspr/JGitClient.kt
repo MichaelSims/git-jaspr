@@ -210,6 +210,16 @@ class JGitClient(
         }
     }
 
+    override fun resetMixed(refName: String) = apply {
+        logger.trace("resetMixed {}", refName)
+        useGit { git ->
+            git.reset()
+                .setRef(git.repository.resolve(refName).name)
+                .setMode(ResetCommand.ResetType.MIXED)
+                .call()
+        }
+    }
+
     override fun branch(name: String, startPoint: String, force: Boolean): Commit? {
         logger.trace("branch {} start {} force {}", name, startPoint, force)
         val old = if (refExists(name)) log(name, maxCount = 1).single() else null

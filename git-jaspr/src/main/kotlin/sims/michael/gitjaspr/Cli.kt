@@ -1135,12 +1135,21 @@ class InstallHook : GitJasprSubcommand(helpText = "Install the jaspr commit-msg 
 }
 
 // region Navigation commands
+
+private fun requireNoActiveSplit(jaspr: GitJaspr) {
+    require(!jaspr.isSplitInProgress()) {
+        "A split is in progress. Run jaspr unsplit to restore the original commit, " +
+            "or commit your changes and run jaspr top to finish splitting."
+    }
+}
+
 class Down : GitJasprSubcommand(helpText = "Move down in the stack (toward the target branch)") {
     private val targetOpts by TargetOptions()
     private val n by argument("n").int().optional()
 
     override suspend fun doRun() {
         val jaspr = appWiring.gitJaspr
+        requireNoActiveSplit(jaspr)
         if (jaspr.isNavStateStale()) {
             renderer.warn {
                 "Stale navigation state detected (you are on a branch). " +
@@ -1157,6 +1166,7 @@ class Bottom : GitJasprSubcommand(helpText = "Move to the bottom of the stack") 
 
     override suspend fun doRun() {
         val jaspr = appWiring.gitJaspr
+        requireNoActiveSplit(jaspr)
         if (jaspr.isNavStateStale()) {
             renderer.warn {
                 "Stale navigation state detected (you are on a branch). " +
@@ -1173,6 +1183,7 @@ class Up : GitJasprSubcommand(helpText = "Move up in the stack (replay commits t
     private val n by argument("n").int().optional()
 
     override suspend fun doRun() {
+        requireNoActiveSplit(appWiring.gitJaspr)
         appWiring.gitJaspr.navigateUp(n ?: 1, targetOpts.target)
     }
 }
@@ -1182,7 +1193,9 @@ class Top :
     private val targetOpts by TargetOptions()
 
     override suspend fun doRun() {
-        appWiring.gitJaspr.navigateToTop(targetOpts.target)
+        val jaspr = appWiring.gitJaspr
+        jaspr.clearSplitState()
+        jaspr.navigateToTop(targetOpts.target)
     }
 }
 
@@ -1199,6 +1212,7 @@ class NavCancel :
     ) {
     override suspend fun doRun() {
         val jaspr = appWiring.gitJaspr
+        requireNoActiveSplit(jaspr)
         val state = jaspr.readNavState()
         if (state == null) {
             renderer.info { "No navigation session to cancel." }
@@ -1232,7 +1246,9 @@ class NavFinish :
         helpText = "End navigation session, keeping only commits below the cursor",
     ) {
     override suspend fun doRun() {
-        val discarded = appWiring.gitJaspr.finishNavSession()
+        val jaspr = appWiring.gitJaspr
+        requireNoActiveSplit(jaspr)
+        val discarded = jaspr.finishNavSession()
         if (discarded.isNotEmpty()) {
             val count = discarded.size
             val commits = if (count == 1) "commit" else "commits"
@@ -1249,7 +1265,21 @@ class Drop : GitJasprSubcommand(helpText = "Drop the top N commits from the stac
     private val n by argument("n").int().optional()
 
     override suspend fun doRun() {
+        requireNoActiveSplit(appWiring.gitJaspr)
         appWiring.gitJaspr.drop(n ?: 1, targetOpts.target)
+    }
+}
+
+class Split : GitJasprSubcommand(helpText = "Split the HEAD commit into working tree changes") {
+    override suspend fun doRun() {
+        val subject = appWiring.gitJaspr.split()
+        renderer.info {
+            "Commit ${entity(subject)} has been reset. Its changes are in your working tree."
+        }
+        renderer.info {
+            "Create new commits from these changes, then ${command("jaspr top")} to replay the rest of the stack."
+        }
+        renderer.info { "To undo: ${command("jaspr unsplit")}" }
     }
 }
 
@@ -1721,6 +1751,7 @@ fun buildCommand(): SuspendingCliktCommand =
             Edit(),
             Edit(name = "reorder"),
             Fixup(),
+            Split(),
             Continue(),
             // Navigation
             Down(),

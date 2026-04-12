@@ -1919,6 +1919,31 @@ class GitJaspr(
     /** Returns true if HEAD is on a branch (not detached) and nav state exists */
     fun isNavStateStale(): Boolean = !gitClient.isHeadDetached() && readNavState() != null
 
+    private val splitStateFile
+        get() = getJasprDir().resolve("split-state.json")
+
+    fun readSplitState(): SplitState? {
+        val file = splitStateFile
+        if (!file.exists()) return null
+        return try {
+            json.decodeFromString<SplitState>(file.readText())
+        } catch (e: Exception) {
+            logger.warn("Failed to read split state, clearing", e)
+            clearSplitState()
+            null
+        }
+    }
+
+    fun writeSplitState(state: SplitState) {
+        splitStateFile.writeText(json.encodeToString(state))
+    }
+
+    fun clearSplitState() {
+        splitStateFile.delete()
+    }
+
+    fun isSplitInProgress() = readSplitState() != null
+
     /**
      * Navigate down N commits in the stack (toward the target branch). Detaches HEAD and writes nav
      * state.
@@ -2194,6 +2219,37 @@ class GitJaspr(
             // No nav session — just hard reset
             gitClient.reset("HEAD~$n")
         }
+    }
+
+    /**
+     * Split the current HEAD commit by performing a mixed reset. Records the original commit SHA so
+     * [unsplit] can restore it later. If a nav session is active, removes the commit from the nav
+     * stack so reconciliation won't treat the reset as a missing commit.
+     *
+     * @return the short message of the split commit (for display)
+     */
+    fun split(): String {
+        require(readSplitState() == null) {
+            "A split is already in progress. Run jaspr unsplit to finish or undo it."
+        }
+
+        val head = gitClient.log(GitClient.HEAD, 1).single()
+        writeSplitState(SplitState(unsplitSha = head.hash))
+
+        // If in a nav session, remove the commit at the cursor from the stack
+        val navState = readNavState()
+        if (navState != null && gitClient.isHeadDetached()) {
+            val newStack = navState.stack.toMutableList().apply { removeAt(navState.cursorIndex) }
+            val newCursor = navState.cursorIndex - 1
+            if (newStack.isEmpty()) {
+                clearNavState()
+            } else {
+                writeNavState(navState.copy(stack = newStack, cursorIndex = newCursor))
+            }
+        }
+
+        gitClient.resetMixed("HEAD~1")
+        return head.shortMessage
     }
 
     /** Result of syncing a single branch. */

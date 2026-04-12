@@ -47,6 +47,8 @@ interface GitClient {
 
     fun reset(refName: String): GitClient
 
+    fun resetMixed(refName: String): GitClient
+
     fun branch(name: String, startPoint: String = "HEAD", force: Boolean = false): Commit?
 
     fun deleteBranches(names: List<String>, force: Boolean = false): List<String>

@@ -171,6 +171,11 @@ class CliGitClient(
         return apply { executeCommand(listOf("git", "reset", "--hard", refName)) }
     }
 
+    override fun resetMixed(refName: String): GitClient {
+        logger.trace("resetMixed {}", refName)
+        return apply { executeCommand(listOf("git", "reset", refName)) }
+    }
+
     override fun branch(name: String, startPoint: String, force: Boolean): Commit? {
         logger.trace("branch {} start {} force {}", name, startPoint, force)
         val old =
