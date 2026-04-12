@@ -2,7 +2,6 @@ package sims.michael.gitjaspr
 
 import java.io.File
 import java.io.RandomAccessFile
-import java.nio.channels.FileLock
 import java.time.ZonedDateTime
 import java.util.SortedSet
 import kotlin.text.RegexOption.IGNORE_CASE
@@ -714,50 +713,17 @@ class GitJaspr(
         val autoMergeRefSpec = refSpec.copy(localRef = adjustedLocalRef)
         logger.trace("autoMerge refSpec: {}", autoMergeRefSpec)
 
-        val remoteUri =
-            requireNotNull(gitClient.getRemoteUriOrNull(remoteName)) {
-                "Could not find remote URI for remote: $remoteName"
-            }
-
         val cacheDir = getAutoMergeCacheDir()
-        val lockFile = RandomAccessFile(File("${cacheDir.absolutePath}.lock"), "rw")
-        val lock = acquireAutoMergeLock(lockFile)
+        val cacheDirGit = OptimizedCliGitClient(cacheDir, config.remoteBranchPrefix)
+        val lockFile = acquireAutoMergeLock(cacheDirGit, currentRef)
 
         try {
-            val cacheDirGit = OptimizedCliGitClient(cacheDir, config.remoteBranchPrefix)
-            val isCached = cacheDir.resolve(".git").isDirectory
-            val setupTime = measureTime {
-                withContext(Dispatchers.IO) {
-                    cacheDirGit.showStderr = true
-                    if (isCached) {
-                        renderer.info { "Fetching latest changes into auto-merge cache..." }
-                        cacheDirGit.fetch(remoteName)
-                    } else {
-                        renderer.info { "Cloning repository into auto-merge cache..." }
-                        cacheDirGit.clone(remoteUri, remoteName)
-                    }
-
-                    // Add/update the original working directory as a remote so we can fetch
-                    // unpushed commits
-                    if (cacheDirGit.getRemoteUriOrNull("local") == null) {
-                        logger.debug("Adding local remote for unpushed commits")
-                        cacheDirGit.addRemote("local", config.workingDirectory.absolutePath)
-                    }
-                    cacheDirGit.fetch("local")
-                    cacheDirGit.showStderr = false
-
-                    cacheDirGit.checkout(currentRef)
-                }
-            }
-            val verb = if (isCached) "Fetched" else "Cloned"
-            logger.debug("{} auto-merge cache in {}", verb, setupTime)
-
             // Run the auto-merge loop
             val cacheDirJaspr =
                 GitJaspr(
                     ghClient,
                     cacheDirGit,
-                    config.copy(workingDirectory = cacheDir),
+                    config.copy(workingDirectory = cacheDirGit.workingDirectory),
                     newUuid,
                     commitIdentOverride,
                     renderer,
@@ -820,13 +786,13 @@ class GitJaspr(
         } catch (e: Exception) {
             logger.error(
                 "Auto-merge failed with exception. Cache directory: {}",
-                cacheDir.absolutePath,
+                cacheDirGit.workingDirectory.absolutePath,
                 e,
             )
             throw e
         } finally {
-            lock.release()
-            lockFile.close()
+            // Closing the file releases the lock acquired above
+            withContext(Dispatchers.IO) { lockFile.close() }
         }
     }
 
@@ -1875,6 +1841,58 @@ class GitJaspr(
 
     private fun getAutoMergeCacheDir(): File = getJasprDir().resolve("automerge")
 
+    /**
+     * Acquires an exclusive file lock on the auto-merge cache, clones or fetches the repo into
+     * [cacheDirGit], and checks out [currentRef]. Returns the lock file — the caller must close it
+     * to release the lock.
+     */
+    private suspend fun acquireAutoMergeLock(
+        cacheDirGit: OptimizedCliGitClient,
+        currentRef: String,
+    ): RandomAccessFile {
+        val remoteName = config.remoteName
+        val remoteUri =
+            requireNotNull(gitClient.getRemoteUriOrNull(remoteName)) {
+                "Could not find remote URI for remote: $remoteName"
+            }
+        val cacheDir = cacheDirGit.workingDirectory
+
+        return withContext(Dispatchers.IO) {
+            RandomAccessFile(File("${cacheDir.absolutePath}.lock"), "rw").apply {
+                channel.tryLock()
+                    ?: throw GitJasprException(
+                        "Another auto-merge is already running for this repository. " +
+                            "If this is unexpected, check for stale processes."
+                    )
+
+                val isCached = cacheDir.resolve(".git").isDirectory
+                val setupTime = measureTime {
+                    cacheDirGit.showStderr = true
+                    if (isCached) {
+                        renderer.info { "Fetching latest changes into auto-merge cache..." }
+                        cacheDirGit.fetch(remoteName)
+                    } else {
+                        renderer.info { "Cloning repository into auto-merge cache..." }
+                        cacheDirGit.clone(remoteUri, remoteName)
+                    }
+
+                    // Add/update the original working directory as a remote so we can fetch
+                    // unpushed commits
+                    if (cacheDirGit.getRemoteUriOrNull("local") == null) {
+                        logger.debug("Adding local remote for unpushed commits")
+                        cacheDirGit.addRemote("local", config.workingDirectory.absolutePath)
+                    }
+                    cacheDirGit.fetch("local")
+                    cacheDirGit.showStderr = false
+
+                    cacheDirGit.checkout(currentRef)
+                }
+                val verb = if (isCached) "Fetched" else "Cloned"
+                logger.debug("{} auto-merge cache in {}", verb, setupTime)
+            }
+        }
+    }
+
     private val navStateFile
         get() = getJasprDir().resolve("nav-state.json")
 
@@ -2458,13 +2476,6 @@ class GitJaspr(
         val result = gitCommand(dir, "branch", "-f", branch, commit)
         check(result == 0) { "Failed to update branch $branch to $commit" }
     }
-
-    private fun acquireAutoMergeLock(lockFile: RandomAccessFile): FileLock =
-        lockFile.channel.tryLock()
-            ?: throw GitJasprException(
-                "Another auto-merge is already running for this repository. " +
-                    "If this is unexpected, check for stale processes."
-            )
 
     companion object {
         private const val DETACHED_HEAD_NO_NAV_STATE =
