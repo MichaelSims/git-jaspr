@@ -1678,29 +1678,33 @@ fun buildCommand(): SuspendingCliktCommand =
         .versionOption(VERSION)
         .completionOption()
         .subcommands(
+            // Stack workflow
             Status(),
             Push(),
-            Checkout(),
             Merge(),
             AutoMerge(),
             Clean(),
             Rebase(),
+            Sync(),
+            Checkout(),
+            Stack().subcommands(StackList(), StackRename(), StackDelete()),
+            // Editing
             Edit(),
             Edit(name = "reorder"),
-            Stack().subcommands(StackList(), StackRename(), StackDelete()),
-            Down(),
-            Bottom(),
-            Up(),
-            Top(),
-            Nav().subcommands(NavClear(), NavFinish()),
-            Drop(),
             Fixup(),
             Continue(),
-            Sync(),
-            PreviewTheme(),
-            LogPath(),
+            // Navigation
+            Down(),
+            Up(),
+            Bottom(),
+            Top(),
+            Drop(),
+            Nav().subcommands(NavClear(), NavFinish()),
+            // Configuration
             Init(),
             InstallHook(),
+            PreviewTheme(),
+            LogPath(),
             NoOp(),
         )
 
