@@ -498,6 +498,82 @@ interface GitJasprTest {
         }
     }
 
+    @Nav
+    @Test
+    fun `drop during nav session removes commit from stack`() {
+        withTestSetup(useFakeRemote) {
+            // Stack: A -> B -> C -> D on "development"
+            createCommitsFrom(
+                testCase {
+                    repository {
+                        commit { title = "A" }
+                        commit { title = "B" }
+                        commit { title = "C" }
+                        commit {
+                            title = "D"
+                            localRefs += "development"
+                        }
+                    }
+                    checkout = "development"
+                }
+            )
+
+            // Nav down 2: HEAD at B
+            gitJaspr.navigateDown(DEFAULT_TARGET_REF, 2)
+            assertEquals("B", localGit.log(GitClient.HEAD, 1).single().shortMessage)
+
+            // Drop B (removes from stack entirely, HEAD moves to A)
+            gitJaspr.drop(1, DEFAULT_TARGET_REF)
+            assertEquals("A", localGit.log(GitClient.HEAD, 1).single().shortMessage)
+
+            // Nav state should still exist with B removed
+            val state = gitJaspr.readNavState()
+            assertNotNull(state)
+            assertEquals(3, state.stack.size) // A, C, D (B is gone)
+            assertEquals(0, state.cursorIndex) // at A
+
+            // Nav up 1: cherry-picks C (B was dropped, not in replay queue)
+            gitJaspr.navigateUp(1, DEFAULT_TARGET_REF)
+            assertEquals("C", localGit.log(GitClient.HEAD, 1).single().shortMessage)
+
+            // Nav to top: cherry-picks D, restores branch
+            gitJaspr.navigateToTop(DEFAULT_TARGET_REF)
+            assertFalse(localGit.isHeadDetached())
+
+            // Final stack should be A -> C -> D (B was dropped)
+            val finalStack =
+                localGit.getLocalCommitStack(remoteName, GitClient.HEAD, DEFAULT_TARGET_REF)
+            assertEquals(listOf("A", "C", "D"), finalStack.map(Commit::shortMessage))
+        }
+    }
+
+    @Nav
+    @Test
+    fun `drop without nav session resets HEAD`() {
+        withTestSetup(useFakeRemote) {
+            createCommitsFrom(
+                testCase {
+                    repository {
+                        commit { title = "A" }
+                        commit { title = "B" }
+                        commit {
+                            title = "C"
+                            localRefs += "development"
+                        }
+                    }
+                    checkout = "development"
+                }
+            )
+
+            gitJaspr.drop(1, DEFAULT_TARGET_REF)
+
+            // Should still be on the branch, HEAD at B
+            assertFalse(localGit.isHeadDetached())
+            assertEquals("B", localGit.log(GitClient.HEAD, 1).single().shortMessage)
+            assertNull(gitJaspr.readNavState())
+        }
+    }
+
     // endregion
 
     // region sync tests
