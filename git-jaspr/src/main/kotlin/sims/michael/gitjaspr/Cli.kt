@@ -1293,6 +1293,16 @@ class Unsplit :
     }
 }
 
+class Fold :
+    GitJasprSubcommand(helpText = "Fold (squash) the current commit into an adjacent commit") {
+    private val direction by argument("direction").optional()
+
+    override suspend fun doRun() {
+        val subject = appWiring.gitJaspr.fold(direction ?: "down")
+        renderer.info { "Folded into ${entity(subject)}." }
+    }
+}
+
 // endregion
 
 class Fixup : GitJasprSubcommand(helpText = "Create a fixup commit targeting a stack commit") {
@@ -1763,6 +1773,7 @@ fun buildCommand(): SuspendingCliktCommand =
             Fixup(),
             Split(),
             Unsplit(),
+            Fold(),
             Continue(),
             // Navigation
             Down(),

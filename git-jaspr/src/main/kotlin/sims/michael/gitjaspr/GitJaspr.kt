@@ -2288,6 +2288,122 @@ class GitJaspr(
         return restoredCommit.shortMessage
     }
 
+    /**
+     * Fold the current commit into an adjacent commit. The current commit is eliminated; the
+     * neighbor absorbs its changes and keeps its own identity (message, commit-id, author).
+     *
+     * @param direction "down" to fold into the parent (default), "up" to fold into the child
+     * @return the short message of the surviving commit
+     */
+    fun fold(direction: String = "down"): String {
+        require(readSplitState() == null) { "Cannot fold while a split is in progress." }
+
+        return when (direction) {
+            "down" -> foldDown()
+            "up" -> foldUp()
+            else ->
+                throw IllegalArgumentException("Direction must be 'up' or 'down', got '$direction'")
+        }
+    }
+
+    /**
+     * Fold current commit down into its parent. Soft reset removes the current commit, amend merges
+     * its changes into the parent. Parent's identity is preserved.
+     */
+    private fun foldDown(): String {
+        val navState = readNavState()
+        if (navState != null && gitClient.isHeadDetached()) {
+            require(navState.cursorIndex > 0) {
+                "Cannot fold down — already at the bottom of the stack."
+            }
+            // Soft reset removes current commit, amend merges into parent
+            gitClient.resetSoft("HEAD~1")
+            gitClient.commit(amend = true)
+
+            val survivor = gitClient.log(GitClient.HEAD, 1).single()
+
+            // Remove the folded commit from the stack, update the parent's SHA
+            val newStack =
+                navState.stack.toMutableList().apply {
+                    removeAt(navState.cursorIndex)
+                    set(
+                        navState.cursorIndex - 1,
+                        StackEntry(
+                            sha = survivor.hash,
+                            commitId =
+                                checkNotNull(survivor.id) {
+                                    "Surviving commit has no jaspr commit ID."
+                                },
+                        ),
+                    )
+                }
+            writeNavState(navState.copy(stack = newStack, cursorIndex = navState.cursorIndex - 1))
+            return survivor.shortMessage
+        } else {
+            // Top of stack, no nav session — just soft reset and amend
+            val stack = gitClient.log(GitClient.HEAD, 2)
+            require(stack.size >= 2) { "Cannot fold down — nothing below the current commit." }
+            gitClient.resetSoft("HEAD~1")
+            gitClient.commit(amend = true)
+            return gitClient.log(GitClient.HEAD, 1).single().shortMessage
+        }
+    }
+
+    /**
+     * Fold current commit up into the next commit (above the cursor in the replay queue).
+     * Cherry-picks the above commit, then soft-resets 2 commits and recommits with the above
+     * commit's identity.
+     */
+    private fun foldUp(): String {
+        val navState =
+            requireNotNull(readNavState()?.takeIf { gitClient.isHeadDetached() }) {
+                "Cannot fold up without an active navigation session — there is no commit above."
+            }
+        val aboveIndex = navState.cursorIndex + 1
+        require(aboveIndex <= navState.stack.lastIndex) {
+            "Cannot fold up — already at the top of the stack."
+        }
+
+        val aboveEntry = navState.stack[aboveIndex]
+        val aboveCommit = gitClient.log(aboveEntry.sha, 1).single()
+
+        // Cherry-pick the above commit onto the current position
+        gitClient.cherryPick(aboveCommit, commitIdentOverride)
+
+        // Now HEAD has: ...parent -> current -> above'
+        // Soft reset 2 to collapse both into staged changes on top of parent
+        gitClient.resetSoft("HEAD~2")
+
+        // Recommit with the above commit's message, footers, and author
+        val aboveFooters = CommitParsers.getFooters(aboveCommit.fullMessage)
+        val aboveMessage = CommitParsers.trimFooters(aboveCommit.fullMessage)
+        gitClient.commit(
+            message = aboveMessage,
+            footerLines = aboveFooters,
+            author = aboveCommit.author,
+        )
+
+        val survivor = gitClient.log(GitClient.HEAD, 1).single()
+
+        // Remove both the current commit and the above commit from the stack,
+        // insert the survivor at the cursor position
+        val newStack =
+            navState.stack.toMutableList().apply {
+                removeAt(aboveIndex) // remove above first (higher index)
+                removeAt(navState.cursorIndex) // then current
+                add(
+                    navState.cursorIndex,
+                    StackEntry(
+                        sha = survivor.hash,
+                        commitId =
+                            checkNotNull(survivor.id) { "Surviving commit has no jaspr commit ID." },
+                    ),
+                )
+            }
+        writeNavState(navState.copy(stack = newStack))
+        return survivor.shortMessage
+    }
+
     /** Result of syncing a single branch. */
     data class SyncBranchResult(val branch: String, val success: Boolean, val message: String)
 
