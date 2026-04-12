@@ -332,27 +332,25 @@ class CliGitClient(
         forceWithLeaseRefs: Map<String, String?>,
     ) {
         logger.trace("pushWithLease {} with lease refs {}", refSpecs, forceWithLeaseRefs)
-        val filteredRefSpecs =
-            refSpecs.map { refSpec ->
-                // In this context we want to use the full ref name, so we can push HEAD to new
-                // branches
-                refSpec.copy(remoteRef = refsHeads(refSpec.remoteRef))
-            }
+        val filteredRefSpecs = refSpecs.map { refSpec ->
+            // In this context we want to use the full ref name, so we can push HEAD to new
+            // branches
+            refSpec.copy(remoteRef = refsHeads(refSpec.remoteRef))
+        }
 
         if (filteredRefSpecs.isEmpty()) {
             logger.info("pushWithLease: No refSpecs to push")
         } else {
-            val forceWithLeaseArgs =
-                forceWithLeaseRefs.flatMap { (ref, expectedValue) ->
-                    val fullRef = refsHeads(ref)
-                    if (expectedValue == null) {
-                        // Ref must not exist
-                        listOf("--force-with-lease=$fullRef:")
-                    } else {
-                        // Ref must have specific value
-                        listOf("--force-with-lease=$fullRef:$expectedValue")
-                    }
+            val forceWithLeaseArgs = forceWithLeaseRefs.flatMap { (ref, expectedValue) ->
+                val fullRef = refsHeads(ref)
+                if (expectedValue == null) {
+                    // Ref must not exist
+                    listOf("--force-with-lease=$fullRef:")
+                } else {
+                    // Ref must have specific value
+                    listOf("--force-with-lease=$fullRef:$expectedValue")
                 }
+            }
 
             try {
                 executeCommand(

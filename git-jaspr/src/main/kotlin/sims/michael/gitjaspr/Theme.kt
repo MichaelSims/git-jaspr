@@ -195,21 +195,24 @@ private fun buildRoleStyle(
     scheme: String,
     role: String,
 ): (String) -> String {
-    val colorFn: ((String) -> String)? =
-        colorHex?.let { hex ->
-            runCatching { TextColors.rgb(hex) }
-                .getOrElse {
-                    throw IllegalArgumentException(
-                        "Invalid color '$hex' for $scheme.$role.color " +
-                            "(expected hex like #FF5733 or FF5733)"
-                    )
-                }
-                .let { style -> { text: String -> style(text) } }
-        }
+    val colorFn: ((String) -> String)? = colorHex?.let { hex ->
+        runCatching { TextColors.rgb(hex) }
+            .getOrElse {
+                throw IllegalArgumentException(
+                    "Invalid color '$hex' for $scheme.$role.color " +
+                        "(expected hex like #FF5733 or FF5733)"
+                )
+            }
+            .let { style -> { text: String -> style(text) } }
+    }
     val weightFn: ((String) -> String)? =
         when (weight?.lowercase()) {
-            "bold" -> { text: String -> bold(text) }
-            "dim" -> { text: String -> dim(text) }
+            "bold" -> { text: String ->
+                bold(text)
+            }
+            "dim" -> { text: String ->
+                dim(text)
+            }
             null -> null
             else ->
                 throw IllegalArgumentException(

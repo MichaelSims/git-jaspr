@@ -266,10 +266,9 @@ class GitJaspr(
         logger.trace("getExistingStackName")
         require(stack.isNotEmpty())
 
-        val existingNamedStacks =
-            remoteBranches.filter { branch ->
-                RemoteNamedStackRef.parse(branch.name, config.remoteNamedStackBranchPrefix) != null
-            }
+        val existingNamedStacks = remoteBranches.filter { branch ->
+            RemoteNamedStackRef.parse(branch.name, config.remoteNamedStackBranchPrefix) != null
+        }
 
         // Search the remote branches for named stack refs that point to stacks with unmerged
         // commits. Find the first commit in our local stack that is contained in exactly one named
@@ -279,25 +278,24 @@ class GitJaspr(
                 .reversed()
                 .filter { commit -> commit.id != null }
                 .firstNotNullOfOrNull { commit ->
-                    val stacksWithCommit =
-                        existingNamedStacks.mapNotNull { branch ->
-                            val namedStackRefParts =
-                                checkNotNull(
-                                    RemoteNamedStackRef.parse(
-                                        branch.name,
-                                        config.remoteNamedStackBranchPrefix,
-                                    )
+                    val stacksWithCommit = existingNamedStacks.mapNotNull { branch ->
+                        val namedStackRefParts =
+                            checkNotNull(
+                                RemoteNamedStackRef.parse(
+                                    branch.name,
+                                    config.remoteNamedStackBranchPrefix,
                                 )
-                            branch.takeIf {
-                                val remoteName = config.remoteName
-                                val targetInRemote = "$remoteName/${namedStackRefParts.targetRef}"
-                                val namedStackInRemote = "$remoteName/${branch.name}"
-                                strategy
-                                    .logRange(targetInRemote, namedStackInRemote)
-                                    .mapNotNull(Commit::id)
-                                    .contains(checkNotNull(commit.id))
-                            }
+                            )
+                        branch.takeIf {
+                            val remoteName = config.remoteName
+                            val targetInRemote = "$remoteName/${namedStackRefParts.targetRef}"
+                            val namedStackInRemote = "$remoteName/${branch.name}"
+                            strategy
+                                .logRange(targetInRemote, namedStackInRemote)
+                                .mapNotNull(Commit::id)
+                                .contains(checkNotNull(commit.id))
                         }
+                    }
                     if (stacksWithCommit.size == 1) {
                         Found(stacksWithCommit.single().name)
                     } else if (stacksWithCommit.size > 1) {
@@ -944,14 +942,12 @@ class GitJaspr(
         pullRequestHeadRefs: Set<String>,
     ): List<String> {
         logger.trace("getAbandonedBranches")
-        val namedStackBranches =
-            remoteBranches.filter { branch ->
-                RemoteNamedStackRef.parse(branch.name, config.remoteNamedStackBranchPrefix) != null
-            }
-        val remoteJasprBranches =
-            remoteBranches.filter { branch ->
-                RemoteRef.parse(branch.name, config.remoteBranchPrefix) != null
-            }
+        val namedStackBranches = remoteBranches.filter { branch ->
+            RemoteNamedStackRef.parse(branch.name, config.remoteNamedStackBranchPrefix) != null
+        }
+        val remoteJasprBranches = remoteBranches.filter { branch ->
+            RemoteRef.parse(branch.name, config.remoteBranchPrefix) != null
+        }
 
         val unmergedAndReachableFromNamedStacks =
             namedStackBranches
@@ -970,8 +966,9 @@ class GitJaspr(
                 .toSet()
 
         // Return abandoned branches (those with open PRs not reachable by any of our named stacks)
-        val branchesWithPrs =
-            remoteJasprBranches.filter { branch -> branch.name in pullRequestHeadRefs }
+        val branchesWithPrs = remoteJasprBranches.filter { branch ->
+            branch.name in pullRequestHeadRefs
+        }
         val refsToCheck = branchesWithPrs.map { "${config.remoteName}/${it.name}" }
         val commits = gitClient.getCommits(refsToCheck)
         return branchesWithPrs
@@ -1108,21 +1105,20 @@ class GitJaspr(
             }
         val remoteBranchNames =
             gitClient.getRemoteBranches(config.remoteName).map(RemoteBranch::name)
-        val prsNeedingBodyUpdate =
-            stackPrsReordered.map { existingPr ->
-                val commit =
-                    checkNotNull(stackById[existingPr.commitId]) {
-                        "Couldn't find commit for PR with commitId ${existingPr.commitId}"
-                    }
-                val newBody =
-                    buildPullRequestBody(
-                        fullMessage = commit.fullMessage,
-                        pullRequests = stackPrsReordered.reversed(),
-                        existingPr,
-                        remoteBranchNames,
-                    )
-                existingPr.copy(body = newBody)
-            }
+        val prsNeedingBodyUpdate = stackPrsReordered.map { existingPr ->
+            val commit =
+                checkNotNull(stackById[existingPr.commitId]) {
+                    "Couldn't find commit for PR with commitId ${existingPr.commitId}"
+                }
+            val newBody =
+                buildPullRequestBody(
+                    fullMessage = commit.fullMessage,
+                    pullRequests = stackPrsReordered.reversed(),
+                    existingPr,
+                    remoteBranchNames,
+                )
+            existingPr.copy(body = newBody)
+        }
         logger.debug("{}", stack)
         return prsNeedingBodyUpdate
     }
@@ -1489,10 +1485,9 @@ class GitJaspr(
         val dontPushPattern = config.dontPushRegex.toRegex(IGNORE_CASE)
         val statuses = getRemoteCommitStatuses(stack)
 
-        val firstMatchIndex =
-            statuses.indexOfFirst { status ->
-                dontPushPattern.matches(status.localCommit.shortMessage) || status.isDraft == true
-            }
+        val firstMatchIndex = statuses.indexOfFirst { status ->
+            dontPushPattern.matches(status.localCommit.shortMessage) || status.isDraft == true
+        }
 
         return if (firstMatchIndex == -1) {
             // No matches. Include the entire stack
@@ -1513,11 +1508,10 @@ class GitJaspr(
         numCommitsBehind: Int,
         commits: String,
         refSpec: RefSpec,
-    ) =
-        renderer.warn {
-            "Cannot merge because your stack is out-of-date with the base branch " +
-                "($numCommitsBehind $commits behind ${refSpec.remoteRef})."
-        }
+    ) = renderer.warn {
+        "Cannot merge because your stack is out-of-date with the base branch " +
+            "($numCommitsBehind $commits behind ${refSpec.remoteRef})."
+    }
 
     private fun Commit.toRefSpec(): RefSpec = RefSpec(hash, toRemoteRefName())
 

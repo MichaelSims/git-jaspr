@@ -1096,36 +1096,35 @@ class PreviewTheme :
                 commit("0a1b2c3", "Update API docs for auth flow", "commit-4"),
             )
 
-        val prs =
-            commits.mapIndexed { index, c ->
-                PullRequest(
-                    id = "pr-${index + 1}",
-                    commitId = c.id,
-                    number = 100 + index,
-                    headRefName = "$DEFAULT_REMOTE_BRANCH_PREFIX/main/${c.id}",
-                    baseRefName =
-                        if (index == 0) "main"
-                        else "$DEFAULT_REMOTE_BRANCH_PREFIX/main/commit-$index",
-                    title = c.shortMessage,
-                    body = "",
-                    checksPass =
-                        when (index) {
-                            3 -> null // top commit: checks pending
-                            else -> true
-                        },
-                    approved =
-                        when {
-                            index <= 1 -> true
-                            else -> null
-                        },
-                    permalink = "https://github.com/example/repo/pull/${100 + index}",
-                    isDraft = false,
-                )
-            }
+        val prs = commits.mapIndexed { index, c ->
+            PullRequest(
+                id = "pr-${index + 1}",
+                commitId = c.id,
+                number = 100 + index,
+                headRefName = "$DEFAULT_REMOTE_BRANCH_PREFIX/main/${c.id}",
+                baseRefName =
+                    if (index == 0) "main" else "$DEFAULT_REMOTE_BRANCH_PREFIX/main/commit-$index",
+                title = c.shortMessage,
+                body = "",
+                checksPass =
+                    when (index) {
+                        3 -> null // top commit: checks pending
+                        else -> true
+                    },
+                approved =
+                    when {
+                        index <= 1 -> true
+                        else -> null
+                    },
+                permalink = "https://github.com/example/repo/pull/${100 + index}",
+                isDraft = false,
+            )
+        }
         val prsByCommitId = prs.associateBy(PullRequest::commitId)
 
-        val remoteBranches =
-            commits.map { c -> RemoteBranch("$DEFAULT_REMOTE_BRANCH_PREFIX/main/${c.id}", c) }
+        val remoteBranches = commits.map { c ->
+            RemoteBranch("$DEFAULT_REMOTE_BRANCH_PREFIX/main/${c.id}", c)
+        }
 
         val strategy =
             object : GitJaspr.GetStatusStringStrategy {
@@ -1135,8 +1134,9 @@ class PreviewTheme :
 
                 override fun logRange(since: String, until: String) = emptyList<Commit>()
 
-                override suspend fun getPullRequests(commits: List<Commit>) =
-                    commits.mapNotNull { prsByCommitId[it.id] }
+                override suspend fun getPullRequests(commits: List<Commit>) = commits.mapNotNull {
+                    prsByCommitId[it.id]
+                }
             }
 
         val dummyConfig =

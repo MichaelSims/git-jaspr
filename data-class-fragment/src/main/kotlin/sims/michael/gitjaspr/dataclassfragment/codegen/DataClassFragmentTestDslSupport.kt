@@ -136,7 +136,9 @@ object BuilderFunctions {
     fun <T> buildScalarSet(src: Iterable<T>): Set<T> = src.toSet()
 
     fun <T, B : Builder<T>> buildMap(src: Map<String, B>): Map<String, T> =
-        src.mapValues { (_, v) -> v.build() }
+        src.mapValues { (_, v) ->
+            v.build()
+        }
 
     fun <T, B : Builder<T>> buildList(src: Iterable<B>): List<T> = src.map(Builder<T>::build)
 

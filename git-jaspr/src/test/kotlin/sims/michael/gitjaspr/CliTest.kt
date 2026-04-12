@@ -397,12 +397,11 @@ class CliTest {
             }
 
             // Validate theme keys: role must be in THEME_ROLES, suffix must be color or weight
-            val invalidThemeKeys =
-                themeKeys.filter { key ->
-                    val match = checkNotNull(themeKeyPattern.matchEntire(key))
-                    val role = match.groupValues[2]
-                    role !in THEME_ROLES
-                }
+            val invalidThemeKeys = themeKeys.filter { key ->
+                val match = checkNotNull(themeKeyPattern.matchEntire(key))
+                val role = match.groupValues[2]
+                role !in THEME_ROLES
+            }
             assertTrue(invalidThemeKeys.isEmpty()) {
                 "Theme keys with unrecognized roles in default-config.properties: $invalidThemeKeys\n" +
                     "Valid roles: $THEME_ROLES"
