@@ -1159,17 +1159,20 @@ class Bottom : GitJasprSubcommand(helpText = "Move to the bottom of the stack") 
 }
 
 class Up : GitJasprSubcommand(helpText = "Move up in the stack (replay commits toward the tip)") {
+    private val targetOpts by TargetOptions()
     private val n by argument("n").int().optional()
 
     override suspend fun doRun() {
-        appWiring.gitJaspr.navigateUp(n ?: 1)
+        appWiring.gitJaspr.navigateUp(n ?: 1, targetOpts.target)
     }
 }
 
 class Top :
     GitJasprSubcommand(helpText = "Move to the top of the stack (replay all remaining commits)") {
+    private val targetOpts by TargetOptions()
+
     override suspend fun doRun() {
-        appWiring.gitJaspr.navigateToTop()
+        appWiring.gitJaspr.navigateToTop(targetOpts.target)
     }
 }
 

@@ -1906,118 +1906,179 @@ class GitJaspr(
      * state.
      */
     fun navigateDown(targetRef: String, n: Int) {
-        val remoteName = config.remoteName
-        gitClient.fetch(remoteName)
-        val stack = gitClient.getLocalCommitStack(remoteName, GitClient.HEAD, targetRef)
-        require(stack.isNotEmpty()) { "Stack is empty." }
-
         val existingState = readNavState()
-        val currentIndex =
+        val state =
             if (existingState != null && gitClient.isHeadDetached()) {
-                // Already in a nav session — find the current position
-                val headHash = gitClient.log(GitClient.HEAD, 1).single().hash
-                stack
-                    .indexOfFirst { it.hash == headHash }
-                    .also { index -> require(index >= 0) { "Current HEAD is not in the stack." } }
+                reconcile(existingState, targetRef)
             } else {
-                // Not in a session — HEAD is at the tip
-                stack.lastIndex
+                initNavState(targetRef)
             }
 
-        val targetIndex = currentIndex - n
+        val targetIndex = state.cursorIndex - n
         require(targetIndex >= 0) {
-            "Cannot move down $n commit(s) — only $currentIndex commit(s) below current position."
+            "Cannot move down $n commit(s) — only ${state.cursorIndex} commit(s) below current position."
         }
 
-        val targetCommit = stack[targetIndex]
-        val headBeforeDetach =
-            existingState?.headBeforeDetach
-                ?: gitClient.getCurrentBranchName().also {
-                    require(it.isNotEmpty()) { DETACHED_HEAD_NO_NAV_STATE }
-                }
-        val headBeforeDetachSha =
-            existingState?.headBeforeDetachSha ?: gitClient.log(GitClient.HEAD, 1).single().hash
-
-        gitClient.checkout(targetCommit.hash)
-        writeNavState(NavState(headBeforeDetach, headBeforeDetachSha, targetCommit.hash))
+        gitClient.checkout(state.stack[targetIndex].sha)
+        writeNavState(state.copy(cursorIndex = targetIndex))
     }
 
     /** Navigate to the bottom of the stack (first commit above the target branch). */
     fun navigateToBottom(targetRef: String) {
-        val remoteName = config.remoteName
-        gitClient.fetch(remoteName)
-        val stack = gitClient.getLocalCommitStack(remoteName, GitClient.HEAD, targetRef)
-        require(stack.isNotEmpty()) { "Stack is empty." }
-
         val existingState = readNavState()
-        val headBeforeDetach =
-            existingState?.headBeforeDetach
-                ?: gitClient.getCurrentBranchName().also {
-                    require(it.isNotEmpty()) { DETACHED_HEAD_NO_NAV_STATE }
-                }
-        val headBeforeDetachSha =
-            existingState?.headBeforeDetachSha ?: gitClient.log(GitClient.HEAD, 1).single().hash
-        val targetCommit = stack.first()
+        val state =
+            if (existingState != null && gitClient.isHeadDetached()) {
+                reconcile(existingState, targetRef)
+            } else {
+                initNavState(targetRef)
+            }
 
-        gitClient.checkout(targetCommit.hash)
-        writeNavState(NavState(headBeforeDetach, headBeforeDetachSha, targetCommit.hash))
+        require(state.cursorIndex > 0) { "Already at the bottom of the stack." }
+
+        gitClient.checkout(state.stack.first().sha)
+        writeNavState(state.copy(cursorIndex = 0))
     }
 
     /**
      * Navigate up N commits by cherry-picking from the saved stack above the current HEAD. If all
      * remaining commits are replayed, restores the source branch and ends the session.
      */
-    fun navigateUp(n: Int) {
-        val state = requireActiveNavSession()
+    fun navigateUp(n: Int, targetRef: String? = null) {
+        val state = requireActiveNavSession(targetRef)
 
-        val commitsAbove = getCommitsAboveHead(state)
-        require(commitsAbove.isNotEmpty()) { "Already at the top of the stack." }
-        require(n <= commitsAbove.size) {
-            "Cannot move up $n commit(s) — only ${commitsAbove.size} commit(s) above current position."
+        val aboveCount = state.stack.size - state.cursorIndex - 1
+        require(aboveCount > 0) { "Already at the top of the stack." }
+        require(n <= aboveCount) {
+            "Cannot move up $n commit(s) — only $aboveCount commit(s) above current position."
         }
 
-        val toReplay = commitsAbove.take(n)
-        for (commit in toReplay) {
-            gitClient.cherryPick(commit, commitIdentOverride)
+        val updatedStack = state.stack.toMutableList()
+        for (i in 1..n) {
+            val entry = updatedStack[state.cursorIndex + i]
+            val newCommit =
+                gitClient.cherryPick(gitClient.log(entry.sha, 1).single(), commitIdentOverride)
+            updatedStack[state.cursorIndex + i] = entry.copy(sha = newCommit.hash)
         }
 
-        val replayedAll = n == commitsAbove.size
-        if (replayedAll) {
-            endNavSession(state)
+        val newCursor = state.cursorIndex + n
+        if (newCursor == updatedStack.lastIndex) { // We've replayed all commits, end the session
+            endNavSession(state.copy(stack = updatedStack))
         } else {
-            val newHead = gitClient.log(GitClient.HEAD, 1).single().hash
-            writeNavState(state.copy(divergePoint = newHead))
+            writeNavState(state.copy(stack = updatedStack, cursorIndex = newCursor))
         }
     }
 
     /** Navigate to the top of the stack by replaying all remaining commits. */
-    fun navigateToTop() {
-        val state = requireActiveNavSession()
+    fun navigateToTop(targetRef: String? = null) {
+        val state = requireActiveNavSession(targetRef)
 
-        val commitsAbove = getCommitsAboveHead(state)
-        require(commitsAbove.isNotEmpty()) { "Already at the top of the stack." }
+        val aboveCount = state.stack.size - state.cursorIndex - 1
+        require(aboveCount > 0) { "Already at the top of the stack." }
 
-        for (commit in commitsAbove) {
-            gitClient.cherryPick(commit, commitIdentOverride)
+        val updatedStack = state.stack.toMutableList()
+        for (i in (state.cursorIndex + 1)..updatedStack.lastIndex) {
+            val entry = updatedStack[i]
+            val newCommit =
+                gitClient.cherryPick(gitClient.log(entry.sha, 1).single(), commitIdentOverride)
+            updatedStack[i] = entry.copy(sha = newCommit.hash)
         }
 
-        endNavSession(state)
+        endNavSession(state.copy(stack = updatedStack))
     }
 
     /**
-     * Returns the active nav session state, or throws with an appropriate message. Handles all
-     * combinations of detached/attached HEAD and present/absent nav state, including auto-clearing
-     * stale state.
+     * Build the initial [NavState] from the current branch. Called on the first nav down/bottom
+     * when no session exists yet.
      */
-    private fun requireActiveNavSession(): NavState {
+    private fun initNavState(targetRef: String): NavState {
+        val branchName = gitClient.getCurrentBranchName()
+        require(branchName.isNotEmpty()) { DETACHED_HEAD_NO_NAV_STATE }
+
+        val remoteName = config.remoteName
+        gitClient.fetch(remoteName)
+        val commits = gitClient.getLocalCommitStack(remoteName, GitClient.HEAD, targetRef)
+        require(commits.isNotEmpty()) { "Stack is empty." }
+
+        val stack = commits.map { commit ->
+            StackEntry(
+                sha = commit.hash,
+                commitId =
+                    checkNotNull(commit.id) {
+                        "Commit ${commit.hash} (\"${commit.shortMessage}\") has no jaspr commit ID. " +
+                            "Run jaspr push to add IDs before navigating."
+                    },
+            )
+        }
+        return NavState(headBeforeDetach = branchName, stack = stack, cursorIndex = stack.lastIndex)
+    }
+
+    /**
+     * Reconcile the persisted [NavState] with the actual git state. Detects new commits (inserted
+     * by the user), removed commits (hard reset), and amended commits (same Commit-Id, different
+     * SHA).
+     *
+     * - New commits are inserted into the stack at their actual position.
+     * - Missing commits are prepended to the replay queue (above cursor) in their original order.
+     * - SHA changes for the same Commit-Id are updated in place.
+     */
+    fun reconcile(state: NavState, targetRef: String): NavState {
+        val remoteName = config.remoteName
+        gitClient.fetch(remoteName)
+
+        // Walk from HEAD to the merge base to get what's actually materialized
+        val actualBelow = gitClient.getLocalCommitStack(remoteName, GitClient.HEAD, targetRef)
+
+        // The expected "below" portion of the stack
+        val expectedBelow = state.stack.subList(0, state.cursorIndex + 1)
+
+        // Build a map of actual commits by Commit-Id
+        val actualByCommitId = linkedMapOf<String, StackEntry>()
+        for (commit in actualBelow) {
+            val commitId = commit.id ?: continue
+            actualByCommitId[commitId] = StackEntry(sha = commit.hash, commitId = commitId)
+        }
+
+        // Detect missing commits (were below cursor but no longer in git)
+        val missingFromBelow = expectedBelow.filter { it.commitId !in actualByCommitId }
+
+        // Build the new below-cursor portion: actual commits in their git order,
+        // keeping only those with Commit-Ids
+        val newBelow = actualBelow.mapNotNull { commit ->
+            val commitId = commit.id ?: return@mapNotNull null
+            StackEntry(sha = commit.hash, commitId = commitId)
+        }
+
+        // Build the new above-cursor portion: missing commits first (in original order),
+        // then the original above-cursor entries with any SHA updates
+        val aboveCursor = state.stack.subList(state.cursorIndex + 1, state.stack.size)
+        val newAbove =
+            missingFromBelow +
+                aboveCursor.map { entry ->
+                    // If a commit from the above portion happens to be in the actual below
+                    // (e.g., user cherry-picked it), keep the original SHA for replay
+                    actualByCommitId[entry.commitId] ?: entry
+                }
+
+        val newStack = newBelow + newAbove
+        val newCursor = (newBelow.size - 1).coerceAtLeast(0)
+
+        require(newStack.isNotEmpty()) { "Stack is empty after reconciliation." }
+
+        return state.copy(stack = newStack, cursorIndex = newCursor)
+    }
+
+    /**
+     * Returns the active nav session state (after reconciliation), or throws with an appropriate
+     * message. Handles all combinations of detached/attached HEAD and present/absent nav state,
+     * including auto-clearing stale state.
+     */
+    private fun requireActiveNavSession(targetRef: String? = null): NavState {
         val state = readNavState()
         val detached = gitClient.isHeadDetached()
         return when {
-            // Active session — normal case
-            detached && state != null -> state
-            // Detached HEAD without jaspr nav state
+            detached && state != null ->
+                if (targetRef != null) reconcile(state, targetRef) else state
             detached -> throw IllegalArgumentException(DETACHED_HEAD_NO_NAV_STATE)
-            // On a branch — no active session. Clear stale state if present.
             else -> {
                 if (state != null) clearNavState()
                 throw IllegalArgumentException(
@@ -2025,14 +2086,6 @@ class GitJaspr(
                 )
             }
         }
-    }
-
-    /**
-     * Returns the commits from the saved stack that are above the current HEAD (i.e., the commits
-     * between divergePoint and headBeforeDetachSha, exclusive of divergePoint).
-     */
-    private fun getCommitsAboveHead(state: NavState): List<Commit> {
-        return gitClient.logRange(state.divergePoint, state.headBeforeDetachSha)
     }
 
     /**
