@@ -724,6 +724,133 @@ interface GitJasprTest {
         }
     }
 
+    // region split tests
+
+    @Nav
+    @Test
+    fun `split resets HEAD commit and leaves changes in working tree`() {
+        withTestSetup(useFakeRemote) {
+            createCommitsFrom(
+                testCase {
+                    repository {
+                        commit { title = "A" }
+                        commit {
+                            title = "B"
+                            localRefs += "development"
+                        }
+                    }
+                    checkout = "development"
+                }
+            )
+
+            // Split the top commit (no nav session)
+            val subject = gitJaspr.split()
+            assertEquals("B", subject)
+
+            // HEAD should now be at A
+            assertEquals("A", localGit.log(GitClient.HEAD, 1).single().shortMessage)
+
+            // Split state should exist
+            assertNotNull(gitJaspr.readSplitState())
+
+            // B's file should still be in the working tree
+            assertTrue(localRepo.resolve("B.txt").exists())
+        }
+    }
+
+    @Nav
+    @Test
+    fun `split during nav session removes commit from stack`() {
+        withTestSetup(useFakeRemote) {
+            // Stack: A -> B -> C -> D on "development"
+            createCommitsFrom(
+                testCase {
+                    repository {
+                        commit { title = "A" }
+                        commit { title = "B" }
+                        commit { title = "C" }
+                        commit {
+                            title = "D"
+                            localRefs += "development"
+                        }
+                    }
+                    checkout = "development"
+                }
+            )
+
+            // Nav down 2: HEAD at B
+            gitJaspr.navigateDown(DEFAULT_TARGET_REF, 2)
+            assertEquals("B", localGit.log(GitClient.HEAD, 1).single().shortMessage)
+
+            // Split B
+            gitJaspr.split()
+
+            // HEAD should be at A
+            assertEquals("A", localGit.log(GitClient.HEAD, 1).single().shortMessage)
+
+            // Nav state should have B removed, cursor at 0 (A)
+            val state = gitJaspr.readNavState()
+            assertNotNull(state)
+            assertEquals(0, state.cursorIndex)
+            assertEquals(listOf("A", "C", "D"), state.stack.map(StackEntry::commitId))
+
+            // Split state should exist
+            assertNotNull(gitJaspr.readSplitState())
+        }
+    }
+
+    @Nav
+    @Test
+    fun `split then create commits then top replays remaining stack`() {
+        withTestSetup(useFakeRemote) {
+            // Stack: A -> B -> C on "development"
+            createCommitsFrom(
+                testCase {
+                    repository {
+                        commit { title = "A" }
+                        commit { title = "B" }
+                        commit {
+                            title = "C"
+                            localRefs += "development"
+                        }
+                    }
+                    checkout = "development"
+                }
+            )
+
+            // Nav down 1: HEAD at B
+            gitJaspr.navigateDown(DEFAULT_TARGET_REF, 1)
+
+            // Split B
+            gitJaspr.split()
+
+            // Create two new commits from the split
+            localGit.add("B.txt")
+            localGit.commit("B-part1", footerLines = mapOf(COMMIT_ID_LABEL to "B-part1"))
+            localRepo.resolve("extra.txt").writeText("extra\n")
+            localGit.add("extra.txt")
+            localGit.commit("B-part2", footerLines = mapOf(COMMIT_ID_LABEL to "B-part2"))
+
+            // jaspr top should clear split state and replay C
+            gitJaspr.clearSplitState()
+            gitJaspr.navigateToTop(DEFAULT_TARGET_REF)
+
+            assertFalse(localGit.isHeadDetached())
+            assertNull(gitJaspr.readNavState())
+            assertNull(gitJaspr.readSplitState())
+
+            // Final stack should be A -> B-part1 -> B-part2 -> C
+            val finalStack =
+                localGit.getLocalCommitStack(remoteName, GitClient.HEAD, DEFAULT_TARGET_REF)
+            assertEquals(
+                listOf("A", "B-part1", "B-part2", "C"),
+                finalStack.map(Commit::shortMessage),
+            )
+        }
+    }
+
+    // endregion
+
     // endregion
 
     // region sync tests

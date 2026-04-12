@@ -133,6 +133,16 @@ data class NavState(
     val cursorIndex: Int,
 )
 
+/**
+ * State for an in-progress split operation, persisted in `.git/jaspr/split-state.json`. Exists from
+ * `jaspr split` until `jaspr unsplit` or `jaspr top` clears it.
+ */
+@Serializable
+data class SplitState(
+    /** SHA to soft-reset to when unsplitting (the original commit before the mixed reset). */
+    val unsplitSha: String
+)
+
 class GitJasprException(override val message: String) : RuntimeException(message) {
     constructor(message: String, cause: Throwable) : this(message) {
         initCause(cause)
