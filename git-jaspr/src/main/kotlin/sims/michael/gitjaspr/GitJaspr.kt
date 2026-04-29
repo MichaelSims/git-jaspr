@@ -1919,6 +1919,12 @@ class GitJaspr(
     /** Returns true if HEAD is on a branch (not detached) and nav state exists */
     fun isNavStateStale(): Boolean = !gitClient.isHeadDetached() && readNavState() != null
 
+    /**
+     * Returns true if a navigation session is currently active (HEAD detached and nav state
+     * exists).
+     */
+    fun isNavSessionActive(): Boolean = gitClient.isHeadDetached() && readNavState() != null
+
     private val splitStateFile
         get() = getJasprDir().resolve("split-state.json")
 
