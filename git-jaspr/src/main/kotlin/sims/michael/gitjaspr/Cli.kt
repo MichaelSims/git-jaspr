@@ -783,6 +783,18 @@ class Clean : GitJasprSubcommand(helpText = "Clean up orphaned branches") {
                 }
             }
 
+            if (plan.orphanedNamedStackBranches.isNotEmpty()) {
+                add("")
+                add(
+                    theme.heading(
+                        "Orphaned named stack branches (underlying jaspr branches no longer exist):"
+                    )
+                )
+                for (branch in plan.orphanedNamedStackBranches) {
+                    add("  ${theme.entity(branch)}")
+                }
+            }
+
             if (plan.abandonedBranches.isNotEmpty()) {
                 add("")
                 add(
