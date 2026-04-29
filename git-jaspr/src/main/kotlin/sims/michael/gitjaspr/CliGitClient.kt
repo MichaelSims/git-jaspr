@@ -181,6 +181,11 @@ class CliGitClient(
         return apply { executeCommand(listOf("git", "reset", "--soft", refName)) }
     }
 
+    override fun cleanUntracked(): GitClient {
+        logger.trace("cleanUntracked")
+        return apply { executeCommand(listOf("git", "clean", "-d", "-f")) }
+    }
+
     override fun branch(name: String, startPoint: String, force: Boolean): Commit? {
         logger.trace("branch {} start {} force {}", name, startPoint, force)
         val old =

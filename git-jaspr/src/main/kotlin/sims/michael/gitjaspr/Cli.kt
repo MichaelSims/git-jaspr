@@ -1230,7 +1230,6 @@ class NavCancel :
     ) {
     override suspend fun doRun() {
         val jaspr = appWiring.gitJaspr
-        requireNoActiveSplit(jaspr)
         val state = jaspr.readNavState()
         if (state == null) {
             renderer.info { "No navigation session to cancel." }
@@ -1242,9 +1241,15 @@ class NavCancel :
             renderer.info { "Stale navigation state cleared." }
             return
         }
+        val splitWasActive = jaspr.isSplitInProgress()
         val orphanedShas = jaspr.cancelNavSession()
         renderer.info {
             "Navigation session cancelled. Restored ${entity(state.headBeforeDetach)}."
+        }
+        if (splitWasActive) {
+            renderer.warn {
+                "In-progress split discarded; working tree and untracked files were cleaned."
+            }
         }
         if (orphanedShas.isNotEmpty()) {
             renderer.warn { "The following commits are now orphaned (not on any branch):" }

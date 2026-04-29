@@ -230,6 +230,11 @@ class JGitClient(
         }
     }
 
+    override fun cleanUntracked() = apply {
+        logger.trace("cleanUntracked")
+        useGit { git -> git.clean().setCleanDirectories(true).setForce(true).call() }
+    }
+
     override fun branch(name: String, startPoint: String, force: Boolean): Commit? {
         logger.trace("branch {} start {} force {}", name, startPoint, force)
         val old = if (refExists(name)) log(name, maxCount = 1).single() else null

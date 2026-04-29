@@ -75,7 +75,7 @@ flowchart TD
 
     %% Split-mid-stack to Normal
     SMS -- "top" --> N
-    SMS -. "nav cancel [planned]" .-> N
+    SMS -- "nav cancel" --> N
 
     %% 0: N --down/bottom--> NAV
     linkStyle 0 stroke:#d63031,stroke-width:3px,color:#d63031
@@ -97,7 +97,7 @@ flowchart TD
     linkStyle 8 stroke:#27ae60,color:#27ae60
     %% 9: SMS --top--> N
     linkStyle 9 stroke:#2d3436,color:#2d3436
-    %% 10: SMS --nav cancel [planned]--> N
+    %% 10: SMS --nav cancel--> N
     linkStyle 10 stroke:#636e72,color:#636e72
 ```
 
@@ -117,7 +117,7 @@ mutations that are available whenever their preconditions are met.
 | `fold down` | squashes into parent | squashes at cursor | BLOCKED | BLOCKED |
 | `fold up` | BLOCKED (no session) | squashes commit above | BLOCKED | BLOCKED |
 | `drop [N]` | removes N from top | removes N from top of nav stack | BLOCKED | BLOCKED |
-| `nav cancel` | no-op (no session) | restores original branch | BLOCKED | hard escape: reset + clean [planned] |
+| `nav cancel` | no-op (no session) | restores original branch | BLOCKED | hard escape: reset + clean |
 | `nav finish` | no-op (no session) | ends session, discards above cursor | BLOCKED | BLOCKED |
 
 ### Why split blocks navigation
@@ -133,8 +133,8 @@ The three escape hatches from a split are:
 - **`unsplit`**: Absorb everything back into the original commit (undo the split).
 - **`top`**: Accept the current state (new commits the user created from the split pieces)
   and replay the remaining stack on top. This is the "done splitting" exit.
-- **`nav cancel`** (planned, git-jaspr-2g9): Hard escape that resets to the original
-  branch and clears all state. Destructive by design.
+- **`nav cancel`**: Hard escape that resets to the original branch and clears all state.
+  Destructive by design.
 
 ### Why `top` clears split state
 
@@ -173,11 +173,6 @@ fully served by a single level. Nesting would add complexity with no clear appli
 
 ## Future Considerations
 
-- **git-jaspr-1c5**: The post-split message should vary based on whether a nav session is
-  active. At the tip, mentioning `top` is misleading. Mid-stack, it is the primary exit.
 - **git-jaspr-6gd**: Install a temporary `post-checkout` hook during nav sessions to warn
   the user immediately if they check out a branch, rather than detecting staleness lazily
   on the next jaspr command.
-- **git-jaspr-2g9**: Allow `nav cancel` during a split as a hard escape
-  (`git reset --hard` + `git clean -d -f` to the original branch ref, clearing both
-  split and nav state).
