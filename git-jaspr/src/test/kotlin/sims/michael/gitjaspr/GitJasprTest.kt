@@ -744,6 +744,44 @@ interface GitJasprTest {
         }
     }
 
+    @Nav
+    @Test
+    fun `cancel during split discards split state and working tree changes`() {
+        withTestSetup(useFakeRemote) {
+            createCommitsFrom(
+                testCase {
+                    repository {
+                        commit { title = "A" }
+                        commit { title = "B" }
+                        commit {
+                            title = "C"
+                            localRefs += "development"
+                        }
+                    }
+                    checkout = "development"
+                }
+            )
+            val originalTipHash = localGit.log(GitClient.HEAD, 1).single().hash
+
+            // Nav down 1: HEAD at B
+            gitJaspr.navigateDown(DEFAULT_TARGET_REF, 1)
+            // Split B: working tree now has B's changes; an untracked file is also added
+            gitJaspr.split()
+            localRepo.resolve("untracked.txt").writeText("scratch\n")
+            assertNotNull(gitJaspr.readSplitState())
+
+            gitJaspr.cancelNavSession()
+
+            assertFalse(localGit.isHeadDetached())
+            assertEquals("development", localGit.getCurrentBranchName())
+            assertNull(gitJaspr.readNavState())
+            assertNull(gitJaspr.readSplitState())
+            assertEquals(originalTipHash, localGit.log(GitClient.HEAD, 1).single().hash)
+            assertFalse(localGit.hasUncommittedChangesToTrackedFiles())
+            assertFalse(localRepo.resolve("untracked.txt").exists())
+        }
+    }
+
     // region split tests
 
     @Nav

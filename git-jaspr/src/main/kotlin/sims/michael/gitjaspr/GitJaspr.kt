@@ -2174,6 +2174,9 @@ class GitJaspr(
      * session started. Any commits created during the session that are not reachable from the
      * restored branch become orphaned.
      *
+     * If a split is in progress, this acts as a hard escape: the working tree is reset to the
+     * original branch, untracked files are removed, and split state is cleared.
+     *
      * @return the SHAs of commits that were below the cursor but are not part of the original
      *   branch (i.e., commits created or cherry-picked during the session)
      */
@@ -2189,6 +2192,13 @@ class GitJaspr(
         // These will be orphaned when we restore it. Stop at the first original commit.
         val headLog = gitClient.log(GitClient.HEAD, state.stack.size + 1)
         val orphanedShas = headLog.takeWhile { it.hash !in originalShas }.map(Commit::hash)
+
+        if (isSplitInProgress()) {
+            // Hard escape: discard working tree changes and any commits made during the split
+            gitClient.reset(state.headBeforeDetach)
+            gitClient.cleanUntracked()
+            clearSplitState()
+        }
 
         gitClient.checkout(state.headBeforeDetach)
         clearNavState()

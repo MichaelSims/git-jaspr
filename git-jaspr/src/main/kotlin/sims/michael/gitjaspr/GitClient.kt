@@ -51,6 +51,9 @@ interface GitClient {
 
     fun resetSoft(refName: String): GitClient
 
+    /** Equivalent to `git clean -d -f` — removes untracked files and directories. */
+    fun cleanUntracked(): GitClient
+
     fun branch(name: String, startPoint: String = "HEAD", force: Boolean = false): Commit?
 
     fun deleteBranches(names: List<String>, force: Boolean = false): List<String>
