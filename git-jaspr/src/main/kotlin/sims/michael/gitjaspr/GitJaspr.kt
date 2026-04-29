@@ -1155,6 +1155,69 @@ class GitJaspr(
         check(hook.setExecutable(true)) { "Failed to set the executable bit on $hook" }
     }
 
+    /**
+     * Idempotently install (or refresh) the jaspr-managed section of the post-checkout hook so the
+     * user gets a warning when a checkout invalidates their nav session. Coexists with any
+     * pre-existing post-checkout hook by appending a clearly delimited block.
+     */
+    private fun installNavSessionHook() {
+        val hooksDir = resolveGitCommonDir().resolve("hooks")
+        if (!hooksDir.isDirectory) return
+        val hook = hooksDir.resolve(POST_CHECKOUT_HOOK)
+        val ourSection =
+            checkNotNull(javaClass.getResourceAsStream("/$POST_CHECKOUT_HOOK_RESOURCE")).use {
+                it.bufferedReader().readText()
+            }
+
+        val newContent =
+            if (!hook.exists()) {
+                "#!/bin/sh\n\n$ourSection"
+            } else {
+                val withoutOurs = stripNavHookSection(hook.readText()).trimEnd('\n')
+                if (withoutOurs.isBlank()) "#!/bin/sh\n\n$ourSection"
+                else "$withoutOurs\n\n$ourSection"
+            }
+
+        if (!hook.exists() || hook.readText() != newContent) {
+            hook.writeText(newContent)
+        }
+        if (!hook.canExecute()) {
+            hook.setExecutable(true)
+        }
+    }
+
+    /**
+     * Remove the jaspr-managed section from the post-checkout hook. If the hook becomes empty (only
+     * contained our section), delete it entirely. Otherwise leave the user's portion untouched.
+     */
+    private fun removeNavSessionHook() {
+        val hooksDir = resolveGitCommonDir().resolve("hooks")
+        if (!hooksDir.isDirectory) return
+        val hook = hooksDir.resolve(POST_CHECKOUT_HOOK)
+        if (!hook.exists()) return
+        val existing = hook.readText()
+        if (NAV_HOOK_BEGIN_MARKER !in existing) return
+
+        val cleaned = stripNavHookSection(existing).trimEnd('\n')
+        val onlyShebangAndBlank =
+            cleaned.lines().all { line -> line.isBlank() || line.startsWith("#!") }
+        if (onlyShebangAndBlank) {
+            hook.delete()
+        } else {
+            hook.writeText("$cleaned\n")
+        }
+    }
+
+    private fun stripNavHookSection(content: String): String {
+        val begin = content.indexOf(NAV_HOOK_BEGIN_MARKER)
+        if (begin == -1) return content
+        val endMarker = content.indexOf(NAV_HOOK_END_MARKER, startIndex = begin)
+        if (endMarker == -1) return content
+        val newlineAfterEnd = content.indexOf('\n', startIndex = endMarker)
+        val end = if (newlineAfterEnd == -1) content.length else newlineAfterEnd + 1
+        return content.removeRange(begin, end)
+    }
+
     private fun RemoteCommitStatus.toStatusList(
         commitsWithDuplicateIds: Map<String, List<RemoteCommitStatus>>
     ) =
@@ -1981,6 +2044,7 @@ class GitJaspr(
 
     fun clearNavState() {
         navStateFile.delete()
+        removeNavSessionHook()
     }
 
     /** Returns true if HEAD is on a branch (not detached) and nav state exists */
@@ -2037,6 +2101,7 @@ class GitJaspr(
 
         gitClient.checkout(state.stack[targetIndex].sha)
         writeNavState(state.copy(cursorIndex = targetIndex))
+        installNavSessionHook()
     }
 
     /** Navigate to the bottom of the stack (first commit above the target branch). */
@@ -2053,6 +2118,7 @@ class GitJaspr(
 
         gitClient.checkout(state.stack.first().sha)
         writeNavState(state.copy(cursorIndex = 0))
+        installNavSessionHook()
     }
 
     /**
@@ -2843,6 +2909,10 @@ class GitJaspr(
             |"""
                 .trimMargin()
         private const val COMMIT_MSG_HOOK = "commit-msg"
+        private const val POST_CHECKOUT_HOOK = "post-checkout"
+        private const val POST_CHECKOUT_HOOK_RESOURCE = "post-checkout-jaspr-section"
+        private const val NAV_HOOK_BEGIN_MARKER = "# JASPR-NAV-HOOK-BEGIN"
+        private const val NAV_HOOK_END_MARKER = "# JASPR-NAV-HOOK-END"
     }
 }
 
