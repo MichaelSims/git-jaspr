@@ -713,17 +713,19 @@ class GitJaspr(
         val autoMergeRefSpec = refSpec.copy(localRef = adjustedLocalRef)
         logger.trace("autoMerge refSpec: {}", autoMergeRefSpec)
 
-        val cacheDir = getAutoMergeCacheDir()
-        val cacheDirGit = OptimizedCliGitClient(cacheDir, config.remoteBranchPrefix)
-        val lockFile = acquireAutoMergeLock(cacheDirGit, currentRef)
+        val worktreeDir = getAutoMergeWorktreeDir()
+        val lockFile = acquireAutoMergeLock()
+        val worktreeGit = OptimizedCliGitClient(worktreeDir, config.remoteBranchPrefix)
 
         try {
+            createAutoMergeWorktree(worktreeDir, currentRef)
+
             // Run the auto-merge loop
-            val cacheDirJaspr =
+            val worktreeJaspr =
                 GitJaspr(
                     ghClient,
-                    cacheDirGit,
-                    config.copy(workingDirectory = cacheDirGit.workingDirectory),
+                    worktreeGit,
+                    config.copy(workingDirectory = worktreeDir),
                     newUuid,
                     commitIdentOverride,
                     renderer,
@@ -732,7 +734,7 @@ class GitJaspr(
             var attemptsMade = 0
             while (attemptsMade < maxAttempts) {
                 val numCommitsBehind =
-                    cacheDirGit
+                    worktreeGit
                         .logRange(
                             autoMergeRefSpec.localRef,
                             "$remoteName/${autoMergeRefSpec.remoteRef}",
@@ -745,7 +747,7 @@ class GitJaspr(
                 }
 
                 val stack =
-                    cacheDirGit.getLocalCommitStack(
+                    worktreeGit.getLocalCommitStack(
                         remoteName,
                         autoMergeRefSpec.localRef,
                         autoMergeRefSpec.remoteRef,
@@ -755,16 +757,16 @@ class GitJaspr(
                     break
                 }
 
-                val statuses = cacheDirJaspr.getRemoteCommitStatuses(stack)
+                val statuses = worktreeJaspr.getRemoteCommitStatuses(stack)
                 if (statuses.all(RemoteCommitStatus::isMergeable)) {
-                    cacheDirJaspr.merge(autoMergeRefSpec)
+                    worktreeJaspr.merge(autoMergeRefSpec)
 
-                    // Since we merged from a separate directory, the local working copy will be
-                    // out of date, so let's fetch the latest changes.
+                    // The merge happened in the worktree; the user's main checkout still has
+                    // pre-merge tracking refs, so refresh them.
                     gitClient.fetch(remoteName)
                     break
                 }
-                print(cacheDirJaspr.getStatusString(autoMergeRefSpec, theme))
+                print(worktreeJaspr.getStatusString(autoMergeRefSpec, theme))
 
                 if (statuses.any { status -> status.checksPass == false }) {
                     renderer.warn { "Checks are failing. Aborting auto-merge." }
@@ -781,16 +783,17 @@ class GitJaspr(
                 }
                 delay(pollingIntervalSeconds.seconds)
                 // Fetch the latest changes before we try again
-                cacheDirGit.fetch(remoteName)
+                worktreeGit.fetch(remoteName)
             }
         } catch (e: Exception) {
             logger.error(
-                "Auto-merge failed with exception. Cache directory: {}",
-                cacheDirGit.workingDirectory.absolutePath,
+                "Auto-merge failed with exception. Worktree: {}",
+                worktreeDir.absolutePath,
                 e,
             )
             throw e
         } finally {
+            removeAutoMergeWorktree(worktreeDir)
             // Closing the file releases the lock acquired above
             withContext(Dispatchers.IO) { lockFile.close() }
         }
@@ -1969,57 +1972,61 @@ class GitJaspr(
     private fun getJasprDir(): File =
         config.workingDirectory.resolve(".git/jaspr").also { it.mkdirs() }
 
-    private fun getAutoMergeCacheDir(): File = getJasprDir().resolve("automerge")
+    private fun getAutoMergeWorktreeDir(): File = getJasprDir().resolve("automerge-worktree")
+
+    private fun getAutoMergeLockFile(): File = getJasprDir().resolve("automerge.lock")
 
     /**
-     * Acquires an exclusive file lock on the auto-merge cache, clones or fetches the repo into
-     * [cacheDirGit], and checks out [currentRef]. Returns the lock file — the caller must close it
-     * to release the lock.
+     * Acquires an exclusive file lock guarding auto-merge, ensuring only one auto-merge can be
+     * running for this repository at a time. Returns the lock file — the caller must close it to
+     * release the lock.
      */
-    private suspend fun acquireAutoMergeLock(
-        cacheDirGit: OptimizedCliGitClient,
-        currentRef: String,
-    ): RandomAccessFile {
-        val remoteName = config.remoteName
-        val remoteUri =
-            requireNotNull(gitClient.getRemoteUriOrNull(remoteName)) {
-                "Could not find remote URI for remote: $remoteName"
-            }
-        val cacheDir = cacheDirGit.workingDirectory
-
-        return withContext(Dispatchers.IO) {
-            RandomAccessFile(File("${cacheDir.absolutePath}.lock"), "rw").apply {
+    private suspend fun acquireAutoMergeLock(): RandomAccessFile =
+        withContext(Dispatchers.IO) {
+            RandomAccessFile(getAutoMergeLockFile(), "rw").apply {
                 channel.tryLock()
                     ?: throw GitJasprException(
                         "Another auto-merge is already running for this repository. " +
                             "If this is unexpected, check for stale processes."
                     )
-
-                val isCached = cacheDir.resolve(".git").isDirectory
-                val setupTime = measureTime {
-                    cacheDirGit.showStderr = true
-                    if (isCached) {
-                        renderer.info { "Fetching latest changes into auto-merge cache..." }
-                        cacheDirGit.fetch(remoteName)
-                    } else {
-                        renderer.info { "Cloning repository into auto-merge cache..." }
-                        cacheDirGit.clone(remoteUri, remoteName)
-                    }
-
-                    // Add/update the original working directory as a remote so we can fetch
-                    // unpushed commits
-                    if (cacheDirGit.getRemoteUriOrNull("local") == null) {
-                        logger.debug("Adding local remote for unpushed commits")
-                        cacheDirGit.addRemote("local", config.workingDirectory.absolutePath)
-                    }
-                    cacheDirGit.fetch("local")
-                    cacheDirGit.showStderr = false
-
-                    cacheDirGit.checkout(currentRef)
-                }
-                val verb = if (isCached) "Fetched" else "Cloned"
-                logger.debug("{} auto-merge cache in {}", verb, setupTime)
             }
+        }
+
+    /**
+     * Creates a detached-HEAD worktree at [worktreeDir] pointing at [ref]. Removes any pre-existing
+     * worktree at the same path first (e.g. left over from a crashed run).
+     */
+    private fun createAutoMergeWorktree(worktreeDir: File, ref: String) {
+        if (worktreeDir.exists()) {
+            // Best-effort cleanup of a stale worktree from a prior run
+            runWorktreeRemove(worktreeDir)
+        }
+        val setupTime = measureTime {
+            val proc =
+                ProcessBuilder("git", "worktree", "add", "--detach", worktreeDir.absolutePath, ref)
+                    .directory(config.workingDirectory)
+                    .redirectErrorStream(true)
+                    .start()
+            val output = proc.inputStream.bufferedReader().readText()
+            check(proc.waitFor() == 0) { "Failed to create auto-merge worktree: $output" }
+        }
+        logger.debug("Created auto-merge worktree in {}", setupTime)
+    }
+
+    private fun removeAutoMergeWorktree(worktreeDir: File) {
+        runWorktreeRemove(worktreeDir)
+    }
+
+    private fun runWorktreeRemove(worktreeDir: File) {
+        val proc =
+            ProcessBuilder("git", "worktree", "remove", "--force", worktreeDir.absolutePath)
+                .directory(config.workingDirectory)
+                .redirectErrorStream(true)
+                .start()
+        val output = proc.inputStream.bufferedReader().readText()
+        val rc = proc.waitFor()
+        if (rc != 0) {
+            logger.debug("git worktree remove returned {}: {}", rc, output)
         }
     }
 
