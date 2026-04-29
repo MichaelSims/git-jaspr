@@ -929,6 +929,39 @@ class GitJaspr(
     }
 
     /**
+     * Returns named stack branches whose commits no longer have any corresponding jaspr ID branches
+     * on the remote. This happens when the user (or GitHub on PR close) deletes the jaspr ID
+     * branches but the named stack branch is left behind.
+     *
+     * Empty named stack branches (already-merged stacks) are not included here; those are reported
+     * by [getEmptyNamedStackBranches].
+     */
+    internal fun getOrphanedNamedStackBranches(remoteBranches: List<RemoteBranch>): List<String> {
+        logger.trace("getOrphanedNamedStackBranches")
+        val remoteJasprCommitIds =
+            remoteBranches
+                .mapNotNull { branch ->
+                    RemoteRef.parse(branch.name, config.remoteBranchPrefix)?.commitId
+                }
+                .toSet()
+
+        return remoteBranches.mapNotNull { branch ->
+            val parts =
+                RemoteNamedStackRef.parse(branch.name, config.remoteNamedStackBranchPrefix)
+                    ?: return@mapNotNull null
+            val stack =
+                gitClient.getLocalCommitStack(
+                    config.remoteName,
+                    "${config.remoteName}/${branch.name}",
+                    parts.targetRef,
+                )
+            if (stack.isEmpty()) return@mapNotNull null
+            val stackCommitIds = stack.mapNotNull(Commit::id).toSet()
+            if (stackCommitIds.none { it in remoteJasprCommitIds }) branch.name else null
+        }
+    }
+
+    /**
      * Returns open PRs that will be abandoned by pushing the given [stack] to the named stack
      * identified by [prefixedStackName]. A PR is "abandoned" when its commit ID was reachable from
      * the named stack before the push but is absent from the new stack.
@@ -1029,17 +1062,27 @@ class GitJaspr(
         val emptyNamedStackBranches: SortedSet<String> = sortedSetOf(),
         /** A list of jaspr branches that are not orphaned but are unreachable by any named stack */
         val abandonedBranches: SortedSet<String> = sortedSetOf(),
+        /**
+         * A list of named stack branches whose underlying jaspr ID branches no longer exist on the
+         * remote. The named stack is left over after the underlying work has been cleaned.
+         */
+        val orphanedNamedStackBranches: SortedSet<String> = sortedSetOf(),
     ) {
         operator fun plus(other: CleanPlan): CleanPlan {
             return CleanPlan(
                 (orphanedBranches + (other.orphanedBranches - abandonedBranches)).toSortedSet(),
                 (emptyNamedStackBranches + other.emptyNamedStackBranches).toSortedSet(),
                 (abandonedBranches + other.abandonedBranches).toSortedSet(),
+                (orphanedNamedStackBranches + other.orphanedNamedStackBranches).toSortedSet(),
             )
         }
 
         fun allBranches() =
-            (orphanedBranches + emptyNamedStackBranches + abandonedBranches).sorted()
+            (orphanedBranches +
+                    emptyNamedStackBranches +
+                    abandonedBranches +
+                    orphanedNamedStackBranches)
+                .sorted()
     }
 
     suspend fun getCleanPlan(cleanAbandonedPrs: Boolean, cleanAllCommits: Boolean): CleanPlan {
@@ -1055,6 +1098,7 @@ class GitJaspr(
 
         val allOrphanedBranches = getOrphanedBranches(remoteBranches, pullRequestHeadRefs)
         val emptyNamedStackBranches = getEmptyNamedStackBranches(remoteBranches)
+        val orphanedNamedStackBranches = getOrphanedNamedStackBranches(remoteBranches)
         val allAbandonedBranches =
             if (cleanAbandonedPrs) {
                 getAbandonedBranches(remoteBranches, pullRequestHeadRefs)
@@ -1089,6 +1133,7 @@ class GitJaspr(
             orphanedBranches.toSortedSet(),
             emptyNamedStackBranches.toSortedSet(),
             abandonedBranches.toSortedSet(),
+            orphanedNamedStackBranches.toSortedSet(),
         )
     }
 

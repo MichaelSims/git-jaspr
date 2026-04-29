@@ -5795,6 +5795,51 @@ interface GitJasprTest {
 
     @Clean
     @Test
+    fun `clean reports orphaned named stack branches when underlying jaspr branches are gone`() {
+        withTestSetup(useFakeRemote) {
+            createCommitsFrom(
+                testCase {
+                    repository {
+                        commit { title = "A" }
+                        commit {
+                            title = "B"
+                            localRefs += "dev"
+                        }
+                    }
+                    checkout = "dev"
+                }
+            )
+            gitJaspr.push(stackName = "my-stack")
+
+            // Manually delete every jaspr ID branch on the remote, leaving the named stack
+            // branch behind. Mirrors what GitHub's "delete branch on close" does when the
+            // user closes PRs without running jaspr clean.
+            val jasprIdBranches =
+                localGit.getRemoteBranches(remoteName).map(RemoteBranch::name).filter { name ->
+                    RemoteRefEncoding.RemoteRef.parse(
+                        name,
+                        RemoteRefEncoding.DEFAULT_REMOTE_BRANCH_PREFIX,
+                    ) != null
+                }
+            if (useFakeRemote) {
+                remoteGit.deleteBranches(jasprIdBranches, force = true)
+            } else {
+                localGit.push(
+                    jasprIdBranches.map { name -> RefSpec(FORCE_PUSH_PREFIX, name) },
+                    remoteName,
+                )
+            }
+
+            val plan = gitJaspr.getCleanPlan(cleanAbandonedPrs = false, cleanAllCommits = false)
+            assertEquals(
+                sortedSetOf(RemoteNamedStackRef("my-stack").name()),
+                plan.orphanedNamedStackBranches,
+            )
+        }
+    }
+
+    @Clean
+    @Test
     fun `clean deletes empty named stack branches`() {
         withTestSetup(useFakeRemote) {
             createCommitsFrom(
