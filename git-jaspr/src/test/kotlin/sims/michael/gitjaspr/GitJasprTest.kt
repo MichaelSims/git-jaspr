@@ -2433,8 +2433,8 @@ interface GitJasprTest {
             val actual = getAndPrintStatusString(RefSpec("development", "main"))
             assertEquals(
                 """
-                |[❗✅✅✅✅ㄧ] %s : %s : four
-                |[❗✅✅✅✅ㄧ] %s : %s : three
+                |[⬆️✅✅✅✅ㄧ] %s : %s : four
+                |[⬆️✅✅✅✅ㄧ] %s : %s : three
                 |[✅✅✅✅✅✅] %s : %s : one
                 """
                     .trimMargin()
@@ -2797,6 +2797,48 @@ interface GitJasprTest {
                     ),
                 actual,
             )
+        }
+    }
+
+    @Status
+    @Test
+    fun `status surfaces remote-only commits when named stack has commits not in local stack`() {
+        withTestSetup(useFakeRemote) {
+            createCommitsFrom(
+                testCase {
+                    repository {
+                        commit {
+                            title = "one"
+                            willPassVerification = true
+                            localRefs += "behind"
+                        }
+                        commit {
+                            title = "two"
+                            willPassVerification = true
+                            localRefs += "development"
+                        }
+                    }
+                    checkout = "development"
+                }
+            )
+
+            val stackName = "my-stack-name"
+            gitJaspr.push(stackName = stackName)
+            waitForChecksToConclude("one", "two")
+
+            // Walk back to a position where the local stack only has "one"; the remote named
+            // stack still has both, so "two" is a remote-only commit-id.
+            localGit.checkout("behind")
+            localGit.setUpstreamBranch(
+                remoteName,
+                "$DEFAULT_REMOTE_NAMED_STACK_BRANCH_PREFIX/$DEFAULT_TARGET_REF/$stackName",
+            )
+            val actual = getAndPrintStatusString()
+
+            // The new section should be present, list 1 remote-only commit, and name "two".
+            assertContains(actual, "Remote stack has 1 commit not in your local stack")
+            assertContains(actual, "  ⬇️  ")
+            assertContains(actual, "two")
         }
     }
 
@@ -6698,6 +6740,16 @@ interface GitJasprTest {
                 }
             }
         }
+        // The "Remote stack has N commits not in your local stack" section depends on test data
+        // we can't easily predict (hashes, dates). Tests that don't explicitly verify it should
+        // still pass when it appears, so we extract it from `actual` and tack it onto expected.
+        val remoteOnlyExtract =
+            "(?m)^Remote stack has \\d+ commits? not in your local stack[^\\n]*\\n(?:  ⬇️  [^\\n]*\\n)+"
+                .toRegex(RegexOption.MULTILINE)
+                .find(actual)
+                ?.value
+                ?.let { "\n$it" }
+                .orEmpty()
         return """
             | ┌─────────── commit pushed
             | │ ┌─────────── exists       ┐
@@ -6709,7 +6761,7 @@ interface GitJasprTest {
             |$formattedString
 
         """
-            .trimMargin() + namedStackInfoString
+            .trimMargin() + namedStackInfoString + remoteOnlyExtract
     }
 
     // Much like toStatusString above, this repeats the PR body footer. See notes there for the

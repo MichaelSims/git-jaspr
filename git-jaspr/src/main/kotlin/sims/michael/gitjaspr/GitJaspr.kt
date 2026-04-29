@@ -16,6 +16,8 @@ import kotlinx.serialization.json.Json
 import org.slf4j.LoggerFactory
 import sims.michael.gitjaspr.CommitParsers.getSubjectAndBodyFromFullMessage
 import sims.michael.gitjaspr.CommitParsers.trimFooters
+import sims.michael.gitjaspr.GitJaspr.StatusBits.Status.AHEAD
+import sims.michael.gitjaspr.GitJaspr.StatusBits.Status.BEHIND
 import sims.michael.gitjaspr.GitJaspr.StatusBits.Status.EMPTY
 import sims.michael.gitjaspr.GitJaspr.StatusBits.Status.FAIL
 import sims.michael.gitjaspr.GitJaspr.StatusBits.Status.PENDING
@@ -242,6 +244,52 @@ class GitJaspr(
                     }
                 )
             }
+            appendRemoteOnlyCommits(stack, stackName, theme, strategy)
+        }
+    }
+
+    private fun StringBuilder.appendRemoteOnlyCommits(
+        localStack: List<Commit>,
+        stackName: String,
+        theme: Theme,
+        strategy: GetStatusStringStrategy,
+    ) {
+        val remoteName = config.remoteName
+        val targetRef =
+            RemoteNamedStackRef.parse(stackName, config.remoteNamedStackBranchPrefix)?.targetRef
+                ?: return
+        val remoteStack =
+            try {
+                strategy.getLocalCommitStack("$remoteName/$stackName", targetRef)
+            } catch (e: Exception) {
+                logger.debug("Failed to walk remote stack '{}': {}", stackName, e.message)
+                return
+            }
+        val localCommitIds = localStack.mapNotNull(Commit::id).toSet()
+        val remoteOnly = remoteStack.filter { it.id != null && it.id !in localCommitIds }
+        if (remoteOnly.isEmpty()) return
+
+        val localMaxDate = localStack.maxOfOrNull(Commit::commitDate)
+        val remoteOnlyMaxDate = checkNotNull(remoteOnly.maxOfOrNull(Commit::commitDate))
+        // Mark as "likely stale" only when the local stack is strictly newer than every
+        // remote-only commit; ties or remote-newer get the highlighted treatment.
+        val likelyStale = localMaxDate != null && localMaxDate > remoteOnlyMaxDate
+
+        appendLine()
+        val count = remoteOnly.size
+        val heading =
+            if (!likelyStale) {
+                "Remote stack has $count ${commitOrCommits(count)} not in your local stack:"
+            } else {
+                "Remote stack has $count ${commitOrCommits(count)} not in your local stack " +
+                    "(likely stale):"
+            }
+        appendLine(if (!likelyStale) theme.warning(heading) else theme.muted(heading))
+        for (commit in remoteOnly) {
+            val line =
+                "  ${BEHIND.emoji}  ${commit.hash.take(7)}  " +
+                    "${commit.commitDate.toLocalDate()}  ${commit.shortMessage}"
+            appendLine(if (!likelyStale) line else theme.muted(line))
         }
     }
 
@@ -1229,8 +1277,11 @@ class GitJaspr(
                     when {
                         commitsWithDuplicateIds.containsKey(localCommit.id) -> WARNING
                         remoteCommit == null -> EMPTY
-                        remoteCommit.hash != localCommit.hash -> WARNING
-                        else -> SUCCESS
+                        remoteCommit.hash == localCommit.hash -> SUCCESS
+                        // Hashes differ — indicate which side is fresher
+                        localCommit.commitDate > remoteCommit.commitDate -> AHEAD
+                        remoteCommit.commitDate > localCommit.commitDate -> BEHIND
+                        else -> WARNING
                     },
                 pullRequestExists = if (pullRequest != null) SUCCESS else EMPTY,
                 checksPass =
@@ -1699,7 +1750,11 @@ class GitJaspr(
             PENDING("⌛"),
             UNKNOWN("❓"),
             EMPTY("ㄧ"),
-            WARNING("❗");
+            WARNING("❗"),
+            /** Local commit is fresher than its remote counterpart (push needed). */
+            AHEAD("⬆️"),
+            /** Remote commit is fresher than its local counterpart (pull needed). */
+            BEHIND("⬇️");
 
             fun styledEmoji(theme: Theme) =
                 when (this) {
@@ -1708,7 +1763,9 @@ class GitJaspr(
                     PENDING,
                     UNKNOWN -> theme.warning(emoji)
                     EMPTY -> theme.muted(emoji)
-                    WARNING -> theme.warning(emoji)
+                    WARNING,
+                    AHEAD,
+                    BEHIND -> theme.warning(emoji)
                 }
         }
     }
