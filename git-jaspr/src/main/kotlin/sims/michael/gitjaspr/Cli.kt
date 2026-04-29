@@ -1272,12 +1272,18 @@ class Drop : GitJasprSubcommand(helpText = "Drop the top N commits from the stac
 
 class Split : GitJasprSubcommand(helpText = "Split the HEAD commit into working tree changes") {
     override suspend fun doRun() {
-        val subject = appWiring.gitJaspr.split()
+        val jaspr = appWiring.gitJaspr
+        val wasInNavSession = jaspr.isNavSessionActive()
+        val subject = jaspr.split()
         renderer.info {
             "Commit ${entity(subject)} has been reset. Its changes are in your working tree."
         }
-        renderer.info {
-            "Create new commits from these changes, then ${command("jaspr top")} to replay the rest of the stack."
+        if (wasInNavSession) {
+            renderer.info {
+                "Create new commits from these changes, then ${command("jaspr top")} to replay the rest of the stack."
+            }
+        } else {
+            renderer.info { "Create new commits from these changes." }
         }
         renderer.info { "To undo: ${command("jaspr unsplit")}" }
     }
