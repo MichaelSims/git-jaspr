@@ -951,7 +951,24 @@ class GitJaspr(
                 .mapNotNull(Commit::id)
                 .toSet()
         val newCommitIds = stack.mapNotNull(Commit::id).toSet()
-        val droppedIds = oldCommitIds - newCommitIds
+
+        // A commit dropped from this stack may still be owned by another named stack;
+        // those should not be flagged as abandoned.
+        val reachableFromOtherNamedStacks =
+            remoteBranches
+                .filter { it.name != prefixedStackName }
+                .mapNotNull { branch ->
+                    RemoteNamedStackRef.parse(branch.name, config.remoteNamedStackBranchPrefix)
+                        ?.let { ref -> branch.name to ref.targetRef }
+                }
+                .flatMap { (branchName, ref) ->
+                    gitClient
+                        .logRange("$remoteName/$ref", "$remoteName/$branchName")
+                        .mapNotNull(Commit::id)
+                }
+                .toSet()
+
+        val droppedIds = oldCommitIds - newCommitIds - reachableFromOtherNamedStacks
         if (droppedIds.isEmpty()) return emptyList()
 
         return ghClient.getPullRequestsById(droppedIds.toList()).filterByMatchingTargetRef()
@@ -970,7 +987,12 @@ class GitJaspr(
             RemoteRef.parse(branch.name, config.remoteBranchPrefix) != null
         }
 
-        val unmergedAndReachableFromNamedStacks =
+        // Compare by commit-id rather than git hash. After rebases the same logical commit
+        // may have multiple hashes on the remote (one per push), but its commit-id stays
+        // stable. A PR head branch and its named-stack branch can therefore point to
+        // different hashes of the same commit-id; matching on hash falsely flags it as
+        // abandoned.
+        val unmergedCommitIdsReachableFromNamedStacks =
             namedStackBranches
                 .mapNotNull { branch ->
                     RemoteNamedStackRef.parse(branch.name, config.remoteNamedStackBranchPrefix)
@@ -982,7 +1004,7 @@ class GitJaspr(
                             "${config.remoteName}/${targetRef}",
                             "${config.remoteName}/${branchName}",
                         )
-                        .map(Commit::hash)
+                        .mapNotNull(Commit::id)
                 }
                 .toSet()
 
@@ -995,7 +1017,7 @@ class GitJaspr(
         return branchesWithPrs
             .filter { branch ->
                 val ref = "${config.remoteName}/${branch.name}"
-                commits[ref]?.hash !in unmergedAndReachableFromNamedStacks
+                commits[ref]?.id !in unmergedCommitIdsReachableFromNamedStacks
             }
             .map(RemoteBranch::name)
     }

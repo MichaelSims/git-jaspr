@@ -3800,6 +3800,74 @@ interface GitJasprTest {
 
     @Push
     @Test
+    fun `push does not abandon PRs for commits still owned by another named stack`() {
+        withTestSetup(useFakeRemote) {
+            // stack-A owns [A, B]; stack-B owns [A, B, C]. They overlap on A and B.
+            createCommitsFrom(
+                testCase {
+                    repository {
+                        commit { title = "A" }
+                        commit {
+                            title = "B"
+                            localRefs += "dev"
+                        }
+                    }
+                    checkout = "dev"
+                }
+            )
+            gitJaspr.push(stackName = "stack-A")
+
+            createCommitsFrom(
+                testCase {
+                    repository {
+                        commit { title = "A" }
+                        commit { title = "B" }
+                        commit {
+                            title = "C"
+                            localRefs += "dev"
+                        }
+                    }
+                    checkout = "dev"
+                }
+            )
+            gitJaspr.push(stackName = "stack-B")
+
+            // Drop A locally, leaving [B, C], and re-evaluate stack-B.
+            createCommitsFrom(
+                testCase {
+                    repository {
+                        commit { title = "B" }
+                        commit {
+                            title = "C"
+                            localRefs += "dev"
+                        }
+                    }
+                    checkout = "dev"
+                }
+            )
+
+            val remoteBranches = localGit.getRemoteBranches(remoteName)
+            val prefixedStackName = RemoteNamedStackRef("stack-B").name()
+            val stack = localGit.getLocalCommitStack(remoteName, GitClient.HEAD, DEFAULT_TARGET_REF)
+
+            val abandonedPrs =
+                gitJaspr.findPrsAbandonedByPush(
+                    remoteBranches,
+                    prefixedStackName,
+                    DEFAULT_TARGET_REF,
+                    stack,
+                )
+
+            // A is still reachable from stack-A, so it must not be reported as abandoned.
+            assertTrue(
+                abandonedPrs.isEmpty(),
+                "Expected no abandoned PRs since the dropped commit is still owned by stack-A",
+            )
+        }
+    }
+
+    @Push
+    @Test
     fun `push stack with commit contained in multiple named stacks`() {
         withTestSetup(useFakeRemote) {
             createCommitsFrom(
@@ -5950,6 +6018,65 @@ interface GitJasprTest {
                     .filterNot { isNamedStackBranch(it) }
                     .map { it.name }
             assertTrue(jasprBranchesAfterClean.contains(buildRemoteRef("D")))
+        }
+    }
+
+    @Clean
+    @Test
+    fun `clean does not flag PR head as abandoned when commit-id reachable from another named stack`() {
+        withTestSetup(useFakeRemote) {
+            // Push stack-A with [X]; PR head jaspr/main/X is at the original X hash.
+            createCommitsFrom(
+                testCase {
+                    repository {
+                        commit {
+                            title = "X"
+                            localRefs += "dev"
+                        }
+                    }
+                    checkout = "dev"
+                }
+            )
+            gitJaspr.push(stackName = "stack-A")
+
+            // Push stack-B with [X', Y] (X amended, same commit-id, different hash);
+            // PR head jaspr/main/X is force-pushed to X'.
+            createCommitsFrom(
+                testCase {
+                    repository {
+                        commit { title = "X" }
+                        commit {
+                            title = "Y"
+                            localRefs += "dev"
+                        }
+                    }
+                    checkout = "dev"
+                }
+            )
+            gitJaspr.push(stackName = "stack-B")
+
+            // Drop X from stack-B and re-push; PR head jaspr/main/X is NOT updated by this push,
+            // leaving its hash unreachable from stack-B's named-stack ref.
+            createCommitsFrom(
+                testCase {
+                    repository {
+                        commit {
+                            title = "Y"
+                            localRefs += "dev"
+                        }
+                    }
+                    checkout = "dev"
+                }
+            )
+            gitJaspr.push(stackName = "stack-B")
+
+            // X's PR head must not be flagged as abandoned because stack-A still owns
+            // commit-id X (even though the hashes diverge).
+            val plan = gitJaspr.getCleanPlan(cleanAbandonedPrs = true, cleanAllCommits = false)
+            assertFalse(
+                plan.abandonedBranches.contains(buildRemoteRef("X")),
+                "X's PR head should not be abandoned: stack-A still references its commit-id",
+            )
         }
     }
 
