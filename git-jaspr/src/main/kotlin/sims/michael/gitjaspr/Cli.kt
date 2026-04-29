@@ -1278,12 +1278,15 @@ class Split : GitJasprSubcommand(helpText = "Split the HEAD commit into working 
         renderer.info {
             "Commit ${entity(subject)} has been reset. Its changes are in your working tree."
         }
-        if (wasInNavSession) {
-            renderer.info {
-                "Create new commits from these changes, then ${command("jaspr top")} to replay the rest of the stack."
+        renderer.info {
+            buildString {
+                append("You may create new commits from these changes")
+                if (!wasInNavSession) {
+                    append(".")
+                } else {
+                    append(", then ${command("jaspr top")} to replay the rest of the stack.")
+                }
             }
-        } else {
-            renderer.info { "Create new commits from these changes." }
         }
         renderer.info { "To undo: ${command("jaspr unsplit")}" }
     }
