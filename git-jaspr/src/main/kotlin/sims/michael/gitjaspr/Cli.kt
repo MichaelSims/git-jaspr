@@ -716,31 +716,44 @@ class Clean : GitJasprSubcommand(helpText = "Clean up orphaned branches") {
             val prompt =
                 "Perform [${theme.keyHint("c")}]lean, toggle [${theme.keyHint("a")}]bandoned, " +
                     "toggle [${theme.keyHint("m")}]ine, or [${theme.keyHint("q")}]uit"
-            when (terminal.prompt(prompt)?.trim()?.lowercase()) {
-                "c" -> {
-                    val finalPlan =
-                        jaspr.closeAbandonedPrsAndRecalculate(
-                            plan,
-                            cleanAbandonedPrs,
-                            !cleanJustMyPrs,
-                        )
-                    jaspr.executeCleanPlan(finalPlan)
-                    val count = finalPlan.allBranches().size
-                    renderer.info {
-                        success("Deleted $count ${if (count == 1) "branch" else "branches"}.")
+
+            // Inner loop: keeps re-prompting on invalid input without re-fetching the plan.
+            // Breaks out (to re-fetch) only when the user toggles an option that affects the plan.
+            while (true) {
+                when (terminal.prompt(prompt)?.trim()?.lowercase()) {
+                    "c" -> {
+                        val finalPlan =
+                            jaspr.closeAbandonedPrsAndRecalculate(
+                                plan,
+                                cleanAbandonedPrs,
+                                !cleanJustMyPrs,
+                            )
+                        jaspr.executeCleanPlan(finalPlan)
+                        val count = finalPlan.allBranches().size
+                        renderer.info {
+                            success("Deleted $count ${if (count == 1) "branch" else "branches"}.")
+                        }
+                        return
                     }
-                    return
-                }
 
-                "a" -> cleanAbandonedPrs = !cleanAbandonedPrs
-                "m" -> cleanJustMyPrs = !cleanJustMyPrs
-                "q",
-                null -> {
-                    renderer.warn { "Aborted." }
-                    return
-                }
+                    "a" -> {
+                        cleanAbandonedPrs = !cleanAbandonedPrs
+                        break
+                    }
 
-                else -> renderer.error { "Invalid selection." }
+                    "m" -> {
+                        cleanJustMyPrs = !cleanJustMyPrs
+                        break
+                    }
+
+                    "q",
+                    null -> {
+                        renderer.warn { "Aborted." }
+                        return
+                    }
+
+                    else -> renderer.error { "Invalid selection." }
+                }
             }
         }
     }
