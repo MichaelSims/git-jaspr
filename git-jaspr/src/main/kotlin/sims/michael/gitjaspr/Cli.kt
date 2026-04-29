@@ -1183,8 +1183,11 @@ class Up : GitJasprSubcommand(helpText = "Move up in the stack (replay commits t
     private val n by argument("n").int().optional()
 
     override suspend fun doRun() {
-        requireNoActiveSplit(appWiring.gitJaspr)
-        appWiring.gitJaspr.navigateUp(n ?: 1, targetOpts.target)
+        val jaspr = appWiring.gitJaspr
+        requireNoActiveSplit(jaspr)
+        if (!jaspr.navigateUp(n ?: 1, targetOpts.target)) {
+            renderer.info { "Already at the top of the stack." }
+        }
     }
 }
 
@@ -1195,7 +1198,9 @@ class Top :
     override suspend fun doRun() {
         val jaspr = appWiring.gitJaspr
         jaspr.clearSplitState()
-        jaspr.navigateToTop(targetOpts.target)
+        if (!jaspr.navigateToTop(targetOpts.target)) {
+            renderer.info { "Already at the top of the stack." }
+        }
     }
 }
 

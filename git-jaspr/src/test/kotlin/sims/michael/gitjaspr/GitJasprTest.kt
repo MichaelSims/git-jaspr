@@ -351,7 +351,7 @@ interface GitJasprTest {
     }
 
     @Test
-    fun `up with no active session fails`() {
+    fun `up with no active session is a no-op`() {
         withTestSetup(useFakeRemote) {
             createCommitsFrom(
                 testCase {
@@ -364,7 +364,27 @@ interface GitJasprTest {
                     checkout = "development"
                 }
             )
-            assertThrows<IllegalArgumentException> { gitJaspr.navigateUp(1) }
+            assertFalse(gitJaspr.navigateUp(1))
+            assertEquals("development", localGit.getCurrentBranchName())
+        }
+    }
+
+    @Test
+    fun `top with no active session is a no-op`() {
+        withTestSetup(useFakeRemote) {
+            createCommitsFrom(
+                testCase {
+                    repository {
+                        commit {
+                            title = "one"
+                            localRefs += "development"
+                        }
+                    }
+                    checkout = "development"
+                }
+            )
+            assertFalse(gitJaspr.navigateToTop())
+            assertEquals("development", localGit.getCurrentBranchName())
         }
     }
 

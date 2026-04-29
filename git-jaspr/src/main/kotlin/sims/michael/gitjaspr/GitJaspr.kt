@@ -1991,9 +1991,12 @@ class GitJaspr(
     /**
      * Navigate up N commits by cherry-picking from the saved stack above the current HEAD. If all
      * remaining commits are replayed, restores the source branch and ends the session.
+     *
+     * @return true if navigation was performed, false if there was no active session (caller can
+     *   render a friendly message rather than treating it as an error)
      */
-    fun navigateUp(n: Int, targetRef: String? = null) {
-        val state = requireActiveNavSession(targetRef)
+    fun navigateUp(n: Int, targetRef: String? = null): Boolean {
+        val state = activeNavSessionOrNull(targetRef) ?: return false
 
         val aboveCount = state.stack.size - state.cursorIndex - 1
         require(aboveCount > 0) { "Already at the top of the stack." }
@@ -2015,11 +2018,16 @@ class GitJaspr(
         } else {
             writeNavState(state.copy(stack = updatedStack, cursorIndex = newCursor))
         }
+        return true
     }
 
-    /** Navigate to the top of the stack by replaying all remaining commits. */
-    fun navigateToTop(targetRef: String? = null) {
-        val state = requireActiveNavSession(targetRef)
+    /**
+     * Navigate to the top of the stack by replaying all remaining commits.
+     *
+     * @return true if navigation was performed, false if there was no active session
+     */
+    fun navigateToTop(targetRef: String? = null): Boolean {
+        val state = activeNavSessionOrNull(targetRef) ?: return false
 
         val aboveCount = state.stack.size - state.cursorIndex - 1
         require(aboveCount > 0) { "Already at the top of the stack." }
@@ -2033,6 +2041,7 @@ class GitJaspr(
         }
 
         endNavSession(state.copy(stack = updatedStack))
+        return true
     }
 
     /**
@@ -2121,7 +2130,18 @@ class GitJaspr(
      * message. Handles all combinations of detached/attached HEAD and present/absent nav state,
      * including auto-clearing stale state.
      */
-    private fun requireActiveNavSession(targetRef: String? = null): NavState {
+    private fun requireActiveNavSession(targetRef: String? = null): NavState =
+        activeNavSessionOrNull(targetRef)
+            ?: throw IllegalArgumentException(
+                "No navigation session in progress (already at the top of the stack)."
+            )
+
+    /**
+     * Returns the active nav session state (after reconciliation), or null when no session is
+     * active. Throws only for the invalid "detached HEAD without nav state" case. Auto-clears stale
+     * state.
+     */
+    private fun activeNavSessionOrNull(targetRef: String? = null): NavState? {
         val state = readNavState()
         val detached = gitClient.isHeadDetached()
         return when {
@@ -2130,9 +2150,7 @@ class GitJaspr(
             detached -> throw IllegalArgumentException(DETACHED_HEAD_NO_NAV_STATE)
             else -> {
                 if (state != null) clearNavState()
-                throw IllegalArgumentException(
-                    "No navigation session in progress (already at the top of the stack)."
-                )
+                null
             }
         }
     }
