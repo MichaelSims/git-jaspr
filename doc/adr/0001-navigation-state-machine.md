@@ -147,14 +147,22 @@ split state is part of this "session over" semantic.
 
 If the user manually runs `git checkout <branch>` while a nav session is active, HEAD
 moves to a branch but `nav-state.json` still exists. This is detected by checking whether
-HEAD is detached when nav state is present.
+HEAD is detached when nav state is present. Note that `git branch <name>` (without
+checkout) is safe since it does not move HEAD.
 
-Current behavior: `down` and `bottom` warn the user and start a fresh session. This is
-pragmatic but imperfect. Note that `git branch <name>` (without checkout) is safe since it
-does not move HEAD.
+When a session begins (`down` / `bottom`), jaspr installs a delimited block in
+`.git/hooks/post-checkout` that warns the user immediately if a checkout invalidates the
+session. The block is removed when the session ends. The hook coexists with any existing
+post-checkout hook the user may have, by appending below it with markers.
 
-A future improvement (git-jaspr-6gd) would install a temporary `post-checkout` hook during
-nav sessions to warn the user immediately when this happens.
+The hook only prints; it does not modify nav state. That keeps the abandoned session
+recoverable: if the user finds their way back to the prior detached HEAD (typically via
+`git reflog` or `git checkout HEAD@{1}`), the saved cursor and stack are still valid and
+navigation continues from where it left off.
+
+Even with the hook, lazy detection still has to handle the case where the hook didn't run
+or wasn't installed (e.g., older nav sessions started before this feature). `down` and
+`bottom` continue to warn and start a fresh session if they find stale state.
 
 ### No nested splitting
 
@@ -173,6 +181,4 @@ fully served by a single level. Nesting would add complexity with no clear appli
 
 ## Future Considerations
 
-- **git-jaspr-6gd**: Install a temporary `post-checkout` hook during nav sessions to warn
-  the user immediately if they check out a branch, rather than detecting staleness lazily
-  on the next jaspr command.
+(none currently tracked)

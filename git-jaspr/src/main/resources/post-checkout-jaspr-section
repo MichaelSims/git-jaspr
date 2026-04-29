@@ -1,0 +1,12 @@
+# JASPR-NAV-HOOK-BEGIN
+# Warns when a checkout makes the active jaspr navigation session stale.
+# This block is managed by jaspr; do not edit manually.
+if [ "$3" = "1" ]; then
+    nav_state="$(git rev-parse --git-dir)/jaspr/nav-state.json"
+    if [ -f "$nav_state" ] && git symbolic-ref -q HEAD >/dev/null 2>&1; then
+        printf '\nwarning: due to this checkout an active jaspr navigation was abandoned.\n' >&2
+        printf "Use 'git reflog' to find and return to your previous position (e.g., 'git checkout HEAD@{1}').\n" >&2
+        printf "Otherwise, run 'jaspr nav cancel' to discard the abandoned session.\n\n" >&2
+    fi
+fi
+# JASPR-NAV-HOOK-END

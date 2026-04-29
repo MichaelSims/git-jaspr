@@ -746,6 +746,78 @@ interface GitJasprTest {
 
     @Nav
     @Test
+    fun `nav session installs post-checkout hook and removes it on cancel`() {
+        withTestSetup(useFakeRemote) {
+            createCommitsFrom(
+                testCase {
+                    repository {
+                        commit { title = "A" }
+                        commit {
+                            title = "B"
+                            localRefs += "development"
+                        }
+                    }
+                    checkout = "development"
+                }
+            )
+
+            val hook = localRepo.resolve(".git/hooks/post-checkout")
+            assertFalse(hook.exists())
+
+            gitJaspr.navigateDown(DEFAULT_TARGET_REF, 1)
+            assertTrue(hook.exists())
+            assertTrue(hook.canExecute())
+            assertContains(hook.readText(), "JASPR-NAV-HOOK-BEGIN")
+
+            gitJaspr.cancelNavSession()
+            assertFalse(hook.exists())
+        }
+    }
+
+    @Nav
+    @Test
+    fun `nav session preserves pre-existing post-checkout hook content`() {
+        withTestSetup(useFakeRemote) {
+            createCommitsFrom(
+                testCase {
+                    repository {
+                        commit { title = "A" }
+                        commit {
+                            title = "B"
+                            localRefs += "development"
+                        }
+                    }
+                    checkout = "development"
+                }
+            )
+
+            val hook = localRepo.resolve(".git/hooks/post-checkout")
+            hook.parentFile.mkdirs()
+            val userHook =
+                """
+                #!/bin/sh
+                # User's existing post-checkout hook
+                echo "user hook ran"
+                """
+                    .trimIndent() + "\n"
+            hook.writeText(userHook)
+            hook.setExecutable(true)
+
+            gitJaspr.navigateDown(DEFAULT_TARGET_REF, 1)
+            val withJaspr = hook.readText()
+            assertContains(withJaspr, "user hook ran")
+            assertContains(withJaspr, "JASPR-NAV-HOOK-BEGIN")
+
+            gitJaspr.cancelNavSession()
+            assertTrue(hook.exists())
+            val afterCancel = hook.readText()
+            assertContains(afterCancel, "user hook ran")
+            assertFalse(afterCancel.contains("JASPR-NAV-HOOK-BEGIN"))
+        }
+    }
+
+    @Nav
+    @Test
     fun `cancel during split discards split state and working tree changes`() {
         withTestSetup(useFakeRemote) {
             createCommitsFrom(
