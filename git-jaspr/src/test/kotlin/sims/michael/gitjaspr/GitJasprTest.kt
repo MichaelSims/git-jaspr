@@ -217,6 +217,30 @@ interface GitJasprTest {
 
     @Nav
     @Test
+    fun `down with commit missing jaspr commit ID throws GitJasprException`() {
+        withTestSetup(useFakeRemote) {
+            createCommitsFrom(
+                testCase {
+                    repository {
+                        commit { title = "one" }
+                        commit {
+                            title = "two"
+                            id = "" // no commit-id footer
+                            localRefs += "development"
+                        }
+                    }
+                    checkout = "development"
+                }
+            )
+            val exception =
+                assertThrows<GitJasprException> { gitJaspr.navigateDown(DEFAULT_TARGET_REF, 1) }
+            assertContains(exception.message, "has no jaspr commit ID")
+            assertContains(exception.message, "Run jaspr push")
+        }
+    }
+
+    @Nav
+    @Test
     fun `bottom navigates to first commit in stack`() {
         withTestSetup(useFakeRemote) {
             createCommitsFrom(
