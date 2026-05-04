@@ -2258,10 +2258,11 @@ class GitJaspr(
             StackEntry(
                 sha = commit.hash,
                 commitId =
-                    checkNotNull(commit.id) {
-                        "Commit ${commit.hash} (\"${commit.shortMessage}\") has no jaspr commit ID. " +
-                            "Run jaspr push to add IDs before navigating."
-                    },
+                    commit.id
+                        ?: throw GitJasprException(
+                            "Commit ${commit.hash} (\"${commit.shortMessage}\") has no jaspr " +
+                                "commit ID. Run jaspr push to add IDs before navigating."
+                        ),
             )
         }
         return NavState(headBeforeDetach = branchName, stack = stack, cursorIndex = stack.lastIndex)
