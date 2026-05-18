@@ -20,12 +20,9 @@ import sims.michael.gitjaspr.githubtests.generatedtestdsl.testCase
 
 /**
  * Preview-only tests that render `jaspr status` with the colored [DefaultTheme] for every distinct
- * stack/remote-divergence rendering branch in [GitJaspr.appendNamedStackInfo] and
- * [GitJaspr.appendRemoteOnlyCommits]. Intended for eyeballing the rendered output in a real
- * terminal without setting up a real GitHub remote.
- *
- * All scenarios in a class run append (with a labeled header) to a single shared file at
- * `$TMPDIR/jaspr-status-preview.ansi`. The file is reset at the start of each class run.
+ * rendering branch. Intended for eyeballing the rendered output in a real terminal without setting
+ * up a real GitHub remote. Test names describe each scenario; the rendered output is appended to a
+ * single shared file at `$TMPDIR/jaspr-status-preview.ansi` (reset at the start of each class run).
  *
  * Workflow:
  * 1. Run the tests with `STATUS_PREVIEW_TEST_ENABLE=1` set in the environment, e.g.
@@ -34,24 +31,6 @@ import sims.michael.gitjaspr.githubtests.generatedtestdsl.testCase
  *    Without that variable the class is skipped, so no source edit is needed to toggle it.
  * 2. `cat "${TMPDIR%/}/jaspr-status-preview.ansi"` in your terminal to see the renderings with
  *    colors. Suggested alias: `alias jsp='cat "${TMPDIR%/}/jaspr-status-preview.ansi"'`.
- *
- * Scenarios cover all visually distinct paths:
- * - [previewUpToDate]: "up-to-date" headline, no remote-only section.
- * - [previewAheadOnly]: "ahead by N" headline, no remote-only section.
- * - [previewBehindOnlyRecent]: "behind by N" headline, remote-only section in warning style.
- * - [previewDivergedNoRemoteOnly]: "diverged" headline, no remote-only section. Local has a newer
- *   SHA than the remote for the same commit-id (rebased locally) and its content has changed, so
- *   the per-commit "pushed" indicator renders as 🔀 DIVERGENT.
- * - [previewDivergedRemoteAmended]: "diverged" headline, no remote-only section. Remote has a newer
- *   SHA than the local for the same commit-id and the content was amended on the remote, so the
- *   per-commit "pushed" indicator renders as 🔀 DIVERGENT.
- * - [previewDivergedLocalOlder]: "diverged" headline; the remote-only commit is newer than the
- *   local fork, so the remote-only section renders in warning style.
- * - [previewDivergedLikelyStale]: "diverged" headline; the local fork is newer than the remote-only
- *   commit, so the remote-only section renders in muted "(likely stale)" style.
- *
- * The behind-only-stale combination is omitted: its remote-only-section styling is already covered
- * by [previewDivergedLikelyStale], and it requires backdating commits to construct.
  */
 @EnabledIfEnvironmentVariable(named = "STATUS_PREVIEW_TEST_ENABLE", matches = ".+")
 @TestInstance(TestInstance.Lifecycle.PER_CLASS)
@@ -72,7 +51,7 @@ class StatusPreviewTest {
 
     @Test
     @Order(1)
-    fun previewUpToDate(testInfo: TestInfo) {
+    fun `up to date`(testInfo: TestInfo) {
         withTestSetup {
             createCommitsFrom(
                 testCase {
@@ -102,7 +81,7 @@ class StatusPreviewTest {
 
     @Test
     @Order(2)
-    fun previewAheadOnly(testInfo: TestInfo) {
+    fun `local ahead of remote by 1 commit`(testInfo: TestInfo) {
         withTestSetup {
             createCommitsFrom(
                 testCase {
@@ -145,7 +124,7 @@ class StatusPreviewTest {
 
     @Test
     @Order(3)
-    fun previewBehindOnlyRecent(testInfo: TestInfo) {
+    fun `local behind remote by 1 commit with new commit date`(testInfo: TestInfo) {
         withTestSetup {
             createCommitsFrom(
                 testCase {
@@ -181,7 +160,7 @@ class StatusPreviewTest {
 
     @Test
     @Order(4)
-    fun previewDivergedNoRemoteOnly(testInfo: TestInfo) {
+    fun `local has newer amended version of commit`(testInfo: TestInfo) {
         withTestSetup {
             createCommitsFrom(
                 testCase {
@@ -206,8 +185,9 @@ class StatusPreviewTest {
             markAllPullRequestsHealthy()
 
             // Ensure the rewritten local commit lands in a later second so its commit date is
-            // strictly greater than the remote's. Date order doesn't change the DIVERGENT
-            // classification itself, but it keeps the headline rendering consistent across runs.
+            // strictly greater than the remote's. The date determines whether the divergent
+            // indicator renders as ⏫ AHEAD_DIVERGENT, ⏬ BEHIND_DIVERGENT, or 🔀 DIVERGENT
+            // (equal-date fallback).
             delay(1200)
 
             // Rewrite the local stack so its tip has the same commit-id as the remote "two" but a
@@ -222,7 +202,7 @@ class StatusPreviewTest {
                             remoteRefs += buildRemoteRef("one")
                         }
                         commit {
-                            title = "two_amended"
+                            title = "two_amended_locally"
                             id = "two"
                             willPassVerification = true
                             localRefs += "development"
@@ -238,7 +218,7 @@ class StatusPreviewTest {
 
     @Test
     @Order(5)
-    fun previewDivergedRemoteAmended(testInfo: TestInfo) {
+    fun `remote has newer amended version of commit`(testInfo: TestInfo) {
         withTestSetup {
             // Pass 1: build [one, two] locally and push to all the remote refs we care about (the
             // per-commit ref and the named-stack ref). PRs are wired up declaratively so they
@@ -280,15 +260,16 @@ class StatusPreviewTest {
             )
 
             // Ensure the remote-side amendment lands in a later second so its commit date is
-            // strictly greater than the local "two". Date order doesn't change the DIVERGENT
-            // classification itself, but it keeps the headline rendering consistent across runs.
+            // strictly greater than the local "two". The date determines whether the divergent
+            // indicator renders as ⏫ AHEAD_DIVERGENT, ⏬ BEHIND_DIVERGENT, or 🔀 DIVERGENT
+            // (equal-date fallback).
             delay(1200)
 
             // Pass 2: create a sibling of "two" (also a child of "one") with the same commit-id
             // but a fresher SHA + content. Force-pushed to the per-commit ref and the named-stack
             // ref to simulate another contributor amending the commit and pushing while we still
             // have the older local version. Local "development" stays at the original "two", so
-            // the per-commit row shows 🔀 DIVERGENT and the headline reads "diverged".
+            // the per-commit row shows ⏬ BEHIND_DIVERGENT and the headline reads "diverged".
             createCommitsFrom(
                 testCase {
                     repository {
@@ -306,7 +287,7 @@ class StatusPreviewTest {
                             }
                             branch {
                                 commit {
-                                    title = "two_remote_amended"
+                                    title = "two_amended_remotely"
                                     id = "two"
                                     willPassVerification = true
                                     remoteRefs += buildRemoteRef("two")
@@ -326,7 +307,7 @@ class StatusPreviewTest {
 
     @Test
     @Order(6)
-    fun previewDivergedLocalOlder(testInfo: TestInfo) {
+    fun `diverged with newer remote-only commit`(testInfo: TestInfo) {
         withTestSetup {
             // Build the divergence in a single DSL pass so we can interleave a local-only fork
             // ("three") and a remote-only continuation ("two") that lands at the named-stack ref.
@@ -377,7 +358,7 @@ class StatusPreviewTest {
 
     @Test
     @Order(7)
-    fun previewDivergedLikelyStale(testInfo: TestInfo) {
+    fun `diverged with older remote-only commit (likely stale)`(testInfo: TestInfo) {
         withTestSetup {
             createCommitsFrom(
                 testCase {
@@ -406,6 +387,69 @@ class StatusPreviewTest {
             // guarantee the next commits land in a later second.
             delay(1200)
 
+            createCommitsFrom(
+                testCase {
+                    repository {
+                        commit {
+                            title = "one"
+                            willPassVerification = true
+                            remoteRefs += buildRemoteRef("one")
+                        }
+                        commit {
+                            title = "three"
+                            willPassVerification = true
+                            localRefs += "development"
+                        }
+                    }
+                    checkout = "development"
+                }
+            )
+
+            renderAndAppendStatus(testInfo)
+        }
+    }
+
+    @Test
+    @Order(8)
+    fun `local has rebased but identical commit`(testInfo: TestInfo) {
+        withTestSetup {
+            // Build [one, two, three] locally, push everything, all PRs healthy.
+            createCommitsFrom(
+                testCase {
+                    repository {
+                        commit {
+                            title = "one"
+                            willPassVerification = true
+                            remoteRefs += buildRemoteRef("one")
+                        }
+                        commit {
+                            title = "two"
+                            willPassVerification = true
+                            remoteRefs += buildRemoteRef("two")
+                        }
+                        commit {
+                            title = "three"
+                            willPassVerification = true
+                            localRefs += "development"
+                            remoteRefs += buildRemoteRef("three")
+                        }
+                    }
+                    checkout = "development"
+                }
+            )
+            gitJaspr.push(stackName = "preview-stack")
+            markAllPullRequestsHealthy()
+
+            // Push date-ordering past the remote. The test harness cherry-picks the "three" commit
+            // below, and the new local "three" must land in a later second than the remote "three"
+            // so the per-commit indicator renders as ⬆️ AHEAD (a content-equivalent rebase) instead
+            // of falling back to ❗ WARNING on equal dates.
+            delay(1200)
+
+            // Rewrite locally as [one, three] (drop "two"). The harness recognizes "three" exists
+            // already, but its parent ("two") no longer matches HEAD, so it cherry-picks it onto
+            // "one". The result has a fresh SHA but identical content, which is exactly the "I
+            // rebased my stack locally" scenario.
             createCommitsFrom(
                 testCase {
                     repository {

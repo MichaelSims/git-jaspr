@@ -17,7 +17,9 @@ import org.slf4j.LoggerFactory
 import sims.michael.gitjaspr.CommitParsers.getSubjectAndBodyFromFullMessage
 import sims.michael.gitjaspr.CommitParsers.trimFooters
 import sims.michael.gitjaspr.GitJaspr.StatusBits.Status.AHEAD
+import sims.michael.gitjaspr.GitJaspr.StatusBits.Status.AHEAD_DIVERGENT
 import sims.michael.gitjaspr.GitJaspr.StatusBits.Status.BEHIND
+import sims.michael.gitjaspr.GitJaspr.StatusBits.Status.BEHIND_DIVERGENT
 import sims.michael.gitjaspr.GitJaspr.StatusBits.Status.DIVERGENT
 import sims.michael.gitjaspr.GitJaspr.StatusBits.Status.EMPTY
 import sims.michael.gitjaspr.GitJaspr.StatusBits.Status.FAIL
@@ -1324,8 +1326,13 @@ class GitJaspr(
                         remoteCommit == null -> EMPTY
                         remoteCommit.hash == localCommit.hash -> SUCCESS
                         divergenceByLocalHash[localCommit.hash] ==
-                            DivergenceClassifier.Result.DIVERGENT -> DIVERGENT
-                        // Hashes differ — indicate which side is fresher
+                            DivergenceClassifier.Result.DIVERGENT ->
+                            when {
+                                localCommit.commitDate > remoteCommit.commitDate -> AHEAD_DIVERGENT
+                                remoteCommit.commitDate > localCommit.commitDate -> BEHIND_DIVERGENT
+                                else -> DIVERGENT
+                            }
+                        // Hashes differ but content is equivalent — indicate which side is fresher
                         localCommit.commitDate > remoteCommit.commitDate -> AHEAD
                         remoteCommit.commitDate > localCommit.commitDate -> BEHIND
                         else -> WARNING
@@ -1803,23 +1810,37 @@ class GitJaspr(
             /** Remote commit is fresher than its local counterpart (pull needed). */
             BEHIND("⬇️"),
             /**
-             * Local and remote commits share a commit-id but their content differs (an amend or a
-             * conflict-resolution edit landed in one but not the other). Overwriting either side
-             * would lose information.
+             * Local commit is fresher than the remote AND their content has diverged: an amend or a
+             * conflict-resolution edit landed locally that isn't on the remote. Pushing would
+             * overwrite the remote with the new content.
+             */
+            AHEAD_DIVERGENT("⏫"),
+            /**
+             * Remote commit is fresher than the local AND their content has diverged: an amend or
+             * conflict-resolution edit landed on the remote that isn't local. Pulling/overwriting
+             * locally would discard the local version.
+             */
+            BEHIND_DIVERGENT("⏬"),
+            /**
+             * Local and remote commits share a commit-id but their content differs, with no clear
+             * date ordering between them. Rare; usually only when both sides were committed in the
+             * same wall-clock second.
              */
             DIVERGENT("🔀");
 
             fun styledEmoji(theme: Theme) =
                 when (this) {
                     SUCCESS -> theme.success(emoji)
-                    FAIL,
-                    DIVERGENT -> theme.error(emoji)
+                    FAIL -> theme.error(emoji)
                     PENDING,
                     UNKNOWN -> theme.warning(emoji)
                     EMPTY -> theme.muted(emoji)
                     WARNING,
                     AHEAD,
-                    BEHIND -> theme.warning(emoji)
+                    BEHIND,
+                    AHEAD_DIVERGENT,
+                    BEHIND_DIVERGENT,
+                    DIVERGENT -> theme.warning(emoji)
                 }
         }
     }
