@@ -6,6 +6,7 @@ import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertNotNull
 import kotlin.test.assertNull
+import kotlinx.coroutines.delay
 import org.junit.jupiter.api.*
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.slf4j.Logger
@@ -2868,7 +2869,7 @@ interface GitJasprTest {
 
     @Status
     @Test
-    fun `status with content-divergent commit shows DIVERGENT`() {
+    fun `status with locally-amended commit shows AHEAD_DIVERGENT`() {
         withTestSetup(useFakeRemote) {
             createCommitsFrom(
                 testCase {
@@ -2902,6 +2903,11 @@ interface GitJasprTest {
 
             waitForChecksToConclude("one", "two")
 
+            // Ensure the rewritten local commit lands at least one second after the remote so the
+            // direction is unambiguously local-newer. Without the delay the two commit dates can
+            // fall in the same second and the indicator falls through to plain DIVERGENT.
+            delay(1200)
+
             // Rewrite the local stack so its tip shares commit-id "two" with the remote but lands
             // a different file via a different title. This simulates an amend (or a conflict
             // resolution during rebase) that meaningfully changed the commit's content.
@@ -2910,7 +2916,7 @@ interface GitJasprTest {
                     repository {
                         commit { title = "one" }
                         commit {
-                            title = "two_amended"
+                            title = "two_amended_locally"
                             id = "two"
                             localRefs += "development"
                             willPassVerification = true
@@ -2922,7 +2928,7 @@ interface GitJasprTest {
             val actual = getAndPrintStatusString()
             assertEquals(
                 """
-                |[🔀✅✅✅✅ㄧ] %s : %s : two_amended
+                |[⏫✅✅✅✅ㄧ] %s : %s : two_amended_locally
                 |[✅✅✅✅✅✅] %s : %s : one
                 """
                     .trimMargin()
