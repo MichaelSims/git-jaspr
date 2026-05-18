@@ -3,13 +3,13 @@ package sims.michael.gitjaspr
 import java.io.File
 import kotlinx.coroutines.delay
 import org.junit.jupiter.api.BeforeAll
-import org.junit.jupiter.api.Disabled
 import org.junit.jupiter.api.MethodOrderer.OrderAnnotation
 import org.junit.jupiter.api.Order
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.TestInfo
 import org.junit.jupiter.api.TestInstance
 import org.junit.jupiter.api.TestMethodOrder
+import org.junit.jupiter.api.condition.EnabledIfEnvironmentVariable
 import org.slf4j.LoggerFactory
 import sims.michael.gitjaspr.RemoteRefEncoding.DEFAULT_REMOTE_NAMED_STACK_BRANCH_PREFIX
 import sims.michael.gitjaspr.RemoteRefEncoding.RemoteNamedStackRef
@@ -28,7 +28,10 @@ import sims.michael.gitjaspr.githubtests.generatedtestdsl.testCase
  * `$TMPDIR/jaspr-status-preview.ansi`. The file is reset at the start of each class run.
  *
  * Workflow:
- * 1. Temporarily remove `@Disabled` on the class (or on a specific method) and run it.
+ * 1. Run the tests with `STATUS_PREVIEW_TEST_ENABLE=1` set in the environment, e.g.
+ *    `STATUS_PREVIEW_TEST_ENABLE=1 ./gradlew :git-jaspr:test --tests "*StatusPreview*"`. In IDEA,
+ *    set `STATUS_PREVIEW_TEST_ENABLE=1` under "Environment variables" in the run configuration.
+ *    Without that variable the class is skipped, so no source edit is needed to toggle it.
  * 2. `cat "${TMPDIR%/}/jaspr-status-preview.ansi"` in your terminal to see the renderings with
  *    colors. Suggested alias: `alias jsp='cat "${TMPDIR%/}/jaspr-status-preview.ansi"'`.
  *
@@ -50,7 +53,7 @@ import sims.michael.gitjaspr.githubtests.generatedtestdsl.testCase
  * The behind-only-stale combination is omitted: its remote-only-section styling is already covered
  * by [previewDivergedLikelyStale], and it requires backdating commits to construct.
  */
-@Disabled("Preview-only. Remove this annotation (or @Disabled on a specific method) to render.")
+@EnabledIfEnvironmentVariable(named = "STATUS_PREVIEW_TEST_ENABLE", matches = ".+")
 @TestInstance(TestInstance.Lifecycle.PER_CLASS)
 @TestMethodOrder(OrderAnnotation::class)
 class StatusPreviewTest {
