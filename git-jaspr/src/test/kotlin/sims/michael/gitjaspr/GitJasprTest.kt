@@ -2866,6 +2866,72 @@ interface GitJasprTest {
         }
     }
 
+    @Status
+    @Test
+    fun `status with content-divergent commit shows DIVERGENT`() {
+        withTestSetup(useFakeRemote) {
+            createCommitsFrom(
+                testCase {
+                    repository {
+                        commit {
+                            title = "one"
+                            remoteRefs += buildRemoteRef("one")
+                            willPassVerification = true
+                        }
+                        commit {
+                            title = "two"
+                            remoteRefs += buildRemoteRef("two")
+                            localRefs += "development"
+                            willPassVerification = true
+                        }
+                    }
+                    pullRequest {
+                        headRef = buildRemoteRef("one")
+                        baseRef = "main"
+                        title = "one"
+                        willBeApprovedByUserKey = "michael"
+                    }
+                    pullRequest {
+                        headRef = buildRemoteRef("two")
+                        baseRef = buildRemoteRef("one")
+                        title = "two"
+                        willBeApprovedByUserKey = "michael"
+                    }
+                }
+            )
+
+            waitForChecksToConclude("one", "two")
+
+            // Rewrite the local stack so its tip shares commit-id "two" with the remote but lands
+            // a different file via a different title. This simulates an amend (or a conflict
+            // resolution during rebase) that meaningfully changed the commit's content.
+            createCommitsFrom(
+                testCase {
+                    repository {
+                        commit { title = "one" }
+                        commit {
+                            title = "two_amended"
+                            id = "two"
+                            localRefs += "development"
+                            willPassVerification = true
+                        }
+                    }
+                }
+            )
+
+            val actual = getAndPrintStatusString()
+            assertEquals(
+                """
+                |[🔀✅✅✅✅ㄧ] %s : %s : two_amended
+                |[✅✅✅✅✅✅] %s : %s : one
+                """
+                    .trimMargin()
+                    .toStatusString(actual),
+                actual,
+            )
+        }
+    }
+
     // endregion
 
     // region push tests

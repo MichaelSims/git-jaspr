@@ -37,11 +37,11 @@ import sims.michael.gitjaspr.githubtests.generatedtestdsl.testCase
  * - [previewAheadOnly]: "ahead by N" headline, no remote-only section.
  * - [previewBehindOnlyRecent]: "behind by N" headline, remote-only section in warning style.
  * - [previewDivergedNoRemoteOnly]: "diverged" headline, no remote-only section. Local has a newer
- *   SHA than the remote for the same commit-id (rebased locally), so the per-commit "pushed"
- *   indicator renders as ⬆️ AHEAD.
+ *   SHA than the remote for the same commit-id (rebased locally) and its content has changed, so
+ *   the per-commit "pushed" indicator renders as 🔀 DIVERGENT.
  * - [previewDivergedRemoteAmended]: "diverged" headline, no remote-only section. Remote has a newer
- *   SHA than the local for the same commit-id (someone amended on the remote), so the per-commit
- *   "pushed" indicator renders as ⬇️ BEHIND.
+ *   SHA than the local for the same commit-id and the content was amended on the remote, so the
+ *   per-commit "pushed" indicator renders as 🔀 DIVERGENT.
  * - [previewDivergedLocalOlder]: "diverged" headline; the remote-only commit is newer than the
  *   local fork, so the remote-only section renders in warning style.
  * - [previewDivergedLikelyStale]: "diverged" headline; the local fork is newer than the remote-only
@@ -203,8 +203,8 @@ class StatusPreviewTest {
             markAllPullRequestsHealthy()
 
             // Ensure the rewritten local commit lands in a later second so its commit date is
-            // strictly greater than the remote's. Otherwise the per-commit "pushed" indicator
-            // falls back to ❗ WARNING instead of the ⬆️ AHEAD we want to preview.
+            // strictly greater than the remote's. Date order doesn't change the DIVERGENT
+            // classification itself, but it keeps the headline rendering consistent across runs.
             delay(1200)
 
             // Rewrite the local stack so its tip has the same commit-id as the remote "two" but a
@@ -277,15 +277,15 @@ class StatusPreviewTest {
             )
 
             // Ensure the remote-side amendment lands in a later second so its commit date is
-            // strictly greater than the local "two". Otherwise the per-commit indicator falls back
-            // to ❗ WARNING instead of the ⬇️ BEHIND we want to preview.
+            // strictly greater than the local "two". Date order doesn't change the DIVERGENT
+            // classification itself, but it keeps the headline rendering consistent across runs.
             delay(1200)
 
             // Pass 2: create a sibling of "two" (also a child of "one") with the same commit-id
             // but a fresher SHA + content. Force-pushed to the per-commit ref and the named-stack
             // ref to simulate another contributor amending the commit and pushing while we still
             // have the older local version. Local "development" stays at the original "two", so
-            // the per-commit row shows ⬇️ BEHIND and the headline reads "diverged".
+            // the per-commit row shows 🔀 DIVERGENT and the headline reads "diverged".
             createCommitsFrom(
                 testCase {
                     repository {
