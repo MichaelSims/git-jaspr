@@ -18,6 +18,7 @@ import sims.michael.gitjaspr.CommitParsers.getSubjectAndBodyFromFullMessage
 import sims.michael.gitjaspr.CommitParsers.trimFooters
 import sims.michael.gitjaspr.GitJaspr.StatusBits.Status.AHEAD
 import sims.michael.gitjaspr.GitJaspr.StatusBits.Status.BEHIND
+import sims.michael.gitjaspr.GitJaspr.StatusBits.Status.DIVERGENT
 import sims.michael.gitjaspr.GitJaspr.StatusBits.Status.EMPTY
 import sims.michael.gitjaspr.GitJaspr.StatusBits.Status.FAIL
 import sims.michael.gitjaspr.GitJaspr.StatusBits.Status.PENDING
@@ -115,69 +116,112 @@ class GitJaspr(
 
         val numCommitsBehindBase =
             strategy.logRange(stack.last().hash, "$remoteName/${refSpec.remoteRef}").size
-        return buildString {
-            append(theme.heading(HEADER))
+        return DivergenceClassifier(config.workingDirectory, getJasprDir()).use { classifier ->
+            val divergenceByLocalHash = classifyDivergences(statuses, classifier)
+            buildStatusString(
+                statuses,
+                commitsWithDuplicateIds,
+                divergenceByLocalHash,
+                numCommitsBehindBase,
+                remoteName,
+                refSpec,
+                stack,
+                remoteBranches,
+                strategy,
+                theme,
+            )
+        }
+    }
 
-            val stackChecks =
-                if (numCommitsBehindBase != 0) {
-                    // If the stack is out-of-date, no commits are mergeable
-                    List(statuses.size) { false }
-                } else {
-                    statuses.fold(emptyList()) { currentStack, status ->
-                        val allFlagsAreSuccess =
-                            status.toStatusList(commitsWithDuplicateIds).all { it == SUCCESS }
-                        val currentStackIsAllTrue = currentStack.all { it }
-                        currentStack + (currentStackIsAllTrue && allFlagsAreSuccess)
-                    }
+    private fun classifyDivergences(
+        statuses: List<RemoteCommitStatus>,
+        classifier: DivergenceClassifier,
+    ): Map<String, DivergenceClassifier.Result> =
+        statuses
+            .mapNotNull { status ->
+                val localHash = status.localCommit.hash
+                status.remoteCommit
+                    ?.hash
+                    ?.takeIf { remoteHash -> remoteHash != localHash }
+                    ?.let { remoteHash -> localHash to classifier.classify(localHash, remoteHash) }
+            }
+            .toMap()
+
+    private fun buildStatusString(
+        statuses: List<RemoteCommitStatus>,
+        commitsWithDuplicateIds: Map<String, List<RemoteCommitStatus>>,
+        divergenceByLocalHash: Map<String, DivergenceClassifier.Result>,
+        numCommitsBehindBase: Int,
+        remoteName: String,
+        refSpec: RefSpec,
+        stack: List<Commit>,
+        remoteBranches: List<RemoteBranch>,
+        strategy: GetStatusStringStrategy,
+        theme: Theme,
+    ): String = buildString {
+        append(theme.heading(HEADER))
+
+        val stackChecks =
+            if (numCommitsBehindBase != 0) {
+                // If the stack is out-of-date, no commits are mergeable
+                List(statuses.size) { false }
+            } else {
+                statuses.fold(emptyList()) { currentStack, status ->
+                    val allFlagsAreSuccess =
+                        status.toStatusList(commitsWithDuplicateIds, divergenceByLocalHash).all {
+                            it == SUCCESS
+                        }
+                    val currentStackIsAllTrue = currentStack.all { it }
+                    currentStack + (currentStackIsAllTrue && allFlagsAreSuccess)
                 }
+            }
 
-            for (statusAndStackCheck in statuses.reversed().zip(stackChecks.reversed())) {
-                val (status, stackCheck) = statusAndStackCheck
-                append("[")
-                val flags = status.toStatusList(commitsWithDuplicateIds)
-                val statusList = flags + if (stackCheck) SUCCESS else EMPTY
-                append(statusList.joinToString(separator = "") { it.styledEmoji(theme) })
-                append("] ")
-                append(theme.hash(status.localCommit.hash))
+        for (statusAndStackCheck in statuses.reversed().zip(stackChecks.reversed())) {
+            val (status, stackCheck) = statusAndStackCheck
+            append("[")
+            val flags = status.toStatusList(commitsWithDuplicateIds, divergenceByLocalHash)
+            val statusList = flags + if (stackCheck) SUCCESS else EMPTY
+            append(statusList.joinToString(separator = "") { it.styledEmoji(theme) })
+            append("] ")
+            append(theme.hash(status.localCommit.hash))
+            append(" : ")
+            val permalink = status.pullRequest?.permalink
+            if (permalink != null) {
+                append(theme.url(status.pullRequest.permalink))
                 append(" : ")
-                val permalink = status.pullRequest?.permalink
-                if (permalink != null) {
-                    append(theme.url(status.pullRequest.permalink))
-                    append(" : ")
-                }
-                appendLine(theme.value(status.localCommit.shortMessage))
             }
+            appendLine(theme.value(status.localCommit.shortMessage))
+        }
 
-            appendNamedStackInfo(stack, remoteBranches, theme, strategy)
+        appendNamedStackInfo(stack, remoteBranches, theme, strategy)
 
-            if (numCommitsBehindBase > 0) {
-                appendLine()
-                appendLine(
-                    theme.warning(
-                        "Your stack is out-of-date with the base branch " +
-                            "($numCommitsBehindBase ${commitOrCommits(numCommitsBehindBase)} behind ${refSpec.remoteRef})."
-                    )
+        if (numCommitsBehindBase > 0) {
+            appendLine()
+            appendLine(
+                theme.warning(
+                    "Your stack is out-of-date with the base branch " +
+                        "($numCommitsBehindBase ${commitOrCommits(numCommitsBehindBase)} behind ${refSpec.remoteRef})."
                 )
-                append("You'll need to rebase it (")
-                append(theme.command("`git rebase $remoteName/${refSpec.remoteRef}`"))
-                append(") ")
-                appendLine("before your stack will be mergeable.")
-            }
-            if (commitsWithDuplicateIds.isNotEmpty()) {
-                appendLine()
-                appendLine(theme.error("Some commits in your local stack have duplicate IDs:"))
-                for ((id, statusList) in commitsWithDuplicateIds) {
-                    appendLine(
-                        "- $id: (${statusList.joinToString(", ") { it.localCommit.shortMessage }})"
-                    )
-                }
+            )
+            append("You'll need to rebase it (")
+            append(theme.command("`git rebase $remoteName/${refSpec.remoteRef}`"))
+            append(") ")
+            appendLine("before your stack will be mergeable.")
+        }
+        if (commitsWithDuplicateIds.isNotEmpty()) {
+            appendLine()
+            appendLine(theme.error("Some commits in your local stack have duplicate IDs:"))
+            for ((id, statusList) in commitsWithDuplicateIds) {
                 appendLine(
-                    "This is likely because you've based new commit messages off of those from other commits."
-                )
-                appendLine(
-                    "Please correct this by amending the commits and deleting the commit-id lines, then retry your operation."
+                    "- $id: (${statusList.joinToString(", ") { it.localCommit.shortMessage }})"
                 )
             }
+            appendLine(
+                "This is likely because you've based new commit messages off of those from other commits."
+            )
+            appendLine(
+                "Please correct this by amending the commits and deleting the commit-id lines, then retry your operation."
+            )
         }
     }
 
@@ -1270,7 +1314,8 @@ class GitJaspr(
     }
 
     private fun RemoteCommitStatus.toStatusList(
-        commitsWithDuplicateIds: Map<String, List<RemoteCommitStatus>>
+        commitsWithDuplicateIds: Map<String, List<RemoteCommitStatus>>,
+        divergenceByLocalHash: Map<String, DivergenceClassifier.Result>,
     ) =
         StatusBits(
                 commitIsPushed =
@@ -1278,6 +1323,8 @@ class GitJaspr(
                         commitsWithDuplicateIds.containsKey(localCommit.id) -> WARNING
                         remoteCommit == null -> EMPTY
                         remoteCommit.hash == localCommit.hash -> SUCCESS
+                        divergenceByLocalHash[localCommit.hash] ==
+                            DivergenceClassifier.Result.DIVERGENT -> DIVERGENT
                         // Hashes differ — indicate which side is fresher
                         localCommit.commitDate > remoteCommit.commitDate -> AHEAD
                         remoteCommit.commitDate > localCommit.commitDate -> BEHIND
@@ -1754,12 +1801,19 @@ class GitJaspr(
             /** Local commit is fresher than its remote counterpart (push needed). */
             AHEAD("⬆️"),
             /** Remote commit is fresher than its local counterpart (pull needed). */
-            BEHIND("⬇️");
+            BEHIND("⬇️"),
+            /**
+             * Local and remote commits share a commit-id but their content differs (an amend or a
+             * conflict-resolution edit landed in one but not the other). Overwriting either side
+             * would lose information.
+             */
+            DIVERGENT("🔀");
 
             fun styledEmoji(theme: Theme) =
                 when (this) {
                     SUCCESS -> theme.success(emoji)
-                    FAIL -> theme.error(emoji)
+                    FAIL,
+                    DIVERGENT -> theme.error(emoji)
                     PENDING,
                     UNKNOWN -> theme.warning(emoji)
                     EMPTY -> theme.muted(emoji)
