@@ -9,6 +9,11 @@ annotation class Status
 
 @Target(AnnotationTarget.FUNCTION)
 @Retention(AnnotationRetention.RUNTIME)
+@Tag("compare")
+annotation class Compare
+
+@Target(AnnotationTarget.FUNCTION)
+@Retention(AnnotationRetention.RUNTIME)
 @Tag("push")
 annotation class Push
 

@@ -3,6 +3,7 @@ package sims.michael.gitjaspr
 import java.util.MissingFormatArgumentException
 import kotlin.test.assertContains
 import kotlin.test.assertEquals
+import kotlin.test.assertFailsWith
 import kotlin.test.assertFalse
 import kotlin.test.assertNotNull
 import kotlin.test.assertNull
@@ -20,6 +21,7 @@ import sims.michael.gitjaspr.githubtests.TestCaseData
 import sims.michael.gitjaspr.githubtests.generatedtestdsl.testCase
 import sims.michael.gitjaspr.testing.Checkout
 import sims.michael.gitjaspr.testing.Clean
+import sims.michael.gitjaspr.testing.Compare
 import sims.michael.gitjaspr.testing.DEFAULT_COMMITTER
 import sims.michael.gitjaspr.testing.DontPush
 import sims.michael.gitjaspr.testing.Merge
@@ -42,6 +44,10 @@ interface GitJasprTest {
     suspend fun GitHubTestHarness.getAndPrintStatusString(
         refSpec: RefSpec = RefSpec(DEFAULT_LOCAL_OBJECT, DEFAULT_TARGET_REF)
     ) = gitJaspr.getStatusString(refSpec).also(::print)
+
+    suspend fun GitHubTestHarness.getAndPrintCompareString(
+        refSpec: RefSpec = RefSpec(DEFAULT_LOCAL_OBJECT, DEFAULT_TARGET_REF)
+    ) = gitJaspr.getCompareString(refSpec).also(::print)
 
     suspend fun GitHubTestHarness.merge(refSpec: RefSpec, count: Int? = null) =
         gitJaspr.merge(refSpec, count = count)
@@ -2934,6 +2940,112 @@ interface GitJasprTest {
                     .trimMargin()
                     .toStatusString(actual),
                 actual,
+            )
+        }
+    }
+
+    // endregion
+
+    // region compare tests
+    @Compare
+    @Test
+    fun `compare with up-to-date stack renders all rows as identical`() {
+        withTestSetup(useFakeRemote) {
+            createCommitsFrom(
+                testCase {
+                    repository {
+                        commit {
+                            title = "one"
+                            willPassVerification = true
+                        }
+                        commit {
+                            title = "two"
+                            willPassVerification = true
+                            localRefs += "development"
+                        }
+                    }
+                }
+            )
+            push()
+
+            val actual = getAndPrintCompareString()
+            assertTrue(actual.contains("=="), "Expected '==' marker on every row:\n$actual")
+            assertFalse(actual.contains("~~"), "Did not expect '~~' marker:\n$actual")
+            assertFalse(actual.contains("[local-only]"), "Did not expect [local-only]:\n$actual")
+            assertFalse(actual.contains("[remote-only]"), "Did not expect [remote-only]:\n$actual")
+        }
+    }
+
+    @Compare
+    @Test
+    fun `compare with locally amended commit renders ~~ marker on diverged row`() {
+        withTestSetup(useFakeRemote) {
+            createCommitsFrom(
+                testCase {
+                    repository {
+                        commit {
+                            title = "one"
+                            willPassVerification = true
+                        }
+                        commit {
+                            title = "two"
+                            willPassVerification = true
+                            localRefs += "development"
+                        }
+                    }
+                }
+            )
+            push()
+
+            delay(1200)
+
+            createCommitsFrom(
+                testCase {
+                    repository {
+                        commit {
+                            title = "one"
+                            willPassVerification = true
+                        }
+                        commit {
+                            title = "two_amended_locally"
+                            id = "two"
+                            willPassVerification = true
+                            localRefs += "development"
+                        }
+                    }
+                }
+            )
+
+            val actual = getAndPrintCompareString()
+            assertTrue(actual.contains("~~"), "Expected '~~' marker on diverged row:\n$actual")
+            assertTrue(
+                actual.contains("two_amended_locally"),
+                "Expected local-side subject in output:\n$actual",
+            )
+        }
+    }
+
+    @Compare
+    @Test
+    fun `compare fails clearly when no remote stack exists`() {
+        withTestSetup(useFakeRemote) {
+            createCommitsFrom(
+                testCase {
+                    repository {
+                        commit {
+                            title = "one"
+                            willPassVerification = true
+                            localRefs += "development"
+                        }
+                    }
+                }
+            )
+
+            val thrown =
+                assertFailsWith<GitJasprException> { gitJaspr.getCompareString(theme = MonoTheme) }
+            assertTrue(
+                thrown.message!!.contains("No remote stack to compare against"),
+                "Expected 'no remote stack' message:\n${thrown.message}",
             )
         }
     }
