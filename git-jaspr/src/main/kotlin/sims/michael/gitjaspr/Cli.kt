@@ -546,6 +546,31 @@ class Status : GitJasprSubcommand() {
     }
 }
 
+class Compare : GitJasprSubcommand() {
+    // language=Markdown
+    override fun help(context: Context) =
+        """
+        Compare your local stack to the remote named stack side-by-side.
+
+        Each commit pair appears on one row. The marker column shows whether they're
+        content-identical (`==`), diverged (`~~`), or one-sided (blank).
+
+        On diverged rows, the newer side is bold with a leading `*`; the older side is
+        dimmed. Direction of "newer" is determined by commit date.
+
+        Shared row index `[N]` lets the eye connect reordered commits that appear at
+        different positions on the two sides.
+
+        """
+            .trimIndent()
+
+    private val targetRef by TargetRefOptions()
+
+    override suspend fun doRun() {
+        print(appWiring.gitJaspr.getCompareString(targetRef.refSpec, theme))
+    }
+}
+
 class Push : GitJasprSubcommand(helpText = "Push commits and create/update PRs") {
     private val targetRef by TargetRefOptions()
 
@@ -1803,6 +1828,7 @@ fun buildCommand(): SuspendingCliktCommand =
         .subcommands(
             // Stack workflow
             Status(),
+            Compare(),
             Push(),
             Merge(),
             AutoMerge(),

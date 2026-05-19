@@ -474,95 +474,347 @@ class StatusPreviewTest {
 
     @Test
     @Order(9)
-    fun `compare highlight - arrows`(testInfo: TestInfo) {
-        appendComparePreview(testInfo, CompareHighlight.ARROWS)
+    fun `compare - up to date`(testInfo: TestInfo) {
+        withTestSetup {
+            createCommitsFrom(
+                testCase {
+                    repository {
+                        commit {
+                            title = "one"
+                            willPassVerification = true
+                            remoteRefs += buildRemoteRef("one")
+                        }
+                        commit {
+                            title = "two"
+                            willPassVerification = true
+                            remoteRefs += buildRemoteRef("two")
+                        }
+                        commit {
+                            title = "three"
+                            willPassVerification = true
+                            localRefs += "development"
+                            remoteRefs += buildRemoteRef("three")
+                        }
+                    }
+                    checkout = "development"
+                }
+            )
+            gitJaspr.push(stackName = "preview-stack")
+            renderAndAppendCompare(testInfo)
+        }
     }
 
     @Test
     @Order(10)
-    fun `compare highlight - asterisk on newer`(testInfo: TestInfo) {
-        appendComparePreview(testInfo, CompareHighlight.ASTERISK)
+    fun `compare - local has amended commit`(testInfo: TestInfo) {
+        withTestSetup {
+            createCommitsFrom(
+                testCase {
+                    repository {
+                        commit {
+                            title = "one"
+                            willPassVerification = true
+                            remoteRefs += buildRemoteRef("one")
+                        }
+                        commit {
+                            title = "two"
+                            willPassVerification = true
+                            localRefs += "development"
+                            remoteRefs += buildRemoteRef("two")
+                        }
+                    }
+                    checkout = "development"
+                }
+            )
+            gitJaspr.push(stackName = "preview-stack")
+
+            delay(1200)
+
+            createCommitsFrom(
+                testCase {
+                    repository {
+                        commit {
+                            title = "one"
+                            willPassVerification = true
+                            remoteRefs += buildRemoteRef("one")
+                        }
+                        commit {
+                            title = "two_amended_locally"
+                            id = "two"
+                            willPassVerification = true
+                            localRefs += "development"
+                        }
+                    }
+                    checkout = "development"
+                }
+            )
+
+            renderAndAppendCompare(testInfo)
+        }
     }
 
     @Test
     @Order(11)
-    fun `compare highlight - dim older`(testInfo: TestInfo) {
-        appendComparePreview(testInfo, CompareHighlight.DIM_OLDER)
+    fun `compare - remote has amended commit`(testInfo: TestInfo) {
+        withTestSetup {
+            createCommitsFrom(
+                testCase {
+                    repository {
+                        commit {
+                            title = "one"
+                            willPassVerification = true
+                            remoteRefs += buildRemoteRef("one")
+                            branch {
+                                commit {
+                                    title = "two"
+                                    id = "two"
+                                    willPassVerification = true
+                                    localRefs += "development"
+                                    remoteRefs += buildRemoteRef("two")
+                                    remoteRefs +=
+                                        RemoteNamedStackRef(stackName = "preview-stack").name()
+                                }
+                            }
+                        }
+                    }
+                    checkout = "development"
+                }
+            )
+
+            delay(1200)
+
+            createCommitsFrom(
+                testCase {
+                    repository {
+                        commit {
+                            title = "one"
+                            willPassVerification = true
+                            remoteRefs += buildRemoteRef("one")
+                            branch {
+                                commit {
+                                    title = "two"
+                                    id = "two"
+                                    willPassVerification = true
+                                    localRefs += "development"
+                                }
+                            }
+                            branch {
+                                commit {
+                                    title = "two_amended_remotely"
+                                    id = "two"
+                                    willPassVerification = true
+                                    remoteRefs += buildRemoteRef("two")
+                                    remoteRefs +=
+                                        RemoteNamedStackRef(stackName = "preview-stack").name()
+                                }
+                            }
+                        }
+                    }
+                    checkout = "development"
+                }
+            )
+
+            renderAndAppendCompare(testInfo)
+        }
     }
 
     @Test
     @Order(12)
-    fun `compare highlight - bold newer`(testInfo: TestInfo) {
-        appendComparePreview(testInfo, CompareHighlight.BOLD_NEWER)
+    fun `compare - local has unpushed commit on top`(testInfo: TestInfo) {
+        withTestSetup {
+            createCommitsFrom(
+                testCase {
+                    repository {
+                        commit {
+                            title = "one"
+                            willPassVerification = true
+                            remoteRefs += buildRemoteRef("one")
+                        }
+                        commit {
+                            title = "two"
+                            willPassVerification = true
+                            localRefs += "development"
+                            remoteRefs += buildRemoteRef("two")
+                        }
+                    }
+                    checkout = "development"
+                }
+            )
+            gitJaspr.push(stackName = "preview-stack")
+
+            createCommitsFrom(
+                testCase {
+                    repository {
+                        commit {
+                            title = "one"
+                            willPassVerification = true
+                            remoteRefs += buildRemoteRef("one")
+                        }
+                        commit {
+                            title = "two"
+                            willPassVerification = true
+                            remoteRefs += buildRemoteRef("two")
+                        }
+                        commit {
+                            title = "three_unpushed"
+                            willPassVerification = true
+                            localRefs += "development"
+                        }
+                    }
+                    checkout = "development"
+                }
+            )
+
+            renderAndAppendCompare(testInfo)
+        }
     }
 
     @Test
     @Order(13)
-    fun `compare highlight - asterisk + dim older`(testInfo: TestInfo) {
-        appendComparePreview(testInfo, CompareHighlight.ASTERISK_AND_DIM)
+    fun `compare - remote has new commit on top`(testInfo: TestInfo) {
+        withTestSetup {
+            createCommitsFrom(
+                testCase {
+                    repository {
+                        commit {
+                            title = "one"
+                            willPassVerification = true
+                            remoteRefs += buildRemoteRef("one")
+                        }
+                        commit {
+                            title = "two"
+                            willPassVerification = true
+                            localRefs += "development"
+                            remoteRefs += buildRemoteRef("two")
+                            branch {
+                                commit {
+                                    title = "three_from_coworker"
+                                    willPassVerification = true
+                                    remoteRefs += buildRemoteRef("three_from_coworker")
+                                    remoteRefs +=
+                                        RemoteNamedStackRef(stackName = "preview-stack").name()
+                                }
+                            }
+                        }
+                    }
+                    checkout = "development"
+                }
+            )
+
+            renderAndAppendCompare(testInfo)
+        }
     }
 
     @Test
     @Order(14)
-    fun `compare highlight - bold newer + asterisk + dim older`(testInfo: TestInfo) {
-        appendComparePreview(testInfo, CompareHighlight.BOLD_ASTERISK_DIM)
+    fun `compare - reordered commit`(testInfo: TestInfo) {
+        withTestSetup {
+            createCommitsFrom(
+                testCase {
+                    repository {
+                        commit {
+                            title = "one"
+                            id = "one"
+                            willPassVerification = true
+                            remoteRefs += buildRemoteRef("one")
+                        }
+                        commit {
+                            title = "two"
+                            id = "two"
+                            willPassVerification = true
+                            remoteRefs += buildRemoteRef("two")
+                        }
+                        commit {
+                            title = "three"
+                            id = "three"
+                            willPassVerification = true
+                            localRefs += "development"
+                            remoteRefs += buildRemoteRef("three")
+                        }
+                    }
+                    checkout = "development"
+                }
+            )
+            gitJaspr.push(stackName = "preview-stack")
+
+            createCommitsFrom(
+                testCase {
+                    repository {
+                        commit {
+                            title = "one"
+                            id = "one"
+                            willPassVerification = true
+                            remoteRefs += buildRemoteRef("one")
+                        }
+                        commit {
+                            title = "three"
+                            id = "three"
+                            willPassVerification = true
+                        }
+                        commit {
+                            title = "two"
+                            id = "two"
+                            willPassVerification = true
+                            localRefs += "development"
+                        }
+                    }
+                    checkout = "development"
+                }
+            )
+
+            renderAndAppendCompare(testInfo)
+        }
     }
 
-    private fun appendComparePreview(testInfo: TestInfo, highlight: CompareHighlight) {
-        val rows =
-            listOf(
-                CompareRow(
-                    index = 1,
-                    local = CompareCommit("a000001", "dev-00"),
-                    remote = CompareCommit("b000001", "dev-00"),
-                    relation = CompareRelation.IDENTICAL,
-                ),
-                CompareRow(
-                    index = 2,
-                    local = CompareCommit("a000002", "dev-01-amended"),
-                    remote = CompareCommit("b000002", "dev-01"),
-                    relation = CompareRelation.DIVERGED_LOCAL_NEWER,
-                ),
-                CompareRow(
-                    index = 3,
-                    local = CompareCommit("a000003", "dev-02"),
-                    remote = CompareCommit("b000003", "dev-02-amended"),
-                    relation = CompareRelation.DIVERGED_REMOTE_NEWER,
-                ),
-                CompareRow(
-                    index = 4,
-                    local = CompareCommit("a000004", "dev-03"),
-                    remote = CompareCommit("b000004", "dev-03"),
-                    relation = CompareRelation.IDENTICAL,
-                ),
-                CompareRow(
-                    index = 5,
-                    local = CompareCommit("a000005", "dev-04-experimental"),
-                    remote = null,
-                    relation = CompareRelation.LOCAL_ONLY,
-                ),
-                CompareRow(
-                    index = 6,
-                    local = null,
-                    remote = CompareCommit("b000006", "dev-05-from-coworker"),
-                    relation = CompareRelation.REMOTE_ONLY,
-                ),
+    @Test
+    @Order(15)
+    fun `compare - long subjects truncate with ellipsis`(testInfo: TestInfo) {
+        withTestSetup {
+            createCommitsFrom(
+                testCase {
+                    repository {
+                        commit {
+                            title = "short subject under 70 chars stays whole"
+                            id = "short"
+                            willPassVerification = true
+                            remoteRefs += buildRemoteRef("short")
+                        }
+                        commit {
+                            title =
+                                "exactly seventy characters long subject xxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+                            id = "seventy"
+                            willPassVerification = true
+                            remoteRefs += buildRemoteRef("seventy")
+                        }
+                        commit {
+                            title =
+                                "this subject is deliberately longer than seventy characters so we can see the truncation ellipsis in action"
+                            id = "verylong"
+                            willPassVerification = true
+                            localRefs += "development"
+                            remoteRefs += buildRemoteRef("verylong")
+                        }
+                    }
+                    checkout = "development"
+                }
             )
-        val rendered =
-            renderComparePreview(
-                rows = rows,
-                stackName = "preview-stack",
-                remoteName = "origin",
-                highlight = highlight,
-                theme = DefaultTheme,
-            )
+            gitJaspr.push(stackName = "preview-stack")
+            renderAndAppendCompare(testInfo)
+        }
+    }
+
+    private fun GitHubTestHarness.renderAndAppendCompare(
+        testInfo: TestInfo,
+        refSpec: RefSpec = RefSpec(DEFAULT_LOCAL_OBJECT, DEFAULT_TARGET_REF),
+    ) {
+        val ansi = gitJaspr.getCompareString(refSpec, DefaultTheme)
         val name = testInfo.testMethod.get().name
         val banner = "\u001B[1;35m══ $name ══\u001B[0m"
-        sharedOutputFile.appendText("\n$banner\n\n$rendered")
+        sharedOutputFile.appendText("\n$banner\n\n$ansi")
         logger.info(
             "Appended {} ({} bytes) to {}",
             name,
-            rendered.length,
+            ansi.length,
             sharedOutputFile.absolutePath,
         )
     }

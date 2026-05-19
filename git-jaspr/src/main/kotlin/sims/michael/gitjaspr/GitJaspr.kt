@@ -431,6 +431,46 @@ class GitJaspr(
         }
     }
 
+    fun getCompareString(
+        refSpec: RefSpec = RefSpec(DEFAULT_LOCAL_OBJECT, DEFAULT_TARGET_REF),
+        theme: Theme = MonoTheme,
+    ): String {
+        logger.trace("getCompareString {}", refSpec)
+        val remoteName = config.remoteName
+        gitClient.fetch(remoteName)
+        val remoteBranches = gitClient.getRemoteBranches(remoteName)
+        val localStack =
+            gitClient.getLocalCommitStack(remoteName, refSpec.localRef, refSpec.remoteRef)
+        if (localStack.isEmpty()) return theme.muted("Stack is empty.") + "\n"
+
+        val stackName =
+            when (val result = getExistingStackName(localStack, remoteBranches)) {
+                is Found -> result.name
+                is MultipleStacksContainCommit ->
+                    throw GitJasprException(
+                        "Cannot compare: commits exist in multiple stacks: " +
+                            result.stackNames.joinToString(", ")
+                    )
+                NotFound ->
+                    throw GitJasprException(
+                        "No remote stack to compare against. Push first with `jaspr push`."
+                    )
+            }
+        val namedStackRef =
+            checkNotNull(RemoteNamedStackRef.parse(stackName, config.remoteNamedStackBranchPrefix))
+        val remoteStack =
+            gitClient.getLocalCommitStack(
+                remoteName,
+                "$remoteName/$stackName",
+                namedStackRef.targetRef,
+            )
+
+        return DivergenceClassifier(config.workingDirectory, getJasprDir()).use { classifier ->
+            val rows = alignStacks(localStack, remoteStack, classifier)
+            renderCompare(rows, "$remoteName/$stackName", theme)
+        }
+    }
+
     suspend fun push(
         refSpec: RefSpec = RefSpec(DEFAULT_LOCAL_OBJECT, DEFAULT_TARGET_REF),
         stackName: String? = null,
