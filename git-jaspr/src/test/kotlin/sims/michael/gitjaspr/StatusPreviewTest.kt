@@ -472,6 +472,101 @@ class StatusPreviewTest {
         }
     }
 
+    @Test
+    @Order(9)
+    fun `compare highlight - arrows`(testInfo: TestInfo) {
+        appendComparePreview(testInfo, CompareHighlight.ARROWS)
+    }
+
+    @Test
+    @Order(10)
+    fun `compare highlight - asterisk on newer`(testInfo: TestInfo) {
+        appendComparePreview(testInfo, CompareHighlight.ASTERISK)
+    }
+
+    @Test
+    @Order(11)
+    fun `compare highlight - dim older`(testInfo: TestInfo) {
+        appendComparePreview(testInfo, CompareHighlight.DIM_OLDER)
+    }
+
+    @Test
+    @Order(12)
+    fun `compare highlight - bold newer`(testInfo: TestInfo) {
+        appendComparePreview(testInfo, CompareHighlight.BOLD_NEWER)
+    }
+
+    @Test
+    @Order(13)
+    fun `compare highlight - asterisk + dim older`(testInfo: TestInfo) {
+        appendComparePreview(testInfo, CompareHighlight.ASTERISK_AND_DIM)
+    }
+
+    @Test
+    @Order(14)
+    fun `compare highlight - bold newer + asterisk + dim older`(testInfo: TestInfo) {
+        appendComparePreview(testInfo, CompareHighlight.BOLD_ASTERISK_DIM)
+    }
+
+    private fun appendComparePreview(testInfo: TestInfo, highlight: CompareHighlight) {
+        val rows =
+            listOf(
+                CompareRow(
+                    index = 1,
+                    local = CompareCommit("a000001", "dev-00"),
+                    remote = CompareCommit("b000001", "dev-00"),
+                    relation = CompareRelation.IDENTICAL,
+                ),
+                CompareRow(
+                    index = 2,
+                    local = CompareCommit("a000002", "dev-01-amended"),
+                    remote = CompareCommit("b000002", "dev-01"),
+                    relation = CompareRelation.DIVERGED_LOCAL_NEWER,
+                ),
+                CompareRow(
+                    index = 3,
+                    local = CompareCommit("a000003", "dev-02"),
+                    remote = CompareCommit("b000003", "dev-02-amended"),
+                    relation = CompareRelation.DIVERGED_REMOTE_NEWER,
+                ),
+                CompareRow(
+                    index = 4,
+                    local = CompareCommit("a000004", "dev-03"),
+                    remote = CompareCommit("b000004", "dev-03"),
+                    relation = CompareRelation.IDENTICAL,
+                ),
+                CompareRow(
+                    index = 5,
+                    local = CompareCommit("a000005", "dev-04-experimental"),
+                    remote = null,
+                    relation = CompareRelation.LOCAL_ONLY,
+                ),
+                CompareRow(
+                    index = 6,
+                    local = null,
+                    remote = CompareCommit("b000006", "dev-05-from-coworker"),
+                    relation = CompareRelation.REMOTE_ONLY,
+                ),
+            )
+        val rendered =
+            renderComparePreview(
+                rows = rows,
+                stackName = "preview-stack",
+                remoteName = "origin",
+                highlight = highlight,
+                theme = DefaultTheme,
+            )
+        val name = testInfo.testMethod.get().name
+        val banner = "\u001B[1;35m══ $name ══\u001B[0m"
+        sharedOutputFile.appendText("\n$banner\n\n$rendered")
+        logger.info(
+            "Appended {} ({} bytes) to {}",
+            name,
+            rendered.length,
+            sharedOutputFile.absolutePath,
+        )
+    }
+
     private suspend fun GitHubTestHarness.renderAndAppendStatus(
         testInfo: TestInfo,
         refSpec: RefSpec = RefSpec(DEFAULT_LOCAL_OBJECT, DEFAULT_TARGET_REF),
