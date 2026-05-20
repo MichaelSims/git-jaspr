@@ -50,10 +50,14 @@ fun alignStacks(
     val localIds = local.mapNotNull(Commit::id)
     val remoteIds = remote.mapNotNull(Commit::id)
     val lcsIds = longestCommonSubsequence(localIds, remoteIds).toSet()
+    val localById = local.filter { it.id != null }.associateBy { checkNotNull(it.id) }
+    val remoteById = remote.filter { it.id != null }.associateBy { checkNotNull(it.id) }
 
     val rawRows = walkAlignment(local, remote, lcsIds)
-    val classified = classifyDivergedRows(rawRows, classifier)
-    return assignIndexes(classified, localIds.toSet(), remoteIds.toSet())
+    val classifiedAligned = classifyDivergedRows(rawRows, classifier)
+    val classifiedReordered =
+        classifyReorderedRows(classifiedAligned, localById, remoteById, classifier)
+    return assignIndexes(classifiedReordered, localIds.toSet(), remoteIds.toSet())
 }
 
 private fun walkAlignment(
@@ -102,6 +106,36 @@ private fun classifyDivergedRows(
     } else row
 }
 
+/**
+ * Refines one-sided rows whose commit-id also exists on the opposite stack (i.e., reordered
+ * commits). Calls [classifyAlignedPair] against the counterpart to set IDENTICAL vs. DIVERGED_* on
+ * the row's [CompareRow.relation]. The row stays one-sided: [CompareRow.local] /
+ * [CompareRow.remote] are not modified, so the renderer still draws the row in only the original
+ * position.
+ */
+private fun classifyReorderedRows(
+    rows: List<CompareRow>,
+    localById: Map<String, Commit>,
+    remoteById: Map<String, Commit>,
+    classifier: DivergenceClassifier,
+): List<CompareRow> = rows.map { row ->
+    val local = row.local
+    val remote = row.remote
+    val pair =
+        when {
+            local != null && remote == null ->
+                local.id?.let(remoteById::get)?.let { counterpart -> local to counterpart }
+            local == null && remote != null ->
+                remote.id?.let(localById::get)?.let { counterpart -> counterpart to remote }
+            else -> null
+        }
+    if (pair == null) {
+        row
+    } else {
+        row.copy(relation = classifyAlignedPair(pair.first, pair.second, classifier))
+    }
+}
+
 private fun classifyAlignedPair(
     local: Commit,
     remote: Commit,
@@ -121,13 +155,20 @@ private fun classifyAlignedPair(
         }
     }
 
-/** True if this row is one-sided AND its commit-id also exists on the opposite stack. */
-private fun isReordered(row: CompareRow, localIds: Set<String>, remoteIds: Set<String>): Boolean =
-    when (row.relation) {
-        CompareRelation.LOCAL_ONLY -> row.local?.id?.let { it in remoteIds } == true
-        CompareRelation.REMOTE_ONLY -> row.remote?.id?.let { it in localIds } == true
+/**
+ * True if this row is one-sided AND its commit-id also exists on the opposite stack. Detection is
+ * based on `local` / `remote` nullability, not `relation`, so reordered rows that have been
+ * classified as DIVERGED_* (because they were also amended) are still recognized as reordered.
+ */
+private fun isReordered(row: CompareRow, localIds: Set<String>, remoteIds: Set<String>): Boolean {
+    val local = row.local
+    val remote = row.remote
+    return when {
+        local != null && remote == null -> local.id != null && local.id in remoteIds
+        local == null && remote != null -> remote.id != null && remote.id in localIds
         else -> false
     }
+}
 
 private fun assignIndexes(
     rows: List<CompareRow>,
@@ -208,7 +249,7 @@ fun renderCompare(
         val isReorderedRow = reorderedByRow.getValue(row)
         val leftRaw = formatCell(row, isLocal = true, maxSubjectLength, isReorderedRow)
         val rightRaw = formatCell(row, isLocal = false, maxSubjectLength, isReorderedRow)
-        val marker = computeMarker(row.relation)
+        val marker = computeMarker(row.relation, isReorderedRow)
 
         val leftStyled = styleCell(leftRaw.padEnd(leftWidth), row, isLocal = true, theme)
         val rightStyled = styleCell(rightRaw, row, isLocal = false, theme)
@@ -248,14 +289,19 @@ private fun formatCell(
     return "[${row.index}] $asteriskCol${commit.hash.take(7)} $subject$annotation"
 }
 
-private fun computeMarker(relation: CompareRelation): String =
-    when (relation) {
-        CompareRelation.IDENTICAL -> "=="
-        CompareRelation.DIVERGED_LOCAL_NEWER,
-        CompareRelation.DIVERGED_REMOTE_NEWER,
-        CompareRelation.DIVERGED_EQUAL_DATE -> "~~"
-        CompareRelation.LOCAL_ONLY,
-        CompareRelation.REMOTE_ONLY -> ""
+private fun computeMarker(relation: CompareRelation, isReordered: Boolean): String =
+    if (isReordered) {
+        ""
+    } else {
+        when (relation) {
+            CompareRelation.IDENTICAL -> "=="
+            CompareRelation.DIVERGED_LOCAL_NEWER,
+            CompareRelation.DIVERGED_REMOTE_NEWER,
+            CompareRelation.DIVERGED_EQUAL_DATE -> "~~"
+
+            CompareRelation.LOCAL_ONLY,
+            CompareRelation.REMOTE_ONLY -> ""
+        }
     }
 
 private fun styleCell(text: String, row: CompareRow, isLocal: Boolean, theme: Theme): String {
