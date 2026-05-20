@@ -520,6 +520,75 @@ class StatusPreviewTest {
 
     @Test
     @Order(11)
+    fun `compare - reordered and amended commit`(testInfo: TestInfo) {
+        withTestSetup {
+            createCommitsFrom(
+                testCase {
+                    repository {
+                        commit {
+                            title = "one"
+                            id = "one"
+                            willPassVerification = true
+                            remoteRefs += buildRemoteRef("one")
+                        }
+                        commit {
+                            title = "two"
+                            id = "two"
+                            willPassVerification = true
+                            remoteRefs += buildRemoteRef("two")
+                        }
+                        commit {
+                            title = "three"
+                            id = "three"
+                            willPassVerification = true
+                            localRefs += "development"
+                            remoteRefs += buildRemoteRef("three")
+                        }
+                    }
+                    checkout = "development"
+                }
+            )
+            gitJaspr.push(stackName = "preview-stack")
+
+            // Sleep past the second boundary so the amended commit has a strictly later commit
+            // date than the original; without this the renderer can't pick a "newer" side and
+            // falls through to DIVERGED_EQUAL_DATE, suppressing the bold/asterisk/dim styling.
+            delay(1200)
+
+            // Local rewrite: reorder (three swapped with two) and amend the moved "two" commit.
+            // Result: local stack = [one, three, two_amended_locally]; remote stack = [one, two,
+            // three]. Both reordered AND content-divergent on the "two" commit-id.
+            createCommitsFrom(
+                testCase {
+                    repository {
+                        commit {
+                            title = "one"
+                            id = "one"
+                            willPassVerification = true
+                            remoteRefs += buildRemoteRef("one")
+                        }
+                        commit {
+                            title = "three"
+                            id = "three"
+                            willPassVerification = true
+                        }
+                        commit {
+                            title = "two_amended_locally"
+                            id = "two"
+                            willPassVerification = true
+                            localRefs += "development"
+                        }
+                    }
+                    checkout = "development"
+                }
+            )
+
+            renderAndAppendCompare(testInfo)
+        }
+    }
+
+    @Test
+    @Order(12)
     fun `compare - long subjects truncate with ellipsis`(testInfo: TestInfo) {
         withTestSetup {
             createCommitsFrom(
