@@ -28,6 +28,12 @@ interface Theme {
     /** Section headings. */
     fun heading(text: String): String
 
+    /**
+     * In-line emphasis on content (distinct from headings). Used e.g. on the newer side of a
+     * diverged `jaspr compare` row to draw the eye.
+     */
+    fun emphasis(text: String): String
+
     /** Named things: branch names, stack names, config keys, file paths. */
     fun entity(text: String): String
 
@@ -67,6 +73,7 @@ val THEME_ROLES =
         "success",
         "warning",
         "heading",
+        "emphasis",
         "entity",
         "url",
         "command",
@@ -104,6 +111,8 @@ object DefaultTheme : Theme {
 
     override fun heading(text: String) = bold(text)
 
+    override fun emphasis(text: String) = bold(text)
+
     override fun entity(text: String) = cyan(text)
 
     override fun url(text: String) = cyan(text)
@@ -133,6 +142,8 @@ object MonoTheme : Theme {
     override fun warning(text: String) = text
 
     override fun heading(text: String) = text
+
+    override fun emphasis(text: String) = text
 
     override fun entity(text: String) = text
 
@@ -239,6 +250,8 @@ private class CustomTheme(
     override fun warning(text: String) = apply("warning", text, fallback::warning)
 
     override fun heading(text: String) = apply("heading", text, fallback::heading)
+
+    override fun emphasis(text: String) = apply("emphasis", text, fallback::emphasis)
 
     override fun entity(text: String) = apply("entity", text, fallback::entity)
 
