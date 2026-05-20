@@ -632,12 +632,6 @@ class StatusPreviewTest {
         val name = testInfo.testMethod.get().name
         val banner = "\u001B[1;35m══ $name ══\u001B[0m"
         sharedOutputFile.appendText("\n$banner\n\n$ansi")
-        logger.info(
-            "Appended {} ({} bytes) to {}",
-            name,
-            ansi.length,
-            sharedOutputFile.absolutePath,
-        )
     }
 
     private suspend fun GitHubTestHarness.renderAndAppendStatus(
@@ -648,12 +642,6 @@ class StatusPreviewTest {
         val name = testInfo.testMethod.get().name
         val banner = "\u001B[1;35m══ $name ══\u001B[0m"
         sharedOutputFile.appendText("\n$banner\n\n$ansi")
-        logger.info(
-            "Appended {} ({} bytes) to {}",
-            name,
-            ansi.length,
-            sharedOutputFile.absolutePath,
-        )
         logger.info("Scratch dir for this scenario: {}", scratchDir.absolutePath)
     }
 
