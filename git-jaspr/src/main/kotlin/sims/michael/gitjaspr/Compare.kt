@@ -193,7 +193,7 @@ private fun assignIndexes(
 /**
  * Standard O(m*n) DP longest-common-subsequence. Returns one valid LCS (not necessarily unique).
  */
-internal fun <T> longestCommonSubsequence(a: List<T>, b: List<T>): List<T> {
+private fun <T> longestCommonSubsequence(a: List<T>, b: List<T>): List<T> {
     if (a.isEmpty() || b.isEmpty()) return emptyList()
     val m = a.size
     val n = b.size

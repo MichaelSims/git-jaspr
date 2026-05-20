@@ -1018,7 +1018,7 @@ class GitJaspr(
             .mapKeys { (key, _) -> key.removePrefix("${config.remoteName}/") }
     }
 
-    internal suspend fun getOrphanedBranches(): List<String> {
+    suspend fun getOrphanedBranches(): List<String> {
         gitClient.fetch(config.remoteName, prune = true)
         val remoteBranches = gitClient.getRemoteBranches(config.remoteName)
         val pullRequestHeadRefs =
@@ -1030,7 +1030,7 @@ class GitJaspr(
         return getOrphanedBranches(remoteBranches, pullRequestHeadRefs)
     }
 
-    internal fun getOrphanedBranches(
+    private fun getOrphanedBranches(
         remoteBranches: List<RemoteBranch>,
         pullRequestHeadRefs: Set<String>,
     ): List<String> {
@@ -1045,7 +1045,7 @@ class GitJaspr(
         }
     }
 
-    internal fun getEmptyNamedStackBranches(remoteBranches: List<RemoteBranch>): List<String> {
+    private fun getEmptyNamedStackBranches(remoteBranches: List<RemoteBranch>): List<String> {
         logger.trace("getEmptyNamedStackBranches")
         return remoteBranches.map(RemoteBranch::name).filter { branchName ->
             val parts = RemoteNamedStackRef.parse(branchName, config.remoteNamedStackBranchPrefix)
@@ -1075,7 +1075,7 @@ class GitJaspr(
      * Empty named stack branches (already-merged stacks) are not included here; those are reported
      * by [getEmptyNamedStackBranches].
      */
-    internal fun getOrphanedNamedStackBranches(remoteBranches: List<RemoteBranch>): List<String> {
+    private fun getOrphanedNamedStackBranches(remoteBranches: List<RemoteBranch>): List<String> {
         logger.trace("getOrphanedNamedStackBranches")
         val remoteJasprCommitIds =
             remoteBranches
@@ -1107,7 +1107,7 @@ class GitJaspr(
      *
      * @see getAbandonedBranches for the broader detection used by `clean`
      */
-    internal suspend fun findPrsAbandonedByPush(
+    suspend fun findPrsAbandonedByPush(
         remoteBranches: List<RemoteBranch>,
         prefixedStackName: String,
         targetRef: String,
@@ -1147,7 +1147,7 @@ class GitJaspr(
     }
 
     /** Returns a list of jaspr branches with open PRs that are not reachable by any named stack. */
-    internal fun getAbandonedBranches(
+    private fun getAbandonedBranches(
         remoteBranches: List<RemoteBranch>,
         pullRequestHeadRefs: Set<String>,
     ): List<String> {
@@ -1496,10 +1496,10 @@ class GitJaspr(
         }
     }
 
-    internal suspend fun getRemoteCommitStatuses(stack: List<Commit>): List<RemoteCommitStatus> =
+    suspend fun getRemoteCommitStatuses(stack: List<Commit>): List<RemoteCommitStatus> =
         getRemoteCommitStatuses(stack, gitClient.getRemoteBranches(config.remoteName))
 
-    internal suspend fun getRemoteCommitStatuses(
+    private suspend fun getRemoteCommitStatuses(
         stack: List<Commit>,
         remoteBranches: List<RemoteBranch>,
     ): List<RemoteCommitStatus> = getRemoteCommitStatuses(stack, remoteBranches, defaultStrategy())
@@ -2079,8 +2079,7 @@ class GitJaspr(
         return localBranchesToDelete + remainingBranches
     }
 
-    /** Intended for tests */
-    internal fun clone(transformConfig: (Config) -> Config) =
+    fun clone(transformConfig: (Config) -> Config) =
         GitJaspr(
             ghClient,
             gitClient,

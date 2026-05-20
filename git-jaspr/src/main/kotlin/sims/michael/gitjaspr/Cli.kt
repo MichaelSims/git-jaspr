@@ -1123,7 +1123,7 @@ private fun parseVersionParts(version: String) =
  * Expected format: `"git version 2.51.2"` (may have additional suffix like `".windows.1"`).
  * [minVersion] is a dotted version string like `"2.44.0"`.
  */
-internal fun isGitVersionAtLeast(gitVersionOutput: String, minVersion: String): Boolean {
+fun isGitVersionAtLeast(gitVersionOutput: String, minVersion: String): Boolean {
     val actual = parseVersionParts(gitVersionOutput.removePrefix("git version "))
     if (actual.size < 3) return false
     return versionNumber(actual) >= versionNumber(parseVersionParts(minVersion))
@@ -1848,7 +1848,7 @@ private fun migrateConfig(oldConfig: File): String {
     return Init.readDefaultConfigResource().replace(TOKEN_PLACEHOLDER, token)
 }
 
-internal fun File.findNearestGitDir(): File {
+fun File.findNearestGitDir(): File {
     val parentFiles = generateSequence(canonicalFile) { it.parentFile }
     return checkNotNull(parentFiles.firstOrNull { file -> file.resolve(".git").exists() }) {
         "Can't find a git working dir in $canonicalFile or any of its parent directories"
