@@ -11,7 +11,6 @@ import org.junit.jupiter.api.TestInstance
 import org.junit.jupiter.api.TestMethodOrder
 import org.junit.jupiter.api.condition.EnabledIfEnvironmentVariable
 import org.slf4j.LoggerFactory
-import sims.michael.gitjaspr.RemoteRefEncoding.DEFAULT_REMOTE_NAMED_STACK_BRANCH_PREFIX
 import sims.michael.gitjaspr.RemoteRefEncoding.RemoteNamedStackRef
 import sims.michael.gitjaspr.RemoteRefEncoding.buildRemoteRef
 import sims.michael.gitjaspr.githubtests.GitHubTestHarness
@@ -81,86 +80,7 @@ class StatusPreviewTest {
 
     @Test
     @Order(2)
-    fun `local ahead of remote by 1 commit`(testInfo: TestInfo) {
-        withTestSetup {
-            createCommitsFrom(
-                testCase {
-                    repository {
-                        commit {
-                            title = "one"
-                            willPassVerification = true
-                            localRefs += "development"
-                            remoteRefs += buildRemoteRef("one")
-                        }
-                    }
-                    checkout = "development"
-                }
-            )
-
-            gitJaspr.push(stackName = "preview-stack")
-            markAllPullRequestsHealthy()
-
-            createCommitsFrom(
-                testCase {
-                    repository {
-                        commit {
-                            title = "one"
-                            willPassVerification = true
-                            remoteRefs += buildRemoteRef("one")
-                        }
-                        commit {
-                            title = "two"
-                            willPassVerification = true
-                            localRefs += "development"
-                        }
-                    }
-                    checkout = "development"
-                }
-            )
-
-            renderAndAppendStatus(testInfo)
-        }
-    }
-
-    @Test
-    @Order(3)
-    fun `local behind remote by 1 commit with new commit date`(testInfo: TestInfo) {
-        withTestSetup {
-            createCommitsFrom(
-                testCase {
-                    repository {
-                        commit {
-                            title = "one"
-                            willPassVerification = true
-                            localRefs += "behind"
-                        }
-                        commit {
-                            title = "two"
-                            willPassVerification = true
-                            localRefs += "development"
-                        }
-                    }
-                    checkout = "development"
-                }
-            )
-
-            val stackName = "preview-stack"
-            gitJaspr.push(stackName = stackName)
-            markAllPullRequestsHealthy()
-
-            localGit.checkout("behind")
-            localGit.setUpstreamBranch(
-                remoteName,
-                "$DEFAULT_REMOTE_NAMED_STACK_BRANCH_PREFIX/$DEFAULT_TARGET_REF/$stackName",
-            )
-
-            renderAndAppendStatus(testInfo)
-        }
-    }
-
-    @Test
-    @Order(4)
-    fun `local has newer amended version of commit`(testInfo: TestInfo) {
+    fun `local has unpushed commit`(testInfo: TestInfo) {
         withTestSetup {
             createCommitsFrom(
                 testCase {
@@ -180,19 +100,9 @@ class StatusPreviewTest {
                     checkout = "development"
                 }
             )
-
             gitJaspr.push(stackName = "preview-stack")
             markAllPullRequestsHealthy()
 
-            // Ensure the rewritten local commit lands in a later second so its commit date is
-            // strictly greater than the remote's. The date determines whether the divergent
-            // indicator renders as ⏫ AHEAD_DIVERGENT, ⏬ BEHIND_DIVERGENT, or 🔀 DIVERGENT
-            // (equal-date fallback).
-            delay(1200)
-
-            // Rewrite the local stack so its tip has the same commit-id as the remote "two" but a
-            // different SHA + subject. After this, ahead/behind by SHA are both 1, but the remote
-            // stack has no commit-ids missing from local, so the "remote-only" section is empty.
             createCommitsFrom(
                 testCase {
                     repository {
@@ -202,8 +112,12 @@ class StatusPreviewTest {
                             remoteRefs += buildRemoteRef("one")
                         }
                         commit {
-                            title = "two_amended_locally"
-                            id = "two"
+                            title = "two"
+                            willPassVerification = true
+                            remoteRefs += buildRemoteRef("two")
+                        }
+                        commit {
+                            title = "three_unpushed"
                             willPassVerification = true
                             localRefs += "development"
                         }
@@ -217,12 +131,9 @@ class StatusPreviewTest {
     }
 
     @Test
-    @Order(5)
-    fun `remote has newer amended version of commit`(testInfo: TestInfo) {
+    @Order(3)
+    fun `remote has new commit`(testInfo: TestInfo) {
         withTestSetup {
-            // Pass 1: build [one, two] locally and push to all the remote refs we care about (the
-            // per-commit ref and the named-stack ref). PRs are wired up declaratively so they
-            // render fully passed without a separate `markAllPullRequestsHealthy` call.
             createCommitsFrom(
                 testCase {
                     repository {
@@ -230,13 +141,17 @@ class StatusPreviewTest {
                             title = "one"
                             willPassVerification = true
                             remoteRefs += buildRemoteRef("one")
+                        }
+                        commit {
+                            title = "two"
+                            willPassVerification = true
+                            localRefs += "development"
+                            remoteRefs += buildRemoteRef("two")
                             branch {
                                 commit {
-                                    title = "two"
-                                    id = "two"
+                                    title = "three_from_coworker"
                                     willPassVerification = true
-                                    localRefs += "development"
-                                    remoteRefs += buildRemoteRef("two")
+                                    remoteRefs += buildRemoteRef("three_from_coworker")
                                     remoteRefs +=
                                         RemoteNamedStackRef(stackName = "preview-stack").name()
                                 }
@@ -259,61 +174,14 @@ class StatusPreviewTest {
                 }
             )
 
-            // Ensure the remote-side amendment lands in a later second so its commit date is
-            // strictly greater than the local "two". The date determines whether the divergent
-            // indicator renders as ⏫ AHEAD_DIVERGENT, ⏬ BEHIND_DIVERGENT, or 🔀 DIVERGENT
-            // (equal-date fallback).
-            delay(1200)
-
-            // Pass 2: create a sibling of "two" (also a child of "one") with the same commit-id
-            // but a fresher SHA + content. Force-pushed to the per-commit ref and the named-stack
-            // ref to simulate another contributor amending the commit and pushing while we still
-            // have the older local version. Local "development" stays at the original "two", so
-            // the per-commit row shows ⏬ BEHIND_DIVERGENT and the headline reads "diverged".
-            createCommitsFrom(
-                testCase {
-                    repository {
-                        commit {
-                            title = "one"
-                            willPassVerification = true
-                            remoteRefs += buildRemoteRef("one")
-                            branch {
-                                commit {
-                                    title = "two"
-                                    id = "two"
-                                    willPassVerification = true
-                                    localRefs += "development"
-                                }
-                            }
-                            branch {
-                                commit {
-                                    title = "two_amended_remotely"
-                                    id = "two"
-                                    willPassVerification = true
-                                    remoteRefs += buildRemoteRef("two")
-                                    remoteRefs +=
-                                        RemoteNamedStackRef(stackName = "preview-stack").name()
-                                }
-                            }
-                        }
-                    }
-                    checkout = "development"
-                }
-            )
-
             renderAndAppendStatus(testInfo)
         }
     }
 
     @Test
-    @Order(6)
-    fun `diverged with newer remote-only commit`(testInfo: TestInfo) {
+    @Order(4)
+    fun `local and remote each have unique commits`(testInfo: TestInfo) {
         withTestSetup {
-            // Build the divergence in a single DSL pass so we can interleave a local-only fork
-            // ("three") and a remote-only continuation ("two") that lands at the named-stack ref.
-            // Creation order is "one" -> "three" (inside the branch) -> "two", which guarantees
-            // date(two) > date(three) so the remote-only section renders in the warning style
-            // (not "likely stale").
             createCommitsFrom(
                 testCase {
                     repository {
@@ -357,123 +225,7 @@ class StatusPreviewTest {
     }
 
     @Test
-    @Order(7)
-    fun `diverged with older remote-only commit (likely stale)`(testInfo: TestInfo) {
-        withTestSetup {
-            createCommitsFrom(
-                testCase {
-                    repository {
-                        commit {
-                            title = "one"
-                            willPassVerification = true
-                            remoteRefs += buildRemoteRef("one")
-                        }
-                        commit {
-                            title = "two"
-                            willPassVerification = true
-                            localRefs += "development"
-                            remoteRefs += buildRemoteRef("two")
-                        }
-                    }
-                    checkout = "development"
-                }
-            )
-
-            gitJaspr.push(stackName = "preview-stack")
-            markAllPullRequestsHealthy()
-
-            // Git commit times are stored at the second resolution. The "(likely stale)" rendering
-            // depends on localMaxDate > remoteOnlyMaxDate (strict), so we delay long enough to
-            // guarantee the next commits land in a later second.
-            delay(1200)
-
-            createCommitsFrom(
-                testCase {
-                    repository {
-                        commit {
-                            title = "one"
-                            willPassVerification = true
-                            remoteRefs += buildRemoteRef("one")
-                        }
-                        commit {
-                            title = "three"
-                            willPassVerification = true
-                            localRefs += "development"
-                        }
-                    }
-                    checkout = "development"
-                }
-            )
-
-            renderAndAppendStatus(testInfo)
-        }
-    }
-
-    @Test
-    @Order(8)
-    fun `local has rebased but identical commit`(testInfo: TestInfo) {
-        withTestSetup {
-            // Build [one, two, three] locally, push everything, all PRs healthy.
-            createCommitsFrom(
-                testCase {
-                    repository {
-                        commit {
-                            title = "one"
-                            willPassVerification = true
-                            remoteRefs += buildRemoteRef("one")
-                        }
-                        commit {
-                            title = "two"
-                            willPassVerification = true
-                            remoteRefs += buildRemoteRef("two")
-                        }
-                        commit {
-                            title = "three"
-                            willPassVerification = true
-                            localRefs += "development"
-                            remoteRefs += buildRemoteRef("three")
-                        }
-                    }
-                    checkout = "development"
-                }
-            )
-            gitJaspr.push(stackName = "preview-stack")
-            markAllPullRequestsHealthy()
-
-            // Push date-ordering past the remote. The test harness cherry-picks the "three" commit
-            // below, and the new local "three" must land in a later second than the remote "three"
-            // so the per-commit indicator renders as ⬆️ AHEAD (a content-equivalent rebase) instead
-            // of falling back to ❗ WARNING on equal dates.
-            delay(1200)
-
-            // Rewrite locally as [one, three] (drop "two"). The harness recognizes "three" exists
-            // already, but its parent ("two") no longer matches HEAD, so it cherry-picks it onto
-            // "one". The result has a fresh SHA but identical content, which is exactly the "I
-            // rebased my stack locally" scenario.
-            createCommitsFrom(
-                testCase {
-                    repository {
-                        commit {
-                            title = "one"
-                            willPassVerification = true
-                            remoteRefs += buildRemoteRef("one")
-                        }
-                        commit {
-                            title = "three"
-                            willPassVerification = true
-                            localRefs += "development"
-                        }
-                    }
-                    checkout = "development"
-                }
-            )
-
-            renderAndAppendStatus(testInfo)
-        }
-    }
-
-    @Test
-    @Order(9)
+    @Order(5)
     fun `compare - up to date`(testInfo: TestInfo) {
         withTestSetup {
             createCommitsFrom(
@@ -505,7 +257,7 @@ class StatusPreviewTest {
     }
 
     @Test
-    @Order(10)
+    @Order(6)
     fun `compare - local has amended commit`(testInfo: TestInfo) {
         withTestSetup {
             createCommitsFrom(
@@ -554,7 +306,7 @@ class StatusPreviewTest {
     }
 
     @Test
-    @Order(11)
+    @Order(7)
     fun `compare - remote has amended commit`(testInfo: TestInfo) {
         withTestSetup {
             createCommitsFrom(
@@ -619,7 +371,7 @@ class StatusPreviewTest {
     }
 
     @Test
-    @Order(12)
+    @Order(8)
     fun `compare - local has unpushed commit on top`(testInfo: TestInfo) {
         withTestSetup {
             createCommitsFrom(
@@ -670,7 +422,7 @@ class StatusPreviewTest {
     }
 
     @Test
-    @Order(13)
+    @Order(9)
     fun `compare - remote has new commit on top`(testInfo: TestInfo) {
         withTestSetup {
             createCommitsFrom(
@@ -706,7 +458,7 @@ class StatusPreviewTest {
     }
 
     @Test
-    @Order(14)
+    @Order(10)
     fun `compare - reordered commit`(testInfo: TestInfo) {
         withTestSetup {
             createCommitsFrom(
@@ -767,7 +519,7 @@ class StatusPreviewTest {
     }
 
     @Test
-    @Order(15)
+    @Order(11)
     fun `compare - long subjects truncate with ellipsis`(testInfo: TestInfo) {
         withTestSetup {
             createCommitsFrom(

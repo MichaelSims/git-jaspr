@@ -2464,8 +2464,8 @@ interface GitJasprTest {
             val actual = getAndPrintStatusString(RefSpec("development", "main"))
             assertEquals(
                 """
-                |[⬆️✅✅✅✅ㄧ] %s : %s : four
-                |[⬆️✅✅✅✅ㄧ] %s : %s : three
+                |[❗✅✅✅✅ㄧ] %s : %s : four
+                |[❗✅✅✅✅ㄧ] %s : %s : three
                 |[✅✅✅✅✅✅] %s : %s : one
                 """
                     .trimMargin()
@@ -2833,7 +2833,7 @@ interface GitJasprTest {
 
     @Status
     @Test
-    fun `status surfaces remote-only commits when named stack has commits not in local stack`() {
+    fun `status surfaces remote-only commits via summary line pointing at compare`() {
         withTestSetup(useFakeRemote) {
             createCommitsFrom(
                 testCase {
@@ -2866,30 +2866,38 @@ interface GitJasprTest {
             )
             val actual = getAndPrintStatusString()
 
-            // The new section should be present, list 1 remote-only commit, and name "two".
-            assertContains(actual, "Remote stack has 1 commit not in your local stack")
-            assertContains(actual, "  ⬇️  ")
-            assertContains(actual, "two")
+            assertContains(actual, "! 1 remote-only commit. Run `jaspr compare` for details.")
         }
     }
 
     @Status
     @Test
-    fun `status with locally-amended commit shows AHEAD_DIVERGENT`() {
+    fun `status summary line reports both sides when local and remote each have unique commits`() {
         withTestSetup(useFakeRemote) {
+            // Build a state where:
+            //   local development = [one, three]
+            //   remote named stack = [one, two]
+            // so local-only = {three} and remote-only = {two}.
             createCommitsFrom(
                 testCase {
                     repository {
                         commit {
                             title = "one"
-                            remoteRefs += buildRemoteRef("one")
                             willPassVerification = true
+                            remoteRefs += buildRemoteRef("one")
+                            branch {
+                                commit {
+                                    title = "three"
+                                    willPassVerification = true
+                                    localRefs += "development"
+                                }
+                            }
                         }
                         commit {
                             title = "two"
-                            remoteRefs += buildRemoteRef("two")
-                            localRefs += "development"
                             willPassVerification = true
+                            remoteRefs += buildRemoteRef("two")
+                            remoteRefs += RemoteNamedStackRef(stackName = "my-stack-name").name()
                         }
                     }
                     pullRequest {
@@ -2904,42 +2912,16 @@ interface GitJasprTest {
                         title = "two"
                         willBeApprovedByUserKey = "michael"
                     }
-                }
-            )
-
-            waitForChecksToConclude("one", "two")
-
-            // Ensure the rewritten local commit lands at least one second after the remote so the
-            // direction is unambiguously local-newer. Without the delay the two commit dates can
-            // fall in the same second and the indicator falls through to plain DIVERGENT.
-            delay(1200)
-
-            // Rewrite the local stack so its tip shares commit-id "two" with the remote but lands
-            // a different file via a different title. This simulates an amend (or a conflict
-            // resolution during rebase) that meaningfully changed the commit's content.
-            createCommitsFrom(
-                testCase {
-                    repository {
-                        commit { title = "one" }
-                        commit {
-                            title = "two_amended_locally"
-                            id = "two"
-                            localRefs += "development"
-                            willPassVerification = true
-                        }
-                    }
+                    checkout = "development"
                 }
             )
 
             val actual = getAndPrintStatusString()
-            assertEquals(
-                """
-                |[⏫✅✅✅✅ㄧ] %s : %s : two_amended_locally
-                |[✅✅✅✅✅✅] %s : %s : one
-                """
-                    .trimMargin()
-                    .toStatusString(actual),
+
+            assertContains(
                 actual,
+                "! 1 remote-only commit, 1 local commit not yet on remote. " +
+                    "Run `jaspr compare` for details.",
             )
         }
     }
@@ -6945,6 +6927,27 @@ interface GitJasprTest {
                                 "respectively."
                         }
                     )
+                    // For these test scenarios (no rebase / divergence), behind == RO count and
+                    // ahead == LO count, so the unique-commits summary line maps cleanly onto
+                    // numCommitsBehind / numCommitsAhead.
+                    val remoteOnly = numCommitsBehind
+                    val localOnly = numCommitsAhead
+                    if (remoteOnly > 0 || localOnly > 0) {
+                        val parts = buildList {
+                            if (remoteOnly > 0) {
+                                add("$remoteOnly remote-only ${commitOrCommits(remoteOnly)}")
+                            }
+                            if (localOnly > 0) {
+                                add(
+                                    "$localOnly local ${commitOrCommits(localOnly)} not yet on remote"
+                                )
+                            }
+                        }
+                        appendLine()
+                        appendLine(
+                            "! ${parts.joinToString(", ")}. Run `jaspr compare` for details."
+                        )
+                    }
                 }
             }
         }

@@ -16,11 +16,6 @@ import kotlinx.serialization.json.Json
 import org.slf4j.LoggerFactory
 import sims.michael.gitjaspr.CommitParsers.getSubjectAndBodyFromFullMessage
 import sims.michael.gitjaspr.CommitParsers.trimFooters
-import sims.michael.gitjaspr.GitJaspr.StatusBits.Status.AHEAD
-import sims.michael.gitjaspr.GitJaspr.StatusBits.Status.AHEAD_DIVERGENT
-import sims.michael.gitjaspr.GitJaspr.StatusBits.Status.BEHIND
-import sims.michael.gitjaspr.GitJaspr.StatusBits.Status.BEHIND_DIVERGENT
-import sims.michael.gitjaspr.GitJaspr.StatusBits.Status.DIVERGENT
 import sims.michael.gitjaspr.GitJaspr.StatusBits.Status.EMPTY
 import sims.michael.gitjaspr.GitJaspr.StatusBits.Status.FAIL
 import sims.michael.gitjaspr.GitJaspr.StatusBits.Status.PENDING
@@ -118,41 +113,22 @@ class GitJaspr(
 
         val numCommitsBehindBase =
             strategy.logRange(stack.last().hash, "$remoteName/${refSpec.remoteRef}").size
-        return DivergenceClassifier(config.workingDirectory, getJasprDir()).use { classifier ->
-            val divergenceByLocalHash = classifyDivergences(statuses, classifier)
-            buildStatusString(
-                statuses,
-                commitsWithDuplicateIds,
-                divergenceByLocalHash,
-                numCommitsBehindBase,
-                remoteName,
-                refSpec,
-                stack,
-                remoteBranches,
-                strategy,
-                theme,
-            )
-        }
+        return buildStatusString(
+            statuses,
+            commitsWithDuplicateIds,
+            numCommitsBehindBase,
+            remoteName,
+            refSpec,
+            stack,
+            remoteBranches,
+            strategy,
+            theme,
+        )
     }
-
-    private fun classifyDivergences(
-        statuses: List<RemoteCommitStatus>,
-        classifier: DivergenceClassifier,
-    ): Map<String, DivergenceClassifier.Result> =
-        statuses
-            .mapNotNull { status ->
-                val localHash = status.localCommit.hash
-                status.remoteCommit
-                    ?.hash
-                    ?.takeIf { remoteHash -> remoteHash != localHash }
-                    ?.let { remoteHash -> localHash to classifier.classify(localHash, remoteHash) }
-            }
-            .toMap()
 
     private fun buildStatusString(
         statuses: List<RemoteCommitStatus>,
         commitsWithDuplicateIds: Map<String, List<RemoteCommitStatus>>,
-        divergenceByLocalHash: Map<String, DivergenceClassifier.Result>,
         numCommitsBehindBase: Int,
         remoteName: String,
         refSpec: RefSpec,
@@ -170,9 +146,7 @@ class GitJaspr(
             } else {
                 statuses.fold(emptyList()) { currentStack, status ->
                     val allFlagsAreSuccess =
-                        status.toStatusList(commitsWithDuplicateIds, divergenceByLocalHash).all {
-                            it == SUCCESS
-                        }
+                        status.toStatusList(commitsWithDuplicateIds).all { it == SUCCESS }
                     val currentStackIsAllTrue = currentStack.all { it }
                     currentStack + (currentStackIsAllTrue && allFlagsAreSuccess)
                 }
@@ -181,7 +155,7 @@ class GitJaspr(
         for (statusAndStackCheck in statuses.reversed().zip(stackChecks.reversed())) {
             val (status, stackCheck) = statusAndStackCheck
             append("[")
-            val flags = status.toStatusList(commitsWithDuplicateIds, divergenceByLocalHash)
+            val flags = status.toStatusList(commitsWithDuplicateIds)
             val statusList = flags + if (stackCheck) SUCCESS else EMPTY
             append(statusList.joinToString(separator = "") { it.styledEmoji(theme) })
             append("] ")
@@ -290,11 +264,17 @@ class GitJaspr(
                     }
                 )
             }
-            appendRemoteOnlyCommits(stack, stackName, theme, strategy)
+            appendUniqueCommitsSummary(stack, stackName, theme, strategy)
         }
     }
 
-    private fun StringBuilder.appendRemoteOnlyCommits(
+    /**
+     * Emits a single-line summary pointing at `jaspr compare` when the local and remote stacks have
+     * commit-ids unique to one side. Counts are commit-id set differences (not SHA-level); a
+     * content-divergent amendment with the same commit-id on both sides doesn't trigger output. Use
+     * `jaspr compare` to see commit-level divergence detail.
+     */
+    private fun StringBuilder.appendUniqueCommitsSummary(
         localStack: List<Commit>,
         stackName: String,
         theme: Theme,
@@ -311,32 +291,20 @@ class GitJaspr(
                 logger.debug("Failed to walk remote stack '{}': {}", stackName, e.message)
                 return
             }
-        val localCommitIds = localStack.mapNotNull(Commit::id).toSet()
-        val remoteOnly = remoteStack.filter { it.id != null && it.id !in localCommitIds }
-        if (remoteOnly.isEmpty()) return
+        val localIds = localStack.mapNotNull(Commit::id).toSet()
+        val remoteIds = remoteStack.mapNotNull(Commit::id).toSet()
+        val remoteOnly = (remoteIds - localIds).size
+        val localOnly = (localIds - remoteIds).size
+        if (remoteOnly == 0 && localOnly == 0) return
 
-        val localMaxDate = localStack.maxOfOrNull(Commit::commitDate)
-        val remoteOnlyMaxDate = checkNotNull(remoteOnly.maxOfOrNull(Commit::commitDate))
-        // Mark as "likely stale" only when the local stack is strictly newer than every
-        // remote-only commit; ties or remote-newer get the highlighted treatment.
-        val likelyStale = localMaxDate != null && localMaxDate > remoteOnlyMaxDate
-
-        appendLine()
-        val count = remoteOnly.size
-        val heading =
-            if (!likelyStale) {
-                "Remote stack has $count ${commitOrCommits(count)} not in your local stack:"
-            } else {
-                "Remote stack has $count ${commitOrCommits(count)} not in your local stack " +
-                    "(likely stale):"
+        val parts = buildList {
+            if (remoteOnly > 0) add("$remoteOnly remote-only ${commitOrCommits(remoteOnly)}")
+            if (localOnly > 0) {
+                add("$localOnly local ${commitOrCommits(localOnly)} not yet on remote")
             }
-        appendLine(if (!likelyStale) theme.warning(heading) else theme.muted(heading))
-        for (commit in remoteOnly) {
-            val line =
-                "  ${BEHIND.emoji}  ${commit.hash.take(7)}  " +
-                    "${commit.commitDate.toLocalDate()}  ${commit.shortMessage}"
-            appendLine(if (!likelyStale) line else theme.muted(line))
         }
+        appendLine()
+        appendLine(theme.warning("! ${parts.joinToString(", ")}. Run `jaspr compare` for details."))
     }
 
     data class StackNameSuggestions(
@@ -1356,8 +1324,7 @@ class GitJaspr(
     }
 
     private fun RemoteCommitStatus.toStatusList(
-        commitsWithDuplicateIds: Map<String, List<RemoteCommitStatus>>,
-        divergenceByLocalHash: Map<String, DivergenceClassifier.Result>,
+        commitsWithDuplicateIds: Map<String, List<RemoteCommitStatus>>
     ) =
         StatusBits(
                 commitIsPushed =
@@ -1365,16 +1332,6 @@ class GitJaspr(
                         commitsWithDuplicateIds.containsKey(localCommit.id) -> WARNING
                         remoteCommit == null -> EMPTY
                         remoteCommit.hash == localCommit.hash -> SUCCESS
-                        divergenceByLocalHash[localCommit.hash] ==
-                            DivergenceClassifier.Result.DIVERGENT ->
-                            when {
-                                localCommit.commitDate > remoteCommit.commitDate -> AHEAD_DIVERGENT
-                                remoteCommit.commitDate > localCommit.commitDate -> BEHIND_DIVERGENT
-                                else -> DIVERGENT
-                            }
-                        // Hashes differ but content is equivalent — indicate which side is fresher
-                        localCommit.commitDate > remoteCommit.commitDate -> AHEAD
-                        remoteCommit.commitDate > localCommit.commitDate -> BEHIND
                         else -> WARNING
                     },
                 pullRequestExists = if (pullRequest != null) SUCCESS else EMPTY,
@@ -1844,29 +1801,7 @@ class GitJaspr(
             PENDING("⌛"),
             UNKNOWN("❓"),
             EMPTY("ㄧ"),
-            WARNING("❗"),
-            /** Local commit is fresher than its remote counterpart (push needed). */
-            AHEAD("⬆️"),
-            /** Remote commit is fresher than its local counterpart (pull needed). */
-            BEHIND("⬇️"),
-            /**
-             * Local commit is fresher than the remote AND their content has diverged: an amend or a
-             * conflict-resolution edit landed locally that isn't on the remote. Pushing would
-             * overwrite the remote with the new content.
-             */
-            AHEAD_DIVERGENT("⏫"),
-            /**
-             * Remote commit is fresher than the local AND their content has diverged: an amend or
-             * conflict-resolution edit landed on the remote that isn't local. Pulling/overwriting
-             * locally would discard the local version.
-             */
-            BEHIND_DIVERGENT("⏬"),
-            /**
-             * Local and remote commits share a commit-id but their content differs, with no clear
-             * date ordering between them. Rare; usually only when both sides were committed in the
-             * same wall-clock second.
-             */
-            DIVERGENT("🔀");
+            WARNING("❗");
 
             fun styledEmoji(theme: Theme) =
                 when (this) {
@@ -1875,12 +1810,7 @@ class GitJaspr(
                     PENDING,
                     UNKNOWN -> theme.warning(emoji)
                     EMPTY -> theme.muted(emoji)
-                    WARNING,
-                    AHEAD,
-                    BEHIND,
-                    AHEAD_DIVERGENT,
-                    BEHIND_DIVERGENT,
-                    DIVERGENT -> theme.warning(emoji)
+                    WARNING -> theme.warning(emoji)
                 }
         }
     }
