@@ -1,7 +1,5 @@
 package sims.michael.gitjaspr
 
-import com.github.ajalt.mordant.rendering.TextStyles.bold
-
 /**
  * Data model and rendering for `jaspr compare`. Pairs the local stack and the remote named stack
  * row-by-row using LCS alignment, classifies each pair as content-identical or content-diverged,
@@ -265,7 +263,7 @@ private fun styleCell(text: String, row: CompareRow, isLocal: Boolean, theme: Th
     val isNewer = isNewerSide(row, isLocal)
     var styled = text
     if (isOlder) styled = theme.muted(styled)
-    if (isNewer) styled = bold(styled)
+    if (isNewer) styled = theme.emphasis(styled)
     return styled
 }
 
