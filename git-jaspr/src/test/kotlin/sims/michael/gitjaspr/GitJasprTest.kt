@@ -24,6 +24,7 @@ import sims.michael.gitjaspr.testing.Clean
 import sims.michael.gitjaspr.testing.Compare
 import sims.michael.gitjaspr.testing.DEFAULT_COMMITTER
 import sims.michael.gitjaspr.testing.DontPush
+import sims.michael.gitjaspr.testing.Graph
 import sims.michael.gitjaspr.testing.Merge
 import sims.michael.gitjaspr.testing.Nav
 import sims.michael.gitjaspr.testing.PrBody
@@ -48,6 +49,10 @@ interface GitJasprTest {
     suspend fun GitHubTestHarness.getAndPrintCompareString(
         refSpec: RefSpec = RefSpec(DEFAULT_LOCAL_OBJECT, DEFAULT_TARGET_REF)
     ) = gitJaspr.getCompareString(refSpec).also(::print)
+
+    fun GitHubTestHarness.graphRefs(
+        refSpec: RefSpec = RefSpec(DEFAULT_LOCAL_OBJECT, DEFAULT_TARGET_REF)
+    ) = gitJaspr.graphRefs(refSpec)
 
     suspend fun GitHubTestHarness.merge(refSpec: RefSpec, count: Int? = null) =
         gitJaspr.merge(refSpec, count = count)
@@ -3029,6 +3034,69 @@ interface GitJasprTest {
                 thrown.message!!.contains("No remote stack to compare against"),
                 "Expected 'no remote stack' message:\n${thrown.message}",
             )
+        }
+    }
+
+    // endregion
+
+    // region graph tests
+    @Graph
+    @Test
+    fun `graphRefs includes HEAD, remote target, and remote named-stack ref`() {
+        withTestSetup(useFakeRemote) {
+            createCommitsFrom(
+                testCase {
+                    repository {
+                        commit {
+                            title = "one"
+                            willPassVerification = true
+                        }
+                        commit {
+                            title = "two"
+                            willPassVerification = true
+                            localRefs += "development"
+                        }
+                    }
+                    checkout = "development"
+                }
+            )
+            push(stackName = "my-stack")
+
+            val refs = graphRefs(RefSpec(DEFAULT_LOCAL_OBJECT, DEFAULT_TARGET_REF))
+
+            assertContains(refs, DEFAULT_LOCAL_OBJECT)
+            assertContains(refs, "$remoteName/${DEFAULT_TARGET_REF}")
+            assertTrue(
+                refs.any { it.startsWith("$remoteName/") && it.endsWith("my-stack") },
+                "Expected a remote named-stack ref for 'my-stack' in $refs",
+            )
+        }
+    }
+
+    @Graph
+    @Test
+    fun `graphRefs omits the named-stack ref when none exists for the local stack`() {
+        withTestSetup(useFakeRemote) {
+            createCommitsFrom(
+                testCase {
+                    repository {
+                        commit {
+                            title = "one"
+                            willPassVerification = true
+                            localRefs += "development"
+                        }
+                    }
+                    checkout = "development"
+                }
+            )
+
+            val refs = graphRefs(RefSpec(DEFAULT_LOCAL_OBJECT, DEFAULT_TARGET_REF))
+
+            assertContains(refs, DEFAULT_LOCAL_OBJECT)
+            assertContains(refs, "$remoteName/${DEFAULT_TARGET_REF}")
+            // The local stack hasn't been pushed to a named-stack ref, so the only refs are HEAD
+            // and the remote target.
+            assertEquals(2, refs.size, "Unexpected refs: $refs")
         }
     }
 

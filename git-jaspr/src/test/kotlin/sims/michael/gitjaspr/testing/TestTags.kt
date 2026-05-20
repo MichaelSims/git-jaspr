@@ -14,6 +14,11 @@ annotation class Compare
 
 @Target(AnnotationTarget.FUNCTION)
 @Retention(AnnotationRetention.RUNTIME)
+@Tag("graph")
+annotation class Graph
+
+@Target(AnnotationTarget.FUNCTION)
+@Retention(AnnotationRetention.RUNTIME)
 @Tag("push")
 annotation class Push
 

@@ -22,6 +22,7 @@ import com.github.ajalt.clikt.core.terminal
 import com.github.ajalt.clikt.output.MordantHelpFormatter
 import com.github.ajalt.clikt.parameters.arguments.argument
 import com.github.ajalt.clikt.parameters.arguments.convert
+import com.github.ajalt.clikt.parameters.arguments.multiple
 import com.github.ajalt.clikt.parameters.arguments.optional
 import com.github.ajalt.clikt.parameters.groups.OptionGroup
 import com.github.ajalt.clikt.parameters.groups.provideDelegate
@@ -568,6 +569,49 @@ class Compare : GitJasprSubcommand() {
 
     override suspend fun doRun() {
         print(appWiring.gitJaspr.getCompareString(targetRef.refSpec, theme))
+    }
+}
+
+class Graph : GitJasprSubcommand() {
+    // language=Markdown
+    override fun help(context: Context) =
+        """
+        Show a `git log --graph` of your local stack, the remote named stack, and the
+        target branch on the remote.
+
+        Resolves the refs automatically: HEAD, the remote named-stack ref derived from
+        the current branch (when exactly one matches), and `<remote>/<target>`. Refs
+        that don't resolve are dropped silently.
+
+        Pass extra args to `git log` after `--`, e.g.:
+
+            jaspr graph -- --since='2 weeks ago'
+            jaspr graph -- --all
+
+        """
+            .trimIndent()
+
+    private val targetRef by TargetRefOptions()
+
+    private val gitArgs by argument(name = "GIT_LOG_ARGS").multiple()
+
+    override suspend fun doRun() {
+        val refs = appWiring.gitJaspr.graphRefs(targetRef.refSpec)
+        // Shell out directly so git renders its native --graph tree to the terminal;
+        // GitClient's log methods parse into List<Commit> and would discard the graph.
+        val cmd =
+            listOf("git", "log", "--graph", "--oneline", "--decorate", "--abbrev-commit") +
+                refs +
+                gitArgs
+        val exit =
+            withContext(Dispatchers.IO) {
+                ProcessBuilder(cmd)
+                    .directory(appWiring.config.workingDirectory)
+                    .inheritIO()
+                    .start()
+                    .waitFor()
+            }
+        if (exit != 0) throw ProgramResult(exit)
     }
 }
 
@@ -1829,6 +1873,7 @@ fun buildCommand(): SuspendingCliktCommand =
             // Stack workflow
             Status(),
             Compare(),
+            Graph(),
             Push(),
             Merge(),
             AutoMerge(),

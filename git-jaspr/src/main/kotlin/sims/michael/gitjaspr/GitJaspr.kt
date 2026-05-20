@@ -439,6 +439,40 @@ class GitJaspr(
         }
     }
 
+    /**
+     * Resolves the set of refs `jaspr graph` should pass to `git log`: the local stack tip, the
+     * remote target, and the remote named-stack ref when exactly one can be determined. Ambiguous
+     * (multi-stack) or absent named-stack refs are skipped silently so callers can use the result
+     * unconditionally.
+     */
+    fun graphRefs(
+        refSpec: RefSpec = RefSpec(DEFAULT_LOCAL_OBJECT, DEFAULT_TARGET_REF)
+    ): List<String> {
+        logger.trace("graphRefs {}", refSpec)
+        val remoteName = config.remoteName
+        gitClient.fetch(remoteName)
+        val refs = buildList {
+            add(refSpec.localRef)
+            add("$remoteName/${refSpec.remoteRef}")
+
+            val localStack =
+                try {
+                    gitClient.getLocalCommitStack(remoteName, refSpec.localRef, refSpec.remoteRef)
+                } catch (e: Exception) {
+                    logger.debug("Failed to walk local stack for graph: {}", e.message)
+                    return@buildList
+                }
+            if (localStack.isEmpty()) return@buildList
+
+            val remoteBranches = gitClient.getRemoteBranches(remoteName)
+            val stackName =
+                (getExistingStackName(localStack, remoteBranches) as? Found)?.name
+                    ?: return@buildList
+            add("$remoteName/$stackName")
+        }
+        return refs.distinct()
+    }
+
     suspend fun push(
         refSpec: RefSpec = RefSpec(DEFAULT_LOCAL_OBJECT, DEFAULT_TARGET_REF),
         stackName: String? = null,
