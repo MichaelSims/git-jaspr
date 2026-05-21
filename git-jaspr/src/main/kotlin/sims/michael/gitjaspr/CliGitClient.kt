@@ -603,6 +603,72 @@ class CliGitClient(
             .map(CommitParsers::parseCommitLogEntry)
     }
 
+    override fun mergeBase(a: String, b: String): String? {
+        logger.trace("mergeBase {} {}", a, b)
+        val result =
+            ProcessExecutor()
+                .directory(workingDirectory)
+                .command(listOf("git", "merge-base", a, b))
+                .destroyOnExit()
+                .readOutput(true)
+                .apply { if (showStderr) redirectError(System.err) }
+                .execute()
+        return when (result.exitValue) {
+            0 -> result.output.string.trim().takeIf(String::isNotEmpty)
+            1 -> null
+            else ->
+                error("git merge-base $a $b returned ${result.exitValue}: ${result.output.string}")
+        }
+    }
+
+    override fun isAncestor(ancestor: String, descendant: String): Boolean {
+        logger.trace("isAncestor {} {}", ancestor, descendant)
+        val result =
+            ProcessExecutor()
+                .directory(workingDirectory)
+                .command(listOf("git", "merge-base", "--is-ancestor", ancestor, descendant))
+                .destroyOnExit()
+                .readOutput(true)
+                .apply { if (showStderr) redirectError(System.err) }
+                .execute()
+        return when (result.exitValue) {
+            0 -> true
+            1 -> false
+            else ->
+                error(
+                    "git merge-base --is-ancestor $ancestor $descendant returned " +
+                        "${result.exitValue}: ${result.output.string}"
+                )
+        }
+    }
+
+    override fun mergeTreeWriteTree(base: String, ours: String, theirs: String): String? {
+        logger.trace("mergeTreeWriteTree base={} ours={} theirs={}", base, ours, theirs)
+        val result =
+            ProcessExecutor()
+                .directory(workingDirectory)
+                .command(
+                    listOf("git", "merge-tree", "--write-tree", "--merge-base=$base", ours, theirs)
+                )
+                .destroyOnExit()
+                .readOutput(true)
+                .apply { if (showStderr) redirectError(System.err) }
+                .execute()
+        // `git merge-tree --write-tree` exits 0 on a clean merge (prints just the tree SHA),
+        // exits 1 on a merge with conflicts (prints tree SHA + conflict info), and exits >1 on
+        // unrecoverable errors (invalid args, etc.). We treat exit 1 as "would conflict" and
+        // return null; the caller doesn't currently need the conflict details.
+        return when (result.exitValue) {
+            0 -> result.output.lines.firstOrNull()?.trim()?.takeIf(String::isNotEmpty)
+            1 -> null
+            else ->
+                error(
+                    "git merge-tree --write-tree returned ${result.exitValue}: " +
+                        result.output.string
+                )
+        }
+    }
+
     private fun executeCommand(
         command: List<String>,
         environment: Map<String, String> = emptyMap(),

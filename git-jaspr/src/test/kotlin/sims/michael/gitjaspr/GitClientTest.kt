@@ -2,10 +2,12 @@ package sims.michael.gitjaspr
 
 import java.io.File
 import kotlin.test.assertNotEquals
+import kotlin.test.assertNotNull
 import kotlin.test.assertNull
 import org.eclipse.jgit.lib.Constants
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertFalse
+import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.assertThrows
 import org.slf4j.Logger
@@ -471,6 +473,66 @@ interface GitClientTest {
             assertThrows<IllegalStateException> {
                 localGit.setUpstreamBranch(remoteName, "remoteBranch")
             }
+        }
+    }
+
+    @Test
+    fun `mergeBase returns the common ancestor of two refs`() {
+        withTestSetup {
+            createCommitsFrom(
+                testCase {
+                    repository {
+                        commit { title = "a" }
+                        commit { title = "b" }
+                        commit {
+                            title = "c"
+                            localRefs += "main"
+                        }
+                    }
+                    checkout = "main"
+                }
+            )
+            val git = createGitClient(localGit.workingDirectory)
+            val commits = localGit.log()
+            val a = commits.single { it.shortMessage == "a" }
+            val c = commits.single { it.shortMessage == "c" }
+            // Commit.hash is the abbreviated SHA; mergeBase returns the full SHA. The full SHA
+            // always begins with the abbreviated one, so we compare via prefix matching.
+            val abcMergeBase = git.mergeBase(a.hash, c.hash)
+            assertNotNull(abcMergeBase)
+            assertTrue(abcMergeBase!!.startsWith(a.hash))
+            val cabMergeBase = git.mergeBase(c.hash, a.hash)
+            assertNotNull(cabMergeBase)
+            assertTrue(cabMergeBase!!.startsWith(a.hash))
+            val ccMergeBase = git.mergeBase(c.hash, c.hash)
+            assertNotNull(ccMergeBase)
+            assertTrue(ccMergeBase!!.startsWith(c.hash))
+        }
+    }
+
+    @Test
+    fun `isAncestor returns true when ancestor is reachable from descendant`() {
+        withTestSetup {
+            createCommitsFrom(
+                testCase {
+                    repository {
+                        commit { title = "a" }
+                        commit { title = "b" }
+                        commit {
+                            title = "c"
+                            localRefs += "main"
+                        }
+                    }
+                    checkout = "main"
+                }
+            )
+            val git = createGitClient(localGit.workingDirectory)
+            val commits = localGit.log()
+            val a = commits.single { it.shortMessage == "a" }
+            val c = commits.single { it.shortMessage == "c" }
+            assertTrue(git.isAncestor(a.hash, c.hash))
+            assertTrue(git.isAncestor(a.hash, a.hash))
+            assertFalse(git.isAncestor(c.hash, a.hash))
         }
     }
 

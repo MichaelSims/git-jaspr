@@ -126,6 +126,31 @@ interface GitClient {
 
     fun isHeadDetached(): Boolean
 
+    /**
+     * Returns the merge-base SHA of two refs (i.e., the best common ancestor reachable from both),
+     * or null if the two refs have no common ancestor.
+     */
+    fun mergeBase(a: String, b: String): String?
+
+    /**
+     * Returns true if [ancestor] is an ancestor of [descendant] (i.e., reachable by walking
+     * [descendant]'s history). Equivalent to `git merge-base --is-ancestor`.
+     */
+    fun isAncestor(ancestor: String, descendant: String): Boolean
+
+    /**
+     * Performs a three-way merge entirely in-memory, returning the result tree SHA on success or
+     * null on conflict. Does not touch the working tree, the index, or HEAD. Equivalent to `git
+     * merge-tree --write-tree --merge-base=<base> <ours> <theirs>`.
+     *
+     * Use this to probe whether a merge / cherry-pick can be applied cleanly before attempting it
+     * for real.
+     *
+     * Requires git 2.38+. Not implemented for [JGitClient]; production wiring routes this through
+     * [CliGitClient].
+     */
+    fun mergeTreeWriteTree(base: String, ours: String, theirs: String): String?
+
     /** Returns short messages for multiple refs in a single operation. */
     fun getShortMessages(refs: List<String>): Map<String, String?>
 
