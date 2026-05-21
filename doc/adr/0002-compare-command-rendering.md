@@ -61,7 +61,8 @@ LOCAL                              REMOTE (<remote>/jaspr/.../<stack>)
 - **Shared row index** `[N]` in brackets on both sides. Per-invocation; resets between
   runs. Lets the reader cross-reference rows when alignment isn't row-for-row.
 - **Marker column** is one of three values:
-    - `==` content-identical (rebased, but same patch)
+    - `==` content-identical (same patch *and* same commit message; rebased
+      counts, reworded does not)
     - `~~` same commit-id, content diverged
     - blank one-sided row (local-only or remote-only)
 

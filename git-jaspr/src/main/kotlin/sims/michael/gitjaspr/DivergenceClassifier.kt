@@ -7,15 +7,19 @@ import org.slf4j.LoggerFactory
 /**
  * Classifies whether two commits represent the same logical change. Two commits are
  * [Result.IDENTICAL] when their patches (their diffs against their respective parents) are
- * equivalent, even if they sit on different parents. They are [Result.DIVERGENT] when the patches
- * differ, for example, because one was amended or because conflict-resolution edits landed during a
- * rebase. The classification is symmetric: `classify(a, b)` always agrees with `classify(b, a)`.
+ * equivalent **and** their commit messages (subject + body) match, even if they sit on different
+ * parents. They are [Result.DIVERGENT] when the patches differ, when the messages differ, or both:
+ * for example, an amended commit changes the patch; a reworded commit changes the message. The
+ * classification is symmetric: `classify(a, b)` always agrees with `classify(b, a)`.
  *
  * Strategy:
- * 1. Patch-id fast path. If `git patch-id` of the two commits' diffs match, classify as
+ * 1. Message comparison. If the two commits' full messages (trimmed of trailing whitespace) differ,
+ *    classify as [Result.DIVERGENT]. This is the cheapest check and short-circuits cases where the
+ *    patches happen to match but the messages don't (e.g., a reword).
+ * 2. Patch-id fast path. If `git patch-id` of the two commits' diffs match, classify as
  *    [Result.IDENTICAL]. Patch-id ignores line numbers and whitespace, so unrelated line-number
  *    shifts during a clean rebase still register as the same patch.
- * 2. Cherry-pick probe slow path. On patch-id mismatch, attempt to cherry-pick one commit onto the
+ * 3. Cherry-pick probe slow path. On patch-id mismatch, attempt to cherry-pick one commit onto the
  *    other's parent in a scratch worktree. If the cherry-pick applies cleanly and the resulting
  *    tree matches the expected tree, classify as [Result.IDENTICAL]. Otherwise [Result.DIVERGENT].
  *
@@ -47,18 +51,46 @@ class DivergenceClassifier(private val workingDirectory: File, jasprDir: File) :
             return cachedResult
         }
 
-        val aPatchId = computePatchId(aSha)
-        val bPatchId = computePatchId(bSha)
-
         val result =
-            if (aPatchId != null && aPatchId == bPatchId) {
-                Result.IDENTICAL
+            if (!messagesMatch(aSha, bSha)) {
+                Result.DIVERGENT
             } else {
-                simulateCherryPick(aSha, bSha)
+                val aPatchId = computePatchId(aSha)
+                val bPatchId = computePatchId(bSha)
+                if (aPatchId != null && aPatchId == bPatchId) {
+                    Result.IDENTICAL
+                } else {
+                    simulateCherryPick(aSha, bSha)
+                }
             }
         writeCachedResult(aSha, bSha, result)
         return result
     }
+
+    /**
+     * True when both commits' full messages (subject + body, trimmed of trailing whitespace) are
+     * non-null and equal. Returns false if either message cannot be read; treating a read failure
+     * as "messages differ" is conservative and avoids classifying as IDENTICAL when we can't
+     * actually verify equality.
+     */
+    private fun messagesMatch(aSha: String, bSha: String): Boolean {
+        val aMessage = computeCommitMessage(aSha) ?: return false
+        val bMessage = computeCommitMessage(bSha) ?: return false
+        return aMessage == bMessage
+    }
+
+    private fun computeCommitMessage(sha: String): String? =
+        try {
+            val proc =
+                ProcessBuilder("git", "log", "-1", "--format=%B", sha)
+                    .directory(workingDirectory)
+                    .start()
+            val output = proc.inputStream.bufferedReader().readText().trimEnd()
+            if (proc.waitFor() == 0) output else null
+        } catch (e: Exception) {
+            logger.debug("Failed to read commit message for {}", sha, e)
+            null
+        }
 
     override fun close() {
         try {
