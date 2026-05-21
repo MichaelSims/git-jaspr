@@ -24,6 +24,11 @@ annotation class Push
 
 @Target(AnnotationTarget.FUNCTION)
 @Retention(AnnotationRetention.RUNTIME)
+@Tag("pull")
+annotation class Pull
+
+@Target(AnnotationTarget.FUNCTION)
+@Retention(AnnotationRetention.RUNTIME)
 @Tag("prBody")
 annotation class PrBody
 

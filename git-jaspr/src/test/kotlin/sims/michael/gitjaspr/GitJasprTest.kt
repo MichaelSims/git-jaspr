@@ -28,6 +28,7 @@ import sims.michael.gitjaspr.testing.Graph
 import sims.michael.gitjaspr.testing.Merge
 import sims.michael.gitjaspr.testing.Nav
 import sims.michael.gitjaspr.testing.PrBody
+import sims.michael.gitjaspr.testing.Pull
 import sims.michael.gitjaspr.testing.Push
 import sims.michael.gitjaspr.testing.Stack
 import sims.michael.gitjaspr.testing.Status
@@ -49,6 +50,10 @@ interface GitJasprTest {
     suspend fun GitHubTestHarness.getAndPrintCompareString(
         refSpec: RefSpec = RefSpec(DEFAULT_LOCAL_OBJECT, DEFAULT_TARGET_REF)
     ) = gitJaspr.getCompareString(refSpec).also(::print)
+
+    fun GitHubTestHarness.pull(
+        refSpec: RefSpec = RefSpec(DEFAULT_LOCAL_OBJECT, DEFAULT_TARGET_REF)
+    ) = gitJaspr.pull(refSpec).also(::print)
 
     fun GitHubTestHarness.graphRefs(
         refSpec: RefSpec = RefSpec(DEFAULT_LOCAL_OBJECT, DEFAULT_TARGET_REF)
@@ -3097,6 +3102,190 @@ interface GitJasprTest {
             // The local stack hasn't been pushed to a named-stack ref, so the only refs are HEAD
             // and the remote target.
             assertEquals(2, refs.size, "Unexpected refs: $refs")
+        }
+    }
+
+    // endregion
+
+    // region pull tests
+    @Pull
+    @Test
+    fun `pull is a no-op when local matches remote`() {
+        withTestSetup(useFakeRemote) {
+            createCommitsFrom(
+                testCase {
+                    repository {
+                        commit {
+                            title = "one"
+                            willPassVerification = true
+                        }
+                        commit {
+                            title = "two"
+                            willPassVerification = true
+                            localRefs += "development"
+                        }
+                    }
+                    checkout = "development"
+                }
+            )
+            gitJaspr.push(stackName = "test-stack")
+
+            val output = pull()
+
+            assertEquals("Your stack is up to date with the remote.\n", output)
+        }
+    }
+
+    @Pull
+    @Test
+    fun `pull is a no-op when local has unpushed commits`() {
+        withTestSetup(useFakeRemote) {
+            createCommitsFrom(
+                testCase {
+                    repository {
+                        commit {
+                            title = "one"
+                            willPassVerification = true
+                        }
+                        commit {
+                            title = "two"
+                            willPassVerification = true
+                            localRefs += "development"
+                        }
+                    }
+                    checkout = "development"
+                }
+            )
+            gitJaspr.push(stackName = "test-stack")
+            // Add an unpushed local commit on top of the pushed stack.
+            createCommitsFrom(
+                testCase {
+                    repository {
+                        commit {
+                            title = "one"
+                            willPassVerification = true
+                        }
+                        commit {
+                            title = "two"
+                            willPassVerification = true
+                        }
+                        commit {
+                            title = "three"
+                            willPassVerification = true
+                            localRefs += "development"
+                        }
+                    }
+                    checkout = "development"
+                }
+            )
+
+            val output = pull()
+
+            assertTrue(
+                output.contains("Your stack has local commits not yet on the remote"),
+                "Expected LOCAL_HAS_UNPUSHED message, got: $output",
+            )
+        }
+    }
+
+    @Pull
+    @Test
+    fun `pull hard-resets when remote has new commits on top`() {
+        withTestSetup(useFakeRemote) {
+            createCommitsFrom(
+                testCase {
+                    repository {
+                        commit {
+                            title = "one"
+                            willPassVerification = true
+                        }
+                        commit {
+                            title = "two"
+                            willPassVerification = true
+                            localRefs += "development"
+                        }
+                    }
+                    checkout = "development"
+                }
+            )
+            gitJaspr.push(stackName = "test-stack")
+            // Push a new commit "three" on top, then rewind local to before that push.
+            createCommitsFrom(
+                testCase {
+                    repository {
+                        commit {
+                            title = "one"
+                            willPassVerification = true
+                        }
+                        commit {
+                            title = "two"
+                            willPassVerification = true
+                        }
+                        commit {
+                            title = "three"
+                            willPassVerification = true
+                            localRefs += "development"
+                        }
+                    }
+                    checkout = "development"
+                }
+            )
+            gitJaspr.push(stackName = "test-stack")
+            // Roll local back to the two-commit state so it's "behind" remote.
+            localGit.reset("HEAD~1")
+
+            val output = pull()
+
+            assertEquals("Pulled; your stack now matches remote.\n", output)
+            assertEquals("three", localGit.log("HEAD", 1).single().shortMessage)
+        }
+    }
+
+    @Pull
+    @Test
+    fun `pull punts when both sides have unique commits`() {
+        withTestSetup(useFakeRemote) {
+            createCommitsFrom(
+                testCase {
+                    repository {
+                        commit {
+                            title = "one"
+                            willPassVerification = true
+                        }
+                        commit {
+                            title = "two"
+                            willPassVerification = true
+                            localRefs += "development"
+                        }
+                    }
+                    checkout = "development"
+                }
+            )
+            gitJaspr.push(stackName = "test-stack")
+            // Replace the top of local with "three", so local has "three" and remote has "two".
+            createCommitsFrom(
+                testCase {
+                    repository {
+                        commit {
+                            title = "one"
+                            willPassVerification = true
+                        }
+                        commit {
+                            title = "three"
+                            willPassVerification = true
+                            localRefs += "development"
+                        }
+                    }
+                    checkout = "development"
+                }
+            )
+
+            val output = pull()
+
+            assertTrue(
+                output.contains("each have unique commits"),
+                "Expected MIXED_UNIQUE_WORK punt, got: $output",
+            )
         }
     }
 
