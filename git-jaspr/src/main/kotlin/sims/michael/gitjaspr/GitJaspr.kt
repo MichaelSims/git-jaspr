@@ -559,20 +559,64 @@ class GitJaspr(
             is PullPlan.NoOp -> appendLine(theme.muted(noOpMessage(plan.reason)))
             is PullPlan.Punt -> appendLine(theme.warning(puntMessage(plan.reason)))
             is PullPlan.HardResetToRemoteTip -> {
-                if (gitClient.hasUncommittedChangesToTrackedFiles()) {
-                    throw GitJasprException(
-                        "Your working directory has uncommitted changes to tracked files. " +
-                            "Please commit or stash them and re-run the command."
-                    )
-                }
+                requireCleanWorkingTree()
                 gitClient.reset(plan.remoteTipSha)
                 appendLine(theme.success("Pulled; your stack now matches remote."))
             }
-            is PullPlan.CherryPickLoOntoRemoteTip,
-            is PullPlan.CherryPickRoOntoLocalHead ->
-                throw UnsupportedOperationException(
-                    "Cherry-pick paths for jaspr pull are not yet implemented"
+            is PullPlan.CherryPickLoOntoRemoteTip -> {
+                requireCleanWorkingTree()
+                probeCherryPickQueue(plan.commits, plan.remoteTipSha)
+                gitClient.reset(plan.remoteTipSha)
+                for (commit in plan.commits) gitClient.cherryPick(commit)
+                val n = plan.commits.size
+                appendLine(
+                    theme.success(
+                        "Adopted remote's version of the shared portion of your stack and " +
+                            "replayed $n local ${commitOrCommits(n)} on top."
+                    )
                 )
+            }
+            is PullPlan.CherryPickRoOntoLocalHead -> {
+                val headSha = gitClient.log(GitClient.HEAD, 1).single().hash
+                probeCherryPickQueue(plan.commits, headSha)
+                for (commit in plan.commits) gitClient.cherryPick(commit)
+                val n = plan.commits.size
+                appendLine(
+                    theme.success(
+                        "Pulled $n ${commitOrCommits(n)} onto your local stack. " +
+                            "Your stack base is ahead of remote's; push to bring remote in sync."
+                    )
+                )
+            }
+        }
+    }
+
+    /**
+     * Probes whether the cherry-pick queue applies cleanly against [startingTreeIsh], using `git
+     * merge-tree --write-tree` and threading each result tree forward as the "ours" for the next
+     * merge. Throws on the first conflict it encounters. Performs no I/O against the working tree,
+     * index, or HEAD; only writes intermediate trees into the object DB.
+     */
+    private fun probeCherryPickQueue(commits: List<Commit>, startingTreeIsh: String) {
+        var currentTreeIsh = startingTreeIsh
+        for (commit in commits) {
+            val result =
+                gitClient.mergeTreeWriteTree("${commit.hash}^", currentTreeIsh, commit.hash)
+                    ?: throw GitJasprException(
+                        "Pull would conflict applying commit ${commit.hash} " +
+                            "(${commit.shortMessage}). Resolve manually with " +
+                            "`git cherry-pick` or `git rebase`, then re-run `jaspr pull`."
+                    )
+            currentTreeIsh = result
+        }
+    }
+
+    private fun requireCleanWorkingTree() {
+        if (gitClient.hasUncommittedChangesToTrackedFiles()) {
+            throw GitJasprException(
+                "Your working directory has uncommitted changes to tracked files. " +
+                    "Please commit or stash them and re-run the command."
+            )
         }
     }
 
