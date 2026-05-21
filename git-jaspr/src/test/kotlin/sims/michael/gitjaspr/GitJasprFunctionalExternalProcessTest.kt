@@ -122,7 +122,7 @@ class GitJasprFunctionalExternalProcessTest : GitJasprTest {
         )
     }
 
-    override fun GitHubTestHarness.pull(refSpec: RefSpec): String {
+    override fun GitHubTestHarness.pull(refSpec: RefSpec, theirs: Boolean): String {
         return executeCli(
             scratchDir = scratchDir,
             remoteUri = remoteUri,
@@ -131,15 +131,16 @@ class GitJasprFunctionalExternalProcessTest : GitJasprTest {
             homeDirConfig = buildHomeDirConfig(),
             repoDirConfig = emptyMap(),
             strings =
-                listOf(
-                    "--remote-name",
-                    remoteName,
-                    "pull",
-                    "--target",
-                    refSpec.remoteRef,
-                    "--local",
-                    refSpec.localRef,
-                ),
+                buildList {
+                    add("--remote-name")
+                    add(remoteName)
+                    add("pull")
+                    add("--target")
+                    add(refSpec.remoteRef)
+                    add("--local")
+                    add(refSpec.localRef)
+                    if (theirs) add("--theirs")
+                },
             invokeLocation = localRepo,
             javaOptions = javaOptions,
         )
