@@ -3289,6 +3289,122 @@ interface GitJasprTest {
         }
     }
 
+    @Pull
+    @Test
+    fun `pull is idempotent after a hard-reset pull`() {
+        withTestSetup(useFakeRemote) {
+            createCommitsFrom(
+                testCase {
+                    repository {
+                        commit {
+                            title = "one"
+                            willPassVerification = true
+                        }
+                        commit {
+                            title = "two"
+                            willPassVerification = true
+                            localRefs += "development"
+                        }
+                    }
+                    checkout = "development"
+                }
+            )
+            gitJaspr.push(stackName = "test-stack")
+            createCommitsFrom(
+                testCase {
+                    repository {
+                        commit {
+                            title = "one"
+                            willPassVerification = true
+                        }
+                        commit {
+                            title = "two"
+                            willPassVerification = true
+                        }
+                        commit {
+                            title = "three"
+                            willPassVerification = true
+                            localRefs += "development"
+                        }
+                    }
+                    checkout = "development"
+                }
+            )
+            gitJaspr.push(stackName = "test-stack")
+            localGit.reset("HEAD~1")
+
+            val first = pull()
+            val second = pull()
+
+            assertEquals("Pulled; your stack now matches remote.\n", first)
+            assertEquals("Your stack is up to date with the remote.\n", second)
+        }
+    }
+
+    @Pull
+    @Test
+    fun `pull refuses when a cherry-pick is in progress`() {
+        withTestSetup(useFakeRemote) {
+            createCommitsFrom(
+                testCase {
+                    repository {
+                        commit {
+                            title = "one"
+                            willPassVerification = true
+                        }
+                        commit {
+                            title = "two"
+                            willPassVerification = true
+                            localRefs += "development"
+                        }
+                    }
+                    checkout = "development"
+                }
+            )
+            gitJaspr.push(stackName = "test-stack")
+            // Drop a CHERRY_PICK_HEAD sentinel into the worktree's git dir.
+            localGit.workingDirectory.resolve(".git/CHERRY_PICK_HEAD").writeText("dummy\n")
+
+            val thrown = assertFailsWith<GitJasprException> { pull() }
+            assertTrue(
+                thrown.message!!.contains("cherry-pick is in progress"),
+                "Expected cherry-pick precondition message, got: ${thrown.message}",
+            )
+        }
+    }
+
+    @Pull
+    @Test
+    fun `pull refuses when a rebase is in progress`() {
+        withTestSetup(useFakeRemote) {
+            createCommitsFrom(
+                testCase {
+                    repository {
+                        commit {
+                            title = "one"
+                            willPassVerification = true
+                        }
+                        commit {
+                            title = "two"
+                            willPassVerification = true
+                            localRefs += "development"
+                        }
+                    }
+                    checkout = "development"
+                }
+            )
+            gitJaspr.push(stackName = "test-stack")
+            // Drop a rebase-merge sentinel directory.
+            localGit.workingDirectory.resolve(".git/rebase-merge").mkdirs()
+
+            val thrown = assertFailsWith<GitJasprException> { pull() }
+            assertTrue(
+                thrown.message!!.contains("rebase is in progress"),
+                "Expected rebase precondition message, got: ${thrown.message}",
+            )
+        }
+    }
+
     // endregion
 
     // region push tests
