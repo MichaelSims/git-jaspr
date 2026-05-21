@@ -486,6 +486,8 @@ class GitJaspr(
     ): String {
         logger.trace("pull {}", refSpec)
 
+        checkNoOperationInProgress()
+
         val remoteName = config.remoteName
         gitClient.fetch(remoteName)
         val remoteBranches = gitClient.getRemoteBranches(remoteName)
@@ -618,6 +620,45 @@ class GitJaspr(
                     "Please commit or stash them and re-run the command."
             )
         }
+    }
+
+    /**
+     * Refuses to start `pull` when a cherry-pick, rebase, or merge is in progress. Detection is
+     * filesystem-based: each operation drops a sentinel file (or directory) inside the
+     * worktree-specific git dir.
+     */
+    private fun checkNoOperationInProgress() {
+        val gitDir = resolveGitDir()
+        val inProgress =
+            when {
+                gitDir.resolve("CHERRY_PICK_HEAD").exists() -> "cherry-pick"
+                gitDir.resolve("MERGE_HEAD").exists() -> "merge"
+                gitDir.resolve("rebase-merge").exists() -> "rebase"
+                gitDir.resolve("rebase-apply").exists() -> "rebase"
+                else -> null
+            }
+        if (inProgress != null) {
+            throw GitJasprException(
+                "Cannot pull: a $inProgress is in progress. " +
+                    "Complete or abort it before re-running `jaspr pull`."
+            )
+        }
+    }
+
+    /**
+     * Returns the worktree-specific git dir. Unlike [resolveGitCommonDir], this points at the
+     * per-worktree dir where per-checkout state like CHERRY_PICK_HEAD, MERGE_HEAD, and
+     * rebase-merge/rebase-apply live.
+     */
+    private fun resolveGitDir(): File {
+        val process =
+            ProcessBuilder("git", "rev-parse", "--git-dir")
+                .directory(config.workingDirectory)
+                .redirectErrorStream(true)
+                .start()
+        val output = process.inputStream.bufferedReader().readText().trim()
+        check(process.waitFor() == 0) { "Failed to resolve git dir: $output" }
+        return config.workingDirectory.resolve(output).canonicalFile
     }
 
     private fun noOpMessage(reason: NoOpReason): String =
