@@ -130,7 +130,7 @@ The "cherry-pick LO onto remote tip" path is more destructive than the
 other action paths: it rewrites local commit SHAs for the shared portion,
 not just appends. Pre-pull HEAD remains in the reflog, so recovery is
 `git reset --hard HEAD@{1}`. Whether to add a dedicated backup ref
-(consistent with the future `--theirs` work) is open; current
+(consistent with `--theirs` resolution which already uses backup refs) is open; current
 intent is "reflog suffices" but pull's output for this path should be
 explicit about what happened:
 
@@ -203,13 +203,20 @@ When the compare contains any DIVERGED row (same commit-id, different
 content), pull punts by default. Auto-merging two rewrites of the same
 commit-id non-interactively requires policy the user must opt into.
 
-A future `--theirs` flag (sketched here, not committed in this ADR) would
-let the user opt in to taking the remote's content unconditionally for all
-DIVERGED rows. The flag would be marked dangerous in help text, write a
-backup ref to `refs/jaspr-backup/pre-pull-<timestamp>` before resolution,
-and surface the backup ref in pull's output for one-command recovery. Only
-`--theirs` is considered; symmetric variants (`--ours`, date-based picks,
-per-row interactive selection) are deliberately out of scope.
+The `--theirs` flag is the only opt-in resolution variant. When supplied,
+pull takes the remote's content unconditionally for all DIVERGED rows by
+cherry-picking remote's version of each diverged commit-id, then re-
+dispatching through the auto-resolve table on the resulting (no-
+divergence) shape. The flag is marked dangerous in help text. Before any
+destructive change, pull writes a backup ref to
+`refs/jaspr-backup/pre-pull-<unix-timestamp>` and surfaces the ref in
+pull's output for one-command recovery (`git reset --hard <ref>`). If the
+post-resolution dispatch would punt (e.g., mixed unique work still
+present after divergence is resolved), or if any subsequent step fails,
+pull rolls back to the backup ref and reports the rollback.
+
+Symmetric variants (`--ours`, date-based picks, per-row interactive
+selection) are deliberately out of scope.
 
 ## Alternatives Considered
 
@@ -266,7 +273,7 @@ was considered and rejected. Commit dates are unreliable as a "who is newer"
 signal in rebase-heavy workflows: rebasing without any content change updates
 the committer date. "Remote-newer wins" is the only direction that actually
 acts (local-newer-wins is a no-op), and it silently overwrites local edits.
-A future `--theirs` flag makes "take remote's content" an explicit user
+The `--theirs` flag makes "take remote's content" an explicit user
 choice with a backup-ref safety net rather than a default.
 
 ## Consequences
@@ -276,7 +283,8 @@ choice with a backup-ref safety net rather than a default.
 - The diverged-stack message in `appendNamedStackInfo` can point at
   `jaspr pull` once it ships, in addition to `jaspr compare`.
 - Backup refs under `refs/jaspr-backup/` enter the jaspr namespace,
-  reserved for the future `--theirs` opt-in.
+  used by the `--theirs` opt-in to save recovery state before destructive
+  divergence resolution.
 - Conflict-handling code stays minimal: the probe-before-apply pattern means
   no `--continue` state machine to maintain.
 - Shapes pull declines to handle (interleaved REMOTE_ONLY, mixed
@@ -288,7 +296,6 @@ choice with a backup-ref safety net rather than a default.
 
 ## Future Considerations
 
-- A `--theirs` flag for divergence resolution.
 - A backup-ref retention policy under `refs/jaspr-backup/`.
 - Pull suggesting `jaspr push` when local's base is ahead of remote's.
 - Compressing identical prefix runs in pull's output for long stacks.

@@ -52,8 +52,9 @@ interface GitJasprTest {
     ) = gitJaspr.getCompareString(refSpec).also(::print)
 
     fun GitHubTestHarness.pull(
-        refSpec: RefSpec = RefSpec(DEFAULT_LOCAL_OBJECT, DEFAULT_TARGET_REF)
-    ) = gitJaspr.pull(refSpec).also(::print)
+        refSpec: RefSpec = RefSpec(DEFAULT_LOCAL_OBJECT, DEFAULT_TARGET_REF),
+        theirs: Boolean = false,
+    ) = gitJaspr.pull(refSpec, theirs).also(::print)
 
     fun GitHubTestHarness.graphRefs(
         refSpec: RefSpec = RefSpec(DEFAULT_LOCAL_OBJECT, DEFAULT_TARGET_REF)
@@ -3370,6 +3371,49 @@ interface GitJasprTest {
                 thrown.message!!.contains("cherry-pick is in progress"),
                 "Expected cherry-pick precondition message, got: ${thrown.message}",
             )
+        }
+    }
+
+    @Pull
+    @Test
+    fun `pull --theirs resolves content divergence by adopting remote's version`() {
+        withTestSetup(useFakeRemote) {
+            createCommitsFrom(
+                testCase {
+                    repository {
+                        commit {
+                            title = "one"
+                            willPassVerification = true
+                        }
+                        commit {
+                            title = "two"
+                            willPassVerification = true
+                            localRefs += "development"
+                        }
+                    }
+                    checkout = "development"
+                }
+            )
+            gitJaspr.push(stackName = "test-stack")
+
+            // Amend "two" locally with content that conflicts with remote's version.
+            // Remote still has the original "two"; local now has a divergent "two".
+            localGit.workingDirectory.resolve("two.txt").writeText("locally amended content\n")
+            localGit.add("two.txt")
+            localGit.commit("two", footerLines = mapOf(COMMIT_ID_LABEL to "two"), amend = true)
+
+            val output = pull(theirs = true)
+
+            assertTrue(
+                output.contains("refs/jaspr-backup/pre-pull-"),
+                "Expected backup ref message; got: $output",
+            )
+            assertTrue(
+                output.contains("Adopted remote's version of 1 diverged commit"),
+                "Expected resolution summary; got: $output",
+            )
+            // Local's "two.txt" should now match remote's version, not the locally amended one.
+            assertEquals("Title: two\n", localGit.workingDirectory.resolve("two.txt").readText())
         }
     }
 

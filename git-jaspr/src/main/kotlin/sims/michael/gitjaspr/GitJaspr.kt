@@ -485,9 +485,10 @@ class GitJaspr(
      */
     fun pull(
         refSpec: RefSpec = RefSpec(DEFAULT_LOCAL_OBJECT, DEFAULT_TARGET_REF),
+        theirs: Boolean = false,
         theme: Theme = MonoTheme,
     ): String {
-        logger.trace("pull {}", refSpec)
+        logger.trace("pull {} theirs={}", refSpec, theirs)
 
         checkNoOperationInProgress()
 
@@ -528,9 +529,114 @@ class GitJaspr(
                 computeDivergedCommitIds(localStack, remoteStack, classifier)
             }
 
+        if (theirs && divergedCommitIds.isNotEmpty()) {
+            return resolveTheirsAndPull(
+                localStack,
+                remoteStack,
+                divergedCommitIds,
+                baseRelation,
+                remoteStackRef,
+                refSpec,
+                targetRefFull,
+                theme,
+            )
+        }
+
         val plan =
             getPullPlan(localStack, remoteStack, remoteTipSha, baseRelation, divergedCommitIds)
         return executePullPlan(plan, theme)
+    }
+
+    /**
+     * Resolves DIVERGED rows by replacing each local diverged commit with the remote's version of
+     * that commit-id, then re-dispatches through [getPullPlan]. Probes the cherry-pick queue before
+     * any destructive change; if the probe is clean, writes a recovery ref to
+     * `refs/jaspr-backup/pre-pull-<unix-timestamp>` and does the work. Rolls back to the backup ref
+     * if the re-dispatched plan punts or any subsequent step fails.
+     */
+    private fun resolveTheirsAndPull(
+        localStack: List<Commit>,
+        remoteStack: List<Commit>,
+        divergedCommitIds: Set<String>,
+        baseRelation: BaseRelation,
+        remoteStackRef: String,
+        refSpec: RefSpec,
+        targetRefFull: String,
+        theme: Theme,
+    ): String {
+        requireCleanWorkingTree()
+
+        val remoteById = remoteStack.filter { it.id != null }.associateBy { checkNotNull(it.id) }
+        val resolvedQueue = localStack.map { commit ->
+            val id = commit.id
+            if (id != null && id in divergedCommitIds) {
+                checkNotNull(remoteById[id]) { "DIVERGED commit-id $id missing from remote" }
+            } else {
+                commit
+            }
+        }
+
+        val localBase =
+            gitClient.mergeBase(refSpec.localRef, targetRefFull)
+                ?: throw GitJasprException("Could not resolve local base for --theirs resolution.")
+        probeCherryPickQueue(resolvedQueue, localBase)
+
+        val currentHead = gitClient.log(GitClient.HEAD, 1).single().hash
+        val backupRef = "refs/jaspr-backup/pre-pull-${System.currentTimeMillis() / 1000}"
+        saveBackupRef(backupRef, currentHead)
+
+        try {
+            gitClient.reset(localBase)
+            for (commit in resolvedQueue) gitClient.cherryPick(commit)
+        } catch (e: Exception) {
+            gitClient.reset(backupRef)
+            throw e
+        }
+
+        val newLocalStack =
+            gitClient.getLocalCommitStack(config.remoteName, refSpec.localRef, refSpec.remoteRef)
+        val newRemoteTipSha = gitClient.log(remoteStackRef, 1).single().hash
+        val newPlan =
+            getPullPlan(newLocalStack, remoteStack, newRemoteTipSha, baseRelation, emptySet())
+
+        if (newPlan is PullPlan.Punt) {
+            gitClient.reset(backupRef)
+            throw GitJasprException(
+                "Resolved divergence with --theirs, but pull still can't complete: " +
+                    puntMessage(newPlan.reason) +
+                    " Rolled back to $backupRef."
+            )
+        }
+
+        val executionMessage =
+            try {
+                executePullPlan(newPlan, theme)
+            } catch (e: Exception) {
+                gitClient.reset(backupRef)
+                throw e
+            }
+
+        val n = divergedCommitIds.size
+        return buildString {
+            append(executionMessage)
+            appendLine(
+                theme.success(
+                    "Adopted remote's version of $n diverged ${commitOrCommits(n)}. " +
+                        "Backup ref saved: $backupRef. " +
+                        "Recover with `git reset --hard $backupRef`."
+                )
+            )
+        }
+    }
+
+    private fun saveBackupRef(refName: String, sha: String) {
+        val proc =
+            ProcessBuilder("git", "update-ref", refName, sha)
+                .directory(config.workingDirectory)
+                .redirectErrorStream(true)
+                .start()
+        val output = proc.inputStream.bufferedReader().readText().trim()
+        check(proc.waitFor() == 0) { "Failed to save backup ref $refName: $output" }
     }
 
     private fun computeBaseRelation(localBase: String?, remoteBase: String?): BaseRelation {

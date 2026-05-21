@@ -644,8 +644,18 @@ class Pull : GitJasprSubcommand() {
 
     private val targetRef by TargetRefOptions()
 
+    private val theirs by
+        option("--theirs").flag(default = false).help {
+            "DANGEROUS. Resolve divergent commits (same commit-id, different content or " +
+                "message) by replacing your local version with the remote's. Use only after " +
+                "running `jaspr compare` to inspect what diverges. Before any destructive " +
+                "change, pull writes a recovery ref to " +
+                "`refs/jaspr-backup/pre-pull-<unix-timestamp>`; the ref is printed in " +
+                "pull's output for one-command recovery via `git reset --hard <ref>`."
+        }
+
     override suspend fun doRun() {
-        print(appWiring.gitJaspr.pull(targetRef.refSpec, theme))
+        print(appWiring.gitJaspr.pull(targetRef.refSpec, theirs, theme))
     }
 }
 
