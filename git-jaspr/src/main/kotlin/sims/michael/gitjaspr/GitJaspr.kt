@@ -248,18 +248,21 @@ class GitJaspr(
                     } else if (numCommitsBehind > 0 && numCommitsAhead == 0) {
                         theme.warning(
                             "Your stack is behind the remote stack in '$remoteName' by " +
-                                "$numCommitsBehind ${commitOrCommits(numCommitsBehind)}."
+                                "$numCommitsBehind ${commitOrCommits(numCommitsBehind)}. " +
+                                "Run `jaspr pull` to incorporate them."
                         )
                     } else if (numCommitsBehind == 0) { // && numCommitsAhead > 0
                         theme.warning(
                             "Your stack is ahead of the remote stack in '$remoteName' by " +
-                                "$numCommitsAhead ${commitOrCommits(numCommitsAhead)}."
+                                "$numCommitsAhead ${commitOrCommits(numCommitsAhead)}. " +
+                                "Run `jaspr push` to publish them."
                         )
                     } else { // numBehind > 0 && numCommitsAhead > 0
-                        theme.error(
-                            "Your stack and the remote stack in '$remoteName' have diverged, and have " +
-                                "$numCommitsAhead and $numCommitsBehind different commits each, " +
-                                "respectively."
+                        theme.warning(
+                            "Your stack and the remote stack in '$remoteName' have diverged " +
+                                "($numCommitsAhead ${commitOrCommits(numCommitsAhead)} ahead, " +
+                                "$numCommitsBehind ${commitOrCommits(numCommitsBehind)} behind). " +
+                                "Run `jaspr compare` to see what's different."
                         )
                     }
                 )
