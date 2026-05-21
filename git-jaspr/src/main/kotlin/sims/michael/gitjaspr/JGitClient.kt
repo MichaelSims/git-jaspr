@@ -21,6 +21,8 @@ import org.eclipse.jgit.lib.Constants
 import org.eclipse.jgit.lib.PersonIdent
 import org.eclipse.jgit.lib.RefUpdate.Result.NO_CHANGE
 import org.eclipse.jgit.revwalk.RevCommit
+import org.eclipse.jgit.revwalk.RevWalk
+import org.eclipse.jgit.revwalk.filter.RevFilter
 import org.eclipse.jgit.transport.PushResult
 import org.eclipse.jgit.transport.RefLeaseSpec
 import org.eclipse.jgit.transport.RemoteRefUpdate
@@ -616,6 +618,45 @@ class JGitClient(
                 repo.resolve(ref)?.let { objectId -> repo.parseCommit(objectId).toCommit(git) }
             }
         }
+    }
+
+    override fun mergeBase(a: String, b: String): String? {
+        logger.trace("mergeBase {} {}", a, b)
+        return useGit { git ->
+            val repo = git.repository
+            val aId = repo.resolve(a) ?: return@useGit null
+            val bId = repo.resolve(b) ?: return@useGit null
+            RevWalk(repo).use { walk ->
+                walk.revFilter = RevFilter.MERGE_BASE
+                walk.markStart(walk.parseCommit(aId))
+                walk.markStart(walk.parseCommit(bId))
+                walk.next()?.name
+            }
+        }
+    }
+
+    override fun isAncestor(ancestor: String, descendant: String): Boolean {
+        logger.trace("isAncestor {} {}", ancestor, descendant)
+        return useGit { git ->
+            val repo = git.repository
+            val ancestorId = repo.resolve(ancestor) ?: return@useGit false
+            val descendantId = repo.resolve(descendant) ?: return@useGit false
+            RevWalk(repo).use { walk ->
+                walk.isMergedInto(walk.parseCommit(ancestorId), walk.parseCommit(descendantId))
+            }
+        }
+    }
+
+    override fun mergeTreeWriteTree(base: String, ours: String, theirs: String): String? {
+        // JGit has merge primitives (ResolveMerger, RecursiveMerger) but the API surface needed to
+        // reproduce `git merge-tree --write-tree` semantics (purely in-memory, no working tree
+        // touched, returns result tree SHA on clean merge or null on conflict) is non-trivial.
+        // Production wiring routes this method through CliGitClient via OptimizedCliGitClient;
+        // JGitClient is not used directly in production.
+        throw UnsupportedOperationException(
+            "mergeTreeWriteTree is not implemented in JGitClient; use CliGitClient or " +
+                "OptimizedCliGitClient instead"
+        )
     }
 
     private inline fun <T> useGit(block: (Git) -> T): T = Git.open(workingDirectory).use(block)

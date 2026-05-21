@@ -42,6 +42,9 @@ private constructor(private val cliGitClient: CliGitClient, private val jGitClie
         cliGitClient.pushWithLease(refSpecs, remoteName, forceWithLeaseRefs)
     }
 
+    override fun mergeTreeWriteTree(base: String, ours: String, theirs: String): String? =
+        cliGitClient.mergeTreeWriteTree(base, ours, theirs)
+
     companion object {
         operator fun invoke(
             workingDirectory: File,

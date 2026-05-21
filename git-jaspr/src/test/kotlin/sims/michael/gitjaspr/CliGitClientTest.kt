@@ -1096,6 +1096,97 @@ class CliGitClientTest : GitClientTest {
         }
     }
 
+    @Test
+    fun `mergeTreeWriteTree returns result tree SHA on a clean merge`() {
+        withMergeRepo { workDir, baseSha, oursSha, theirsSha ->
+            val git = CliGitClient(workDir)
+            val result = git.mergeTreeWriteTree(baseSha, oursSha, theirsSha)
+            assertNotNull(result)
+            // The result should be a valid tree SHA. Round-tripping it through `git rev-parse`
+            // would confirm, but checking the format (40 hex chars) is sufficient for a unit test.
+            assertTrue(
+                result!!.matches("^[0-9a-f]{40}$".toRegex()),
+                "expected tree SHA, got: $result",
+            )
+        }
+    }
+
+    @Test
+    fun `mergeTreeWriteTree returns null when the merge would conflict`() {
+        withConflictingMergeRepo { workDir, baseSha, oursSha, theirsSha ->
+            val git = CliGitClient(workDir)
+            assertNull(git.mergeTreeWriteTree(baseSha, oursSha, theirsSha))
+        }
+    }
+
+    /**
+     * Sets up a small repo with three commits: a base, a divergent "ours" commit touching one file,
+     * and a divergent "theirs" commit touching a different file. The merge of ours/theirs against
+     * the base is clean.
+     */
+    private fun withMergeRepo(block: (File, String, String, String) -> Unit) {
+        val workDir = Files.createTempDirectory("jaspr-merge-test").toFile()
+        try {
+            shellGit(workDir, "init", "--initial-branch=main")
+            shellGit(workDir, "config", "user.email", "test@example.com")
+            shellGit(workDir, "config", "user.name", "Test")
+            workDir.resolve("shared.txt").writeText("base\n")
+            shellGit(workDir, "add", "shared.txt")
+            shellGit(workDir, "commit", "-m", "base")
+            val baseSha = shellGit(workDir, "rev-parse", "HEAD")
+            workDir.resolve("ours.txt").writeText("ours\n")
+            shellGit(workDir, "add", "ours.txt")
+            shellGit(workDir, "commit", "-m", "ours")
+            val oursSha = shellGit(workDir, "rev-parse", "HEAD")
+            shellGit(workDir, "reset", "--hard", baseSha)
+            workDir.resolve("theirs.txt").writeText("theirs\n")
+            shellGit(workDir, "add", "theirs.txt")
+            shellGit(workDir, "commit", "-m", "theirs")
+            val theirsSha = shellGit(workDir, "rev-parse", "HEAD")
+            block(workDir, baseSha, oursSha, theirsSha)
+        } finally {
+            workDir.deleteRecursively()
+        }
+    }
+
+    /**
+     * Same shape as [withMergeRepo] but ours and theirs both modify the same line of the same file,
+     * so the merge conflicts.
+     */
+    private fun withConflictingMergeRepo(block: (File, String, String, String) -> Unit) {
+        val workDir = Files.createTempDirectory("jaspr-merge-conflict-test").toFile()
+        try {
+            shellGit(workDir, "init", "--initial-branch=main")
+            shellGit(workDir, "config", "user.email", "test@example.com")
+            shellGit(workDir, "config", "user.name", "Test")
+            val shared = workDir.resolve("shared.txt")
+            shared.writeText("base\n")
+            shellGit(workDir, "add", "shared.txt")
+            shellGit(workDir, "commit", "-m", "base")
+            val baseSha = shellGit(workDir, "rev-parse", "HEAD")
+            shared.writeText("ours\n")
+            shellGit(workDir, "add", "shared.txt")
+            shellGit(workDir, "commit", "-m", "ours")
+            val oursSha = shellGit(workDir, "rev-parse", "HEAD")
+            shellGit(workDir, "reset", "--hard", baseSha)
+            shared.writeText("theirs\n")
+            shellGit(workDir, "add", "shared.txt")
+            shellGit(workDir, "commit", "-m", "theirs")
+            val theirsSha = shellGit(workDir, "rev-parse", "HEAD")
+            block(workDir, baseSha, oursSha, theirsSha)
+        } finally {
+            workDir.deleteRecursively()
+        }
+    }
+
+    private fun shellGit(dir: File, vararg args: String): String {
+        val proc =
+            ProcessBuilder(listOf("git") + args).directory(dir).redirectErrorStream(true).start()
+        val output = proc.inputStream.bufferedReader().readText().trim()
+        check(proc.waitFor() == 0) { "git ${args.toList()} failed: $output" }
+        return output
+    }
+
     // Helper to reduce boilerplate, delegates to GitHubTestHarness.withTestSetup but applies our
     // factory function for the git client instances
     private fun withTestSetup(block: suspend GitHubTestHarness.() -> Unit): GitHubTestHarness =
