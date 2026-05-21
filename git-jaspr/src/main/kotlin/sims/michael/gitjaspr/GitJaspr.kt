@@ -473,6 +473,138 @@ class GitJaspr(
         return refs.distinct()
     }
 
+    /**
+     * Computes a [PullPlan] for the local stack and executes the no-op, punt, and reset-to-remote
+     * paths. Cherry-pick paths are not yet implemented; they throw [UnsupportedOperationException]
+     * and will be filled in by a follow-up commit. Returns the user-facing output string.
+     *
+     * See `doc/adr/0003-pull-command-scope.md` for the decision tree.
+     */
+    fun pull(
+        refSpec: RefSpec = RefSpec(DEFAULT_LOCAL_OBJECT, DEFAULT_TARGET_REF),
+        theme: Theme = MonoTheme,
+    ): String {
+        logger.trace("pull {}", refSpec)
+
+        val remoteName = config.remoteName
+        gitClient.fetch(remoteName)
+        val remoteBranches = gitClient.getRemoteBranches(remoteName)
+        val localStack =
+            gitClient.getLocalCommitStack(remoteName, refSpec.localRef, refSpec.remoteRef)
+        if (localStack.isEmpty()) return theme.muted("Stack is empty; nothing to pull.") + "\n"
+
+        val stackName =
+            when (val result = getExistingStackName(localStack, remoteBranches)) {
+                is Found -> result.name
+                is MultipleStacksContainCommit ->
+                    throw GitJasprException(
+                        "Cannot pull: commits exist in multiple stacks: " +
+                            result.stackNames.joinToString(", ")
+                    )
+                NotFound ->
+                    throw GitJasprException(
+                        "No remote stack to pull from. Push first with `jaspr push`."
+                    )
+            }
+        val namedStackRef =
+            checkNotNull(RemoteNamedStackRef.parse(stackName, config.remoteNamedStackBranchPrefix))
+        val remoteStackRef = "$remoteName/$stackName"
+        val remoteStack =
+            gitClient.getLocalCommitStack(remoteName, remoteStackRef, namedStackRef.targetRef)
+        val remoteTipSha = gitClient.log(remoteStackRef, 1).single().hash
+
+        val targetRefFull = "$remoteName/${namedStackRef.targetRef}"
+        val localBase = gitClient.mergeBase(refSpec.localRef, targetRefFull)
+        val remoteBase = gitClient.mergeBase(remoteStackRef, targetRefFull)
+        val baseRelation = computeBaseRelation(localBase, remoteBase)
+
+        val divergedCommitIds =
+            DivergenceClassifier(config.workingDirectory, getJasprDir()).use { classifier ->
+                computeDivergedCommitIds(localStack, remoteStack, classifier)
+            }
+
+        val plan =
+            getPullPlan(localStack, remoteStack, remoteTipSha, baseRelation, divergedCommitIds)
+        return executePullPlan(plan, theme)
+    }
+
+    private fun computeBaseRelation(localBase: String?, remoteBase: String?): BaseRelation {
+        if (localBase == null || remoteBase == null) return BaseRelation.UNRELATED
+        if (localBase == remoteBase) return BaseRelation.EQUAL
+        if (gitClient.isAncestor(localBase, remoteBase)) return BaseRelation.REMOTE_AHEAD
+        if (gitClient.isAncestor(remoteBase, localBase)) return BaseRelation.LOCAL_AHEAD
+        return BaseRelation.UNRELATED
+    }
+
+    private fun computeDivergedCommitIds(
+        local: List<Commit>,
+        remote: List<Commit>,
+        classifier: DivergenceClassifier,
+    ): Set<String> {
+        val localById = local.filter { it.id != null }.associateBy { checkNotNull(it.id) }
+        val remoteById = remote.filter { it.id != null }.associateBy { checkNotNull(it.id) }
+        val sharedIds = localById.keys intersect remoteById.keys
+        return sharedIds
+            .filter { id ->
+                val localCommit = checkNotNull(localById[id])
+                val remoteCommit = checkNotNull(remoteById[id])
+                classifier.classify(localCommit.hash, remoteCommit.hash) ==
+                    DivergenceClassifier.Result.DIVERGENT
+            }
+            .toSet()
+    }
+
+    private fun executePullPlan(plan: PullPlan, theme: Theme): String = buildString {
+        when (plan) {
+            is PullPlan.NoOp -> appendLine(theme.muted(noOpMessage(plan.reason)))
+            is PullPlan.Punt -> appendLine(theme.warning(puntMessage(plan.reason)))
+            is PullPlan.HardResetToRemoteTip -> {
+                if (gitClient.hasUncommittedChangesToTrackedFiles()) {
+                    throw GitJasprException(
+                        "Your working directory has uncommitted changes to tracked files. " +
+                            "Please commit or stash them and re-run the command."
+                    )
+                }
+                gitClient.reset(plan.remoteTipSha)
+                appendLine(theme.success("Pulled; your stack now matches remote."))
+            }
+            is PullPlan.CherryPickLoOntoRemoteTip,
+            is PullPlan.CherryPickRoOntoLocalHead ->
+                throw UnsupportedOperationException(
+                    "Cherry-pick paths for jaspr pull are not yet implemented"
+                )
+        }
+    }
+
+    private fun noOpMessage(reason: NoOpReason): String =
+        when (reason) {
+            NoOpReason.UP_TO_DATE -> "Your stack is up to date with the remote."
+            NoOpReason.LOCAL_AHEAD ->
+                "Your stack is ahead of the remote. Run `jaspr push` to bring remote in sync."
+            NoOpReason.LOCAL_HAS_UNPUSHED ->
+                "Your stack has local commits not yet on the remote. " +
+                    "Run `jaspr push` to bring remote in sync."
+            NoOpReason.PURE_REORDERING ->
+                "Your stack and the remote stack contain the same commits in a different " +
+                    "order. Nothing for pull to ingest. Run `jaspr compare` to see the " +
+                    "reordering."
+        }
+
+    private fun puntMessage(reason: PuntReason): String =
+        when (reason) {
+            PuntReason.DIVERGED ->
+                "Pull won't auto-merge divergence (same commit-id, different content or " +
+                    "message). Run `jaspr compare` to see what diverges, then use git " +
+                    "directly."
+            PuntReason.MIXED_UNIQUE_WORK ->
+                "Your stack and the remote stack each have unique commits. Pull can't " +
+                    "determine the correct ordering. Run `jaspr compare` to inspect, then " +
+                    "use git directly."
+            PuntReason.UNRELATED_BASES ->
+                "Your stack and the remote stack are rooted on unrelated histories. " +
+                    "Pull can't handle this. Use git directly to investigate."
+        }
+
     suspend fun push(
         refSpec: RefSpec = RefSpec(DEFAULT_LOCAL_OBJECT, DEFAULT_TARGET_REF),
         stackName: String? = null,

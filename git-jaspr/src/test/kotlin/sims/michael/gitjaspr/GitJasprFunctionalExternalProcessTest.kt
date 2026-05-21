@@ -122,6 +122,29 @@ class GitJasprFunctionalExternalProcessTest : GitJasprTest {
         )
     }
 
+    override fun GitHubTestHarness.pull(refSpec: RefSpec): String {
+        return executeCli(
+            scratchDir = scratchDir,
+            remoteUri = remoteUri,
+            remoteName = remoteName,
+            extraCliArgs = emptyList(),
+            homeDirConfig = buildHomeDirConfig(),
+            repoDirConfig = emptyMap(),
+            strings =
+                listOf(
+                    "--remote-name",
+                    remoteName,
+                    "pull",
+                    "--target",
+                    refSpec.remoteRef,
+                    "--local",
+                    refSpec.localRef,
+                ),
+            invokeLocation = localRepo,
+            javaOptions = javaOptions,
+        )
+    }
+
     override suspend fun GitHubTestHarness.merge(refSpec: RefSpec, count: Int?) {
         executeCli(
             scratchDir = scratchDir,

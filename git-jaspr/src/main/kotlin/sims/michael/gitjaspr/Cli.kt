@@ -615,6 +615,40 @@ class Graph : GitJasprSubcommand() {
     }
 }
 
+class Pull : GitJasprSubcommand() {
+    // language=Markdown
+    override fun help(context: Context) =
+        """
+        Incorporate remote-only commits from the named stack into your local stack.
+
+        Pull is non-interactive and transactional: it either completes its work
+        without conflict, or refuses to start with a clear message pointing at
+        `jaspr compare` and git. See ADR 0003 for the full decision tree.
+
+        Cases pull handles automatically:
+
+        * **fast-forward** — the remote has new commits or has rebased the shared
+          portion; pull adopts the remote stack via `git reset --hard`.
+        * **local-ahead / unpushed local work** — nothing to do; pull reports the
+          state and suggests `jaspr push`.
+
+        Cases pull refuses to handle (use git directly):
+
+        * **divergence** — a shared commit has different content or message on the
+          two sides.
+        * **mixed unique work** — both sides have commits the other doesn't.
+        * **unrelated bases** — the two stack bases share no history.
+
+        """
+            .trimIndent()
+
+    private val targetRef by TargetRefOptions()
+
+    override suspend fun doRun() {
+        print(appWiring.gitJaspr.pull(targetRef.refSpec, theme))
+    }
+}
+
 class Push : GitJasprSubcommand(helpText = "Push commits and create/update PRs") {
     private val targetRef by TargetRefOptions()
 
@@ -1874,6 +1908,7 @@ fun buildCommand(): SuspendingCliktCommand =
             Status(),
             Compare(),
             Graph(),
+            Pull(),
             Push(),
             Merge(),
             AutoMerge(),
