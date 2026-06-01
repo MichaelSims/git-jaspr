@@ -243,8 +243,6 @@ fun renderCompare(
             ?.plus(2) ?: 0
 
     appendLine(theme.heading("LOCAL".padEnd(leftWidth + markerWidth) + "REMOTE ($namedStackRef)"))
-    appendLine()
-
     for (row in rows) {
         val isReorderedRow = reorderedByRow.getValue(row)
         val leftRaw = formatCell(row, isLocal = true, maxSubjectLength, isReorderedRow)
