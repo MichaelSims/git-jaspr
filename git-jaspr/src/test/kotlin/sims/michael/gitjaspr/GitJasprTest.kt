@@ -6516,7 +6516,7 @@ interface GitJasprTest {
 
     @Clean
     @Test
-    fun `clean reports orphaned named stack branches when underlying jaspr branches are gone`() {
+    fun `clean reports abandoned named stack branches when underlying jaspr branches are gone`() {
         withTestSetup(useFakeRemote) {
             createCommitsFrom(
                 testCase {
@@ -6554,7 +6554,7 @@ interface GitJasprTest {
             val plan = gitJaspr.getCleanPlan(cleanAbandonedPrs = false, cleanAllCommits = false)
             assertEquals(
                 sortedSetOf(RemoteNamedStackRef("my-stack").name()),
-                plan.orphanedNamedStackBranches,
+                plan.abandonedNamedStackBranches,
             )
         }
     }
