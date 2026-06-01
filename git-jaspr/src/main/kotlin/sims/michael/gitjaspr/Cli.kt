@@ -939,16 +939,22 @@ class Checkout : GitJasprSubcommand(helpText = "Check out an existing named stac
         val gitJaspr = appWiring.gitJaspr
         val config = appWiring.config
         val target = targetOpts.target
-        val allStacks = gitJaspr.getAllNamedStacks()
-        val stacks = allStacks.filter { it.targetRef == target }
-        if (stacks.isEmpty()) {
+        val allEntries = gitJaspr.getAllNamedStacksWithStatus()
+        // Empty stacks (already merged into target) aren't useful to check out interactively, but
+        // the user can still reach them via -n NAME for inspection.
+        val entries = allEntries.filter { it.ref.targetRef == target }
+        val selectableEntries = entries.filter { !it.isEmpty }
+        if (selectableEntries.isEmpty()) {
             renderer.error {
                 buildString {
                     append(
                         "No named stacks found targeting '${entity(target)}' " +
                             "(searching ${entity("${config.remoteNamedStackBranchPrefix}/$target/*")})."
                     )
-                    val otherStacks = allStacks.filter { it.targetRef != target }
+                    val otherStacks =
+                        allEntries
+                            .filter { it.ref.targetRef != target && !it.isEmpty }
+                            .map { it.ref }
                     if (otherStacks.isNotEmpty()) {
                         appendLine()
                         appendLine("Named stacks exist for other targets:")
@@ -967,24 +973,30 @@ class Checkout : GitJasprSubcommand(helpText = "Check out an existing named stac
 
         val selected =
             if (name != null) {
-                val found = stacks.find { it.stackName == name }
+                val found = entries.find { it.ref.stackName == name }?.ref
                 if (found == null) {
                     renderer.error {
                         "No named stack '${entity(name)}' found targeting '${entity(target)}'. " +
-                            "Available stacks: ${stacks.joinToString(", ") { entity(it.stackName) }}"
+                            "Available stacks: " +
+                            entries.joinToString(", ") { entity(it.ref.stackName) }
                     }
                     throw ProgramResult(255)
                 }
                 found
             } else {
                 val remoteName = config.remoteName
+                val stacks = selectableEntries.map { it.ref }
+                val abandonedNames =
+                    selectableEntries.filter { it.isAbandoned }.map { it.ref.stackName }.toSet()
                 val refs = stacks.map { "${remoteName}/${it.name()}" }
                 val commits = appWiring.gitClient.getCommits(refs)
-                when (val result = selectViaFzf(stacks, commits, remoteName, target)) {
+                when (
+                    val result = selectViaFzf(stacks, commits, remoteName, target, abandonedNames)
+                ) {
                     is FzfResult.Selected -> result.value
                     is FzfResult.Cancelled -> throw ProgramResult(130)
                     is FzfResult.NotAvailable ->
-                        selectViaPrompt(stacks, commits, remoteName, target)
+                        selectViaPrompt(stacks, commits, remoteName, target, abandonedNames)
                 }
             }
 
@@ -996,6 +1008,7 @@ class Checkout : GitJasprSubcommand(helpText = "Check out an existing named stac
         commits: Map<String, Commit?>,
         remoteName: String,
         target: String,
+        abandonedNames: Set<String>,
     ): FzfResult<RemoteNamedStackRef> {
         if (!useFzf) return FzfResult.NotAvailable
         val prefix = stacks.first().prefix
@@ -1009,14 +1022,19 @@ class Checkout : GitJasprSubcommand(helpText = "Check out an existing named stac
                 val ref = "${remoteName}/${stack.name()}"
                 val commit = commits[ref]
                 val subject = commit?.shortMessage?.let { "  \u001b[97m$it\u001b[0m" }.orEmpty()
+                val marker =
+                    if (stack.stackName in abandonedNames) " \u001b[2m[abandoned]\u001b[0m" else ""
                 val author = commit?.author?.name?.let { "  \u001b[2m<$it>\u001b[0m" }.orEmpty()
-                "\u001b[36m${stack.stackName}\u001b[0m$subject$author"
+                "\u001b[36m${stack.stackName}\u001b[0m$marker$subject$author"
             },
             header = "Named stacks targeting $target:",
             previewCommand =
                 "git log --color=always --graph -20" +
                     " --pretty=format:'%C(red)%h%Creset %s %C(green)(%ar) %C(bold blue)<%an>%Creset'" +
-                    " $remoteName/$prefix/$target/{1}",
+                    " $remoteName/$prefix/$target/{1} ^$remoteName/$target" +
+                    " ; git log --color=always --graph -8" +
+                    " --pretty=format:'%C(dim)%h %s (%ar) <%an>%Creset'" +
+                    " \$(git merge-base $remoteName/$prefix/$target/{1} $remoteName/$target)",
         )
     }
 
@@ -1025,6 +1043,7 @@ class Checkout : GitJasprSubcommand(helpText = "Check out an existing named stac
         commits: Map<String, Commit?>,
         remoteName: String,
         target: String,
+        abandonedNames: Set<String>,
     ): RemoteNamedStackRef {
         val lines = buildList {
             add(theme.heading("Named stacks targeting ${theme.entity(target)}:"))
@@ -1033,9 +1052,11 @@ class Checkout : GitJasprSubcommand(helpText = "Check out an existing named stac
                 val commit = commits[ref]
                 val message = commit?.shortMessage?.let { " ${theme.commitSubject(it)}" }.orEmpty()
                 val author = commit?.author?.name?.let { " ${theme.muted("<$it>")}" }.orEmpty()
+                val marker =
+                    if (stack.stackName in abandonedNames) " ${theme.muted("[abandoned]")}" else ""
                 add(
                     "  ${theme.keyHint("${index + 1}.")} " +
-                        "[${theme.entity(stack.stackName)}]$message$author"
+                        "[${theme.entity(stack.stackName)}]$marker$message$author"
                 )
             }
         }

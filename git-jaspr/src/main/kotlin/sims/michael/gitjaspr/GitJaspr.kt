@@ -2266,6 +2266,53 @@ class GitJaspr(
         }
     }
 
+    data class NamedStackWithStatus(
+        val ref: RemoteNamedStackRef,
+        /** True when the stack has no commits relative to its target (already merged). */
+        val isEmpty: Boolean,
+        /**
+         * True when the stack has commits but none of them have a corresponding jaspr ID branch on
+         * the remote (e.g. PRs were closed and GitHub deleted the per-commit branches). Mutually
+         * exclusive with [isEmpty]; an empty stack is reported with [isAbandoned] = false.
+         */
+        val isAbandoned: Boolean,
+    )
+
+    /**
+     * Returns all named stacks on the remote with their health flags computed in one pass. Costs an
+     * extra [GitClient.getLocalCommitStack] per stack relative to [getAllNamedStacks]; prefer
+     * [getAllNamedStacks] when callers don't need the status.
+     */
+    fun getAllNamedStacksWithStatus(): List<NamedStackWithStatus> {
+        val remoteName = config.remoteName
+        gitClient.fetch(remoteName, prune = true)
+        val remoteBranches = gitClient.getRemoteBranches(remoteName)
+        val remoteJasprCommitIds =
+            remoteBranches
+                .mapNotNull { branch ->
+                    RemoteRef.parse(branch.name, config.remoteBranchPrefix)?.commitId
+                }
+                .toSet()
+        return remoteBranches
+            .mapNotNull { branch ->
+                val ref =
+                    RemoteNamedStackRef.parse(branch.name, config.remoteNamedStackBranchPrefix)
+                        ?: return@mapNotNull null
+                val stack =
+                    gitClient.getLocalCommitStack(
+                        remoteName,
+                        "$remoteName/${branch.name}",
+                        ref.targetRef,
+                    )
+                val isEmpty = stack.isEmpty()
+                val isAbandoned =
+                    !isEmpty &&
+                        stack.mapNotNull(Commit::id).none { id -> id in remoteJasprCommitIds }
+                NamedStackWithStatus(ref, isEmpty = isEmpty, isAbandoned = isAbandoned)
+            }
+            .sortedBy { it.ref.stackName }
+    }
+
     /**
      * Checks out a named stack by creating or switching to a local branch that tracks the remote
      * named stack ref.
