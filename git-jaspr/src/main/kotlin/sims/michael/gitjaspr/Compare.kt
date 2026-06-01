@@ -57,7 +57,9 @@ fun alignStacks(
     val classifiedAligned = classifyDivergedRows(rawRows, classifier)
     val classifiedReordered =
         classifyReorderedRows(classifiedAligned, localById, remoteById, classifier)
-    return assignIndexes(classifiedReordered, localIds.toSet(), remoteIds.toSet())
+    // Render newest commit (tip) at the top to match `jaspr status`. Reversing before
+    // assignIndexes also numbers from the tip, so [1] is the tip and indices ascend downward.
+    return assignIndexes(classifiedReordered.reversed(), localIds.toSet(), remoteIds.toSet())
 }
 
 private fun walkAlignment(
