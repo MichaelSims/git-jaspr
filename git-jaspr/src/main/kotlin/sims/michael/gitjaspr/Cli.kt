@@ -740,7 +740,12 @@ class Push : GitJasprSubcommand(helpText = "Push commits and create/update PRs")
     }
 
     private fun selectNameViaFzf(candidates: List<String>): FzfResult<String> =
-        fzfSelect(items = candidates, displayLine = { it }, header = "Select a stack name:")
+        fzfSelect(
+            items = candidates,
+            displayLine = { it },
+            key = { it },
+            header = "Select a stack name:",
+        )
 
     private fun promptForStackName(suggested: String): String {
         renderer.info {
@@ -996,6 +1001,7 @@ class Checkout : GitJasprSubcommand(helpText = "Check out an existing named stac
         val prefix = stacks.first().prefix
         return fzfSelect(
             items = stacks,
+            key = RemoteNamedStackRef::stackName,
             displayLine = { stack ->
                 // Raw ANSI codes with full resets (\e[0m) instead of Mordant's specific resets
                 // (\e[39m, \e[22m) to work around an fzf rendering bug where the first line in
@@ -1498,6 +1504,7 @@ class Fixup : GitJasprSubcommand(helpText = "Create a fixup commit targeting a s
             } else {
                 fzfSelect(
                     items = stack,
+                    key = Commit::hash,
                     displayLine = { commit ->
                         "\u001b[33m${commit.hash.take(7)}\u001b[0m \u001b[97m${commit.shortMessage}\u001b[0m"
                     },
@@ -1978,16 +1985,29 @@ private sealed interface FzfResult<out T> {
 }
 
 /**
- * Presents [items] in fzf for interactive fuzzy selection. Each item is displayed using
- * [displayLine]; an optional [previewCommand] enables the fzf `--preview` pane.
+ * Presents [items] in fzf for interactive fuzzy selection. [displayLine] produces the visible
+ * (possibly ANSI-colored) representation of each item; [key] returns a stable, plain-text
+ * identifier used for round-tripping the selection back from fzf's stdout.
+ *
+ * Implementation note: each input line is `"<key>\t<displayLine>"`. fzf is told to display only
+ * field 2+ via `--with-nth=2..`, while still echoing the full line on selection. We recover the
+ * chosen item by parsing the leading key field, which is immune to whatever fzf does to the display
+ * portion (ANSI stripping, truncation, etc.). Inside [previewCommand], `{1}` refers to the key.
+ *
+ * Keys must be unique across [items] and must not contain a tab character.
  */
 private fun <T> fzfSelect(
     items: List<T>,
     displayLine: (T) -> String,
+    key: (T) -> String,
     header: String? = null,
     previewCommand: String? = null,
 ): FzfResult<T> {
-    if (items.isEmpty()) return FzfResult.Cancelled
+    val logger = Cli.logger
+    if (items.isEmpty()) {
+        logger.debug("fzfSelect: items empty -> Cancelled")
+        return FzfResult.Cancelled
+    }
     val fzfPath =
         try {
             ProcessBuilder("which", "fzf").redirectErrorStream(true).start().let { proc ->
@@ -1996,14 +2016,18 @@ private fun <T> fzfSelect(
             }
         } catch (_: Exception) {
             null
-        } ?: return FzfResult.NotAvailable
+        } ?: return FzfResult.NotAvailable.also { logger.debug("fzfSelect: fzf not on PATH") }
 
-    val displayLines = items.map(displayLine)
+    val keys = items.map(key)
+    require(keys.none { it.contains('\t') }) { "fzfSelect keys must not contain tab characters" }
+    val inputLines = items.indices.map { i -> "${keys[i]}\t${displayLine(items[i])}" }
     val command = buildList {
         add(fzfPath)
         add("--ansi")
         add("--height=~${items.size + 2}")
         add("--reverse")
+        add("--delimiter=\t")
+        add("--with-nth=2..")
         if (header != null) {
             add("--header=$header")
         }
@@ -2014,15 +2038,21 @@ private fun <T> fzfSelect(
     return try {
         val process = ProcessBuilder(command).redirectError(ProcessBuilder.Redirect.INHERIT).start()
         process.outputStream.bufferedWriter().use { writer ->
-            for (line in displayLines) {
+            for (line in inputLines) {
                 writer.write(line)
                 writer.newLine()
             }
         }
-        val selected = process.inputStream.bufferedReader().readLine()?.trim()
+        val selected = process.inputStream.bufferedReader().readLine()
         if (process.waitFor() != 0) return FzfResult.Cancelled
-        val index = displayLines.indexOfFirst { it == selected }
-        if (index >= 0) FzfResult.Selected(items[index]) else FzfResult.Cancelled
+        val selectedKey = selected?.substringBefore('\t')
+        val index = keys.indexOf(selectedKey)
+        if (index >= 0) {
+            FzfResult.Selected(items[index])
+        } else {
+            logger.debug("fzfSelect: selected key {} did not match any item", selectedKey)
+            FzfResult.Cancelled
+        }
     } catch (_: Exception) {
         FzfResult.NotAvailable
     }
