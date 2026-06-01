@@ -1401,8 +1401,8 @@ class GitJaspr(
      * Empty named stack branches (already-merged stacks) are not included here; those are reported
      * by [getEmptyNamedStackBranches].
      */
-    private fun getOrphanedNamedStackBranches(remoteBranches: List<RemoteBranch>): List<String> {
-        logger.trace("getOrphanedNamedStackBranches")
+    private fun getAbandonedNamedStackBranches(remoteBranches: List<RemoteBranch>): List<String> {
+        logger.trace("getAbandonedNamedStackBranches")
         val remoteJasprCommitIds =
             remoteBranches
                 .mapNotNull { branch ->
@@ -1531,14 +1531,14 @@ class GitJaspr(
          * A list of named stack branches whose underlying jaspr ID branches no longer exist on the
          * remote. The named stack is left over after the underlying work has been cleaned.
          */
-        val orphanedNamedStackBranches: SortedSet<String> = sortedSetOf(),
+        val abandonedNamedStackBranches: SortedSet<String> = sortedSetOf(),
     ) {
         operator fun plus(other: CleanPlan): CleanPlan {
             return CleanPlan(
                 (orphanedBranches + (other.orphanedBranches - abandonedBranches)).toSortedSet(),
                 (emptyNamedStackBranches + other.emptyNamedStackBranches).toSortedSet(),
                 (abandonedBranches + other.abandonedBranches).toSortedSet(),
-                (orphanedNamedStackBranches + other.orphanedNamedStackBranches).toSortedSet(),
+                (abandonedNamedStackBranches + other.abandonedNamedStackBranches).toSortedSet(),
             )
         }
 
@@ -1546,7 +1546,7 @@ class GitJaspr(
             (orphanedBranches +
                     emptyNamedStackBranches +
                     abandonedBranches +
-                    orphanedNamedStackBranches)
+                    abandonedNamedStackBranches)
                 .sorted()
     }
 
@@ -1563,7 +1563,7 @@ class GitJaspr(
 
         val allOrphanedBranches = getOrphanedBranches(remoteBranches, pullRequestHeadRefs)
         val emptyNamedStackBranches = getEmptyNamedStackBranches(remoteBranches)
-        val orphanedNamedStackBranches = getOrphanedNamedStackBranches(remoteBranches)
+        val abandonedNamedStackBranches = getAbandonedNamedStackBranches(remoteBranches)
         val allAbandonedBranches =
             if (cleanAbandonedPrs) {
                 getAbandonedBranches(remoteBranches, pullRequestHeadRefs)
@@ -1598,7 +1598,7 @@ class GitJaspr(
             orphanedBranches.toSortedSet(),
             emptyNamedStackBranches.toSortedSet(),
             abandonedBranches.toSortedSet(),
-            orphanedNamedStackBranches.toSortedSet(),
+            abandonedNamedStackBranches.toSortedSet(),
         )
     }
 
