@@ -1,8 +1,9 @@
-class Jaspr < Formula
+class ${FORMULA_CLASS} < Formula
   desc "Stacked pull requests on GitHub"
   homepage "https://github.com/MichaelSims/git-jaspr"
   version "${VERSION}"
   license "Apache-2.0"
+  ${CONFLICTS_LINE}
 
   on_macos do
     if Hardware::CPU.arm?

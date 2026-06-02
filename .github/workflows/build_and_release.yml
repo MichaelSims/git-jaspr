@@ -29,6 +29,8 @@ jobs:
         with:
           tag_name: ${{ env.TAG }}
           draft: true
+          # SemVer prerelease suffix (e.g., v1.2.3-beta.1) -> mark the release as prerelease.
+          prerelease: ${{ contains(env.TAG, '-') }}
           generate_release_notes: true
 
   native_builds:
@@ -185,6 +187,13 @@ jobs:
           path: source
 
       - name: 'Generate formula'
+        id: generate
+        # SemVer prerelease suffix (e.g., v1.2.3-beta.1) -> publish as jaspr@beta.rb with
+        # a conflicts_with directive so users can't have both stable and beta installed.
+        # Otherwise publish as jaspr.rb (stable). The variant decision and the
+        # CONFLICTS_LINE / FORMULA_CLASS values are set inside this bash step (not via
+        # YAML env from a previous step) because the conflicts_with text contains ": "
+        # which would break YAML parsing if substituted via ${{ ... }}.
         env:
           VERSION: ${{ env.TAG }}
           LINUX_AMD64_SHA256: ${{ steps.checksums.outputs.linux_amd64 }}
@@ -195,7 +204,23 @@ jobs:
           MAN_PAGE_SHA256: ${{ steps.man_page_checksum.outputs.man_page }}
         run: |
           export VERSION="${VERSION#v}"
-          envsubst < source/homebrew/jaspr.rb > jaspr.rb
+          if [[ "$TAG" == *-* ]]; then
+            export FORMULA_CLASS="JasprATBeta"
+            export CONFLICTS_LINE='conflicts_with "jaspr", because: "both install the jaspr binary"'
+            FORMULA_NAME="jaspr@beta"
+          else
+            export FORMULA_CLASS="Jaspr"
+            export CONFLICTS_LINE=""
+            FORMULA_NAME="jaspr"
+          fi
+          # Strip trailing whitespace, then squeeze consecutive blank lines, so the empty
+          # CONFLICTS_LINE in the stable case doesn't leave a literal "  " (indented blank)
+          # plus an adjacent blank in the formula.
+          envsubst < source/homebrew/jaspr.rb \
+            | sed 's/[[:space:]]*$//' \
+            | cat -s \
+            > "${FORMULA_NAME}.rb"
+          echo "formula_name=${FORMULA_NAME}" >> "$GITHUB_OUTPUT"
 
       - name: 'Setup SSH for tap repo'
         uses: webfactory/ssh-agent@v0.10.0
@@ -206,11 +231,13 @@ jobs:
         run: git clone git@github.com:MichaelSims/homebrew-tap.git
 
       - name: 'Update formula'
+        env:
+          FORMULA_NAME: ${{ steps.generate.outputs.formula_name }}
         run: |
-          cp jaspr.rb homebrew-tap/jaspr.rb
+          cp "${FORMULA_NAME}.rb" "homebrew-tap/${FORMULA_NAME}.rb"
           cd homebrew-tap
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add jaspr.rb
-          git commit -m "Update jaspr to ${TAG}"
+          git add "${FORMULA_NAME}.rb"
+          git commit -m "Update ${FORMULA_NAME} to ${TAG}"
           git push
