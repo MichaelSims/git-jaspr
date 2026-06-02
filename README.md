@@ -23,6 +23,19 @@ $ brew update
 $ brew install jaspr
 ```
 
+Beta releases are published as a separate `jaspr@beta` formula in the same tap, tracking the latest `vX.Y.Z-<prerelease>` tag (typically `-beta.N` or `-rc.N`):
+
+```shell
+$ brew install michaelsims/tap/jaspr@beta
+```
+
+`jaspr` and `jaspr@beta` install the same binary, so only one can be installed at a time. To switch channels:
+
+```shell
+$ brew uninstall jaspr        # or jaspr@beta
+$ brew install michaelsims/tap/jaspr@beta   # or jaspr
+```
+
 If this is your first time using Jaspr, you will need to generate a config file with `jaspr init` and update it with a GitHub Personal Access Token (classic) with the permissions `read:org`, `read:user`, `repo`, and 
 `user:email`.
 
