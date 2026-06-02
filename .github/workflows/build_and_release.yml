@@ -188,7 +188,7 @@ jobs:
 
       - name: 'Generate formula'
         id: generate
-        # SemVer prerelease suffix (e.g., v1.2.3-beta.1) -> publish as jaspr@beta.rb with
+        # SemVer prerelease suffix (e.g., v1.2.3-beta.1) -> publish as jaspr-beta.rb with
         # a conflicts_with directive so users can't have both stable and beta installed.
         # Otherwise publish as jaspr.rb (stable). The variant decision and the
         # CONFLICTS_LINE / FORMULA_CLASS values are set inside this bash step (not via
@@ -205,9 +205,9 @@ jobs:
         run: |
           export VERSION="${VERSION#v}"
           if [[ "$TAG" == *-* ]]; then
-            export FORMULA_CLASS="JasprATBeta"
+            export FORMULA_CLASS="JasprBeta"
             export CONFLICTS_LINE='conflicts_with "jaspr", because: "both install the jaspr binary"'
-            FORMULA_NAME="jaspr@beta"
+            FORMULA_NAME="jaspr-beta"
           else
             export FORMULA_CLASS="Jaspr"
             export CONFLICTS_LINE=""
