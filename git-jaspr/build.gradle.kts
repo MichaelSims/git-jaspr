@@ -14,39 +14,51 @@ plugins {
     application
 }
 
-val generateVersionFile by
-    tasks.registering {
-        val outputDir = layout.buildDirectory.dir("generated/source/version")
-        outputs.dir(outputDir)
-        // Always execute but only write when content changes to preserve compileKotlin caching.
-        outputs.upToDateWhen { false }
-        doLast {
-            val version =
-                try {
-                    providers
-                        .exec { commandLine("git", "describe", "--tags") }
-                        .standardOutput
-                        .asText
-                        .get()
-                        .trim()
-                } catch (_: Exception) {
-                    "undefined"
-                }
-            val file = outputDir.get().asFile.resolve("sims/michael/gitjaspr/Version.kt")
-            val content =
-                """
+val generateVersionFile by tasks.registering {
+    val outputDir = layout.buildDirectory.dir("generated/source/version")
+    outputs.dir(outputDir)
+    // Always execute but only write when content changes to preserve compileKotlin caching.
+    outputs.upToDateWhen { false }
+    doLast {
+        val version =
+            try {
+                providers
+                    .exec {
+                        commandLine(
+                            "git",
+                            "describe",
+                            "--tags",
+                            // Restrict to SemVer-shaped tags so that when multiple tags
+                            // point at the same commit (e.g. v2.0-beta-8 and v2.0.0 are
+                            // co-tagged), git describe picks the SemVer one instead of
+                            // falling back to ASCII ordering, where `-` (0x2D) sorts
+                            // before `.` (0x2E).
+                            "--match",
+                            "v[0-9]*.[0-9]*.[0-9]*",
+                        )
+                    }
+                    .standardOutput
+                    .asText
+                    .get()
+                    .trim()
+            } catch (_: Exception) {
+                "undefined"
+            }
+        val file = outputDir.get().asFile.resolve("sims/michael/gitjaspr/Version.kt")
+        val content =
+            """
                 |package sims.michael.gitjaspr
                 |
                 |const val VERSION = "$version"
                 |
                 |"""
-                    .trimMargin()
-            if (!file.exists() || file.readText() != content) {
-                file.parentFile.mkdirs()
-                file.writeText(content)
-            }
+                .trimMargin()
+        if (!file.exists() || file.readText() != content) {
+            file.parentFile.mkdirs()
+            file.writeText(content)
         }
     }
+}
 
 sourceSets.main { kotlin.srcDir(generateVersionFile) }
 
