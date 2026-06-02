@@ -939,6 +939,7 @@ class Checkout : GitJasprSubcommand(helpText = "Check out an existing named stac
         val gitJaspr = appWiring.gitJaspr
         val config = appWiring.config
         val target = targetOpts.target
+        renderer.info { "Finding named stacks (this may take a minute)..." }
         val allEntries = gitJaspr.getAllNamedStacksWithStatus()
         // Empty stacks (already merged into target) aren't useful to check out interactively, but
         // the user can still reach them via -n NAME for inspection.
