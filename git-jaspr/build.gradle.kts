@@ -22,7 +22,19 @@ val generateVersionFile by tasks.registering {
         val version =
             try {
                 providers
-                    .exec { commandLine("git", "describe", "--tags") }
+                    .exec {
+                        commandLine(
+                            "git",
+                            "describe",
+                            "--tags",
+                            // Restrict to SemVer-shaped tags so that when multiple tags point at
+                            // the same commit (e.g. v2.0-beta-8 and v2.0.0 are co-tagged), git
+                            // describe picks the SemVer one instead of falling back to ASCII
+                            // ordering, where `-` (0x2D) sorts before `.` (0x2E).
+                            "--match",
+                            "v[0-9]*.[0-9]*.[0-9]*",
+                        )
+                    }
                     .standardOutput
                     .asText
                     .get()
