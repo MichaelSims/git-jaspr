@@ -152,14 +152,22 @@ class GitJaspr(
 
     /**
      * Returns a strategy that wraps [base] and, after every fresh [getPullRequests] call, persists
-     * the returned PRs (keyed by commit-id) to the nav-status cache.
+     * the returned PRs (keyed by commit-id) to the nav-status cache. Preserves the previously
+     * cached named-stack name when the new commit-id set matches the cached one; clears it when the
+     * set changes (the user switched stacks or pushed new commits), so the next resolve recomputes
+     * rather than rendering with a stale name.
      */
     private fun cachePersistingStrategy(base: GetStatusStringStrategy): GetStatusStringStrategy =
         object : GetStatusStringStrategy by base {
             override suspend fun getPullRequests(commits: List<Commit>): List<PullRequest> {
                 val prs = base.getPullRequests(commits)
                 val byId = prs.mapNotNull { pr -> pr.commitId?.let { it to pr } }.toMap()
-                writeNavStatusCache(NavStatusCache(byId))
+                val existing = readNavStatusCache()
+                val preservedName =
+                    if (existing?.pullRequestsByCommitId?.keys == byId.keys) {
+                        existing.namedStackName
+                    } else null
+                writeNavStatusCache(NavStatusCache(byId, preservedName))
                 return prs
             }
         }
@@ -196,6 +204,23 @@ class GitJaspr(
 
         val numCommitsBehindBase =
             strategy.logRange(stack.last().hash, "$remoteName/${effectiveRefSpec.remoteRef}").size
+
+        // Resolving the named stack walks every `jaspr-named/...` ref on the remote -- O(stacks)
+        // git ops, which grows uncomfortably as users accumulate named stacks over time. Use the
+        // cached name when available and only persist `Found` results (the warning paths for
+        // multi-stack ownership and not-found stay cold).
+        val cacheBeforeResolve = readNavStatusCache()
+        val stackSearchResult: NamedStackSearchResult =
+            cacheBeforeResolve?.namedStackName?.let<String, NamedStackSearchResult> { Found(it) }
+                ?: run {
+                    val computed = getExistingStackName(stack, remoteBranches, strategy)
+                    if (computed is Found) {
+                        val prsById = cacheBeforeResolve?.pullRequestsByCommitId.orEmpty()
+                        writeNavStatusCache(NavStatusCache(prsById, computed.name))
+                    }
+                    computed
+                }
+
         return buildStatusString(
             statuses,
             commitsWithDuplicateIds,
@@ -203,7 +228,7 @@ class GitJaspr(
             remoteName,
             effectiveRefSpec,
             stack,
-            remoteBranches,
+            stackSearchResult,
             strategy,
             theme,
             navState,
@@ -217,7 +242,7 @@ class GitJaspr(
         remoteName: String,
         refSpec: RefSpec,
         stack: List<Commit>,
-        remoteBranches: List<RemoteBranch>,
+        stackSearchResult: NamedStackSearchResult,
         strategy: GetStatusStringStrategy,
         theme: Theme,
         navState: NavState?,
@@ -270,7 +295,7 @@ class GitJaspr(
             appendLine(if (isCursor) theme.emphasis(lineContent) else lineContent)
         }
 
-        appendNamedStackInfo(stack, remoteBranches, theme, strategy)
+        appendNamedStackInfo(stack, stackSearchResult, theme, strategy)
 
         if (numCommitsBehindBase > 0) {
             appendLine()
@@ -304,7 +329,7 @@ class GitJaspr(
 
     private fun StringBuilder.appendNamedStackInfo(
         stack: List<Commit>,
-        remoteBranches: List<RemoteBranch>,
+        stackSearchResult: NamedStackSearchResult,
         theme: Theme,
         strategy: GetStatusStringStrategy,
     ) {
@@ -314,7 +339,6 @@ class GitJaspr(
             val numCommitsAhead: Int,
             val numCommitsBehind: Int,
         )
-        val stackSearchResult = getExistingStackName(stack, remoteBranches, strategy)
         if (stackSearchResult is MultipleStacksContainCommit) {
             appendLine()
             appendLine(

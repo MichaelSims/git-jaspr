@@ -151,8 +151,16 @@ data class SplitState(
  *
  * Keyed by jaspr commit-id (not git SHA) so the cache survives amends: amending a commit changes
  * its SHA but its commit-id (and therefore the associated PR) is stable.
+ *
+ * Also stores the resolved [namedStackName] (when known) so we don't have to re-walk every
+ * `jaspr-named/...` ref on every nav move. The resolver's cost grows linearly with the number of
+ * named stacks in the repo, so caching this is significant for users with many stacks.
  */
-@Serializable data class NavStatusCache(val pullRequestsByCommitId: Map<String, PullRequest>)
+@Serializable
+data class NavStatusCache(
+    val pullRequestsByCommitId: Map<String, PullRequest>,
+    val namedStackName: String? = null,
+)
 
 class GitJasprException(override val message: String) : RuntimeException(message) {
     constructor(message: String, cause: Throwable) : this(message) {

@@ -1374,6 +1374,9 @@ interface GitJasprTest {
             assertNotNull(cache)
             // Two pushed commits with commit-ids, so the cache should carry two PRs.
             assertEquals(2, cache.pullRequestsByCommitId.size)
+            // The resolver for the owning named stack is expensive (linear in number of named
+            // stacks on the remote), so its result is also cached.
+            assertEquals(RemoteNamedStackRef("cache-stack").name(), cache.namedStackName)
         }
     }
 
