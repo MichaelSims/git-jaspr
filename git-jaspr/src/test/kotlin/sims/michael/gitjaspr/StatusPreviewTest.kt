@@ -628,7 +628,8 @@ class StatusPreviewTest {
             markAllPullRequestsHealthy()
 
             // 5-commit stack; navigate down 2 so the cursor sits at "three" (the middle).
-            // Expected: banner reads "Navigating [3/5]", cursor arrow on the row for "three".
+            // Expected: banner reads "Navigating preview-stack [3/5]", cursor arrow on the row
+            // for "three".
             gitJaspr.navigateDown(DEFAULT_TARGET_REF, 2)
 
             renderAndAppendStatus(testInfo)

@@ -131,6 +131,12 @@ data class NavState(
     val stack: List<StackEntry>,
     /** Index into [stack] of the commit HEAD is currently on. */
     val cursorIndex: Int,
+    /**
+     * Resolved named-stack name at the time of detach; null when no named stack on the remote
+     * contains the stack's commits (e.g., the stack hasn't been pushed yet). Cached here so nav UI
+     * can render without re-walking remote refs on every move.
+     */
+    val stackName: String? = null,
 )
 
 /**

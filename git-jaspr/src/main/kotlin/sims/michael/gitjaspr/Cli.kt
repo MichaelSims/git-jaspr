@@ -1357,7 +1357,7 @@ class Up : GitJasprSubcommand(helpText = "Move up in the stack (replay commits t
             NavMoveResult.NoSession -> renderer.info { "Already at the top of the stack." }
             is NavMoveResult.MovedWithin -> print(jaspr.getNavPositionString(result.state, theme))
             is NavMoveResult.ReachedTop ->
-                renderer.info { describeReachedTop(result.replayedCount, result.branchName) }
+                renderer.info { describeReachedTop(result.replayedCount, result.restoredName) }
         }
     }
 }
@@ -1373,14 +1373,14 @@ class Top :
             NavMoveResult.NoSession -> renderer.info { "Already at the top of the stack." }
             is NavMoveResult.MovedWithin -> print(jaspr.getNavPositionString(result.state, theme))
             is NavMoveResult.ReachedTop ->
-                renderer.info { describeReachedTop(result.replayedCount, result.branchName) }
+                renderer.info { describeReachedTop(result.replayedCount, result.restoredName) }
         }
     }
 }
 
-private fun describeReachedTop(count: Int, branchName: String): String {
+private fun describeReachedTop(count: Int, restoredName: String): String {
     val noun = if (count == 1) "commit" else "commits"
-    return "Replayed $count $noun, back on `$branchName`."
+    return "Replayed $count $noun, back on `$restoredName`."
 }
 
 class Nav : SuspendingCliktCommand(name = "nav") {

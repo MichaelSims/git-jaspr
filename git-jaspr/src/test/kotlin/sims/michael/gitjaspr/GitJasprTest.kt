@@ -1249,15 +1249,16 @@ interface GitJasprTest {
             )
             gitJaspr.push(stackName = "nav-status-stack")
 
-            // Navigate to the bottom; banner should read [3/3] (cursor at the base, top-first
-            // numbering matches compare's `[N]` row labels).
+            // Navigate to the bottom; banner should read "Navigating nav-status-stack [3/3]"
+            // (cursor at the base, top-first numbering matches compare's `[N]` row labels;
+            // resolved stack name from initNavState).
             gitJaspr.navigateToBottom(DEFAULT_TARGET_REF)
 
             val output = gitJaspr.getStatusString()
 
             // Banner present, on its own line at the very top.
             assertTrue(
-                output.lines().first().contains("Navigating [3/3]"),
+                output.lines().first().contains("Navigating nav-status-stack [3/3]"),
                 "Expected banner on first line; output was:\n$output",
             )
             // The cursor row is marked by coloring its [ ] brackets via theme.entity; under
@@ -1303,7 +1304,7 @@ interface GitJasprTest {
             val output = gitJaspr.getCompareString(theme = MonoTheme)
 
             assertTrue(
-                output.lines().first().contains("Navigating [3/3]"),
+                output.lines().first().contains("Navigating nav-compare-stack [3/3]"),
                 "Expected banner on first line; output was:\n$output",
             )
             // The cursor row is marked by coloring its [N] label; the coloring is a no-op

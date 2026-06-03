@@ -35,7 +35,12 @@ sealed interface NavMoveResult {
 
     data class MovedWithin(val state: NavState) : NavMoveResult
 
-    data class ReachedTop(val replayedCount: Int, val branchName: String) : NavMoveResult
+    /**
+     * Cursor reached the top of the stack and the session ended. [restoredName] is the resolved
+     * named-stack name when known, falling back to the local branch name; it's the identifier to
+     * surface in user-facing "back on `X`" messaging.
+     */
+    data class ReachedTop(val replayedCount: Int, val restoredName: String) : NavMoveResult
 }
 
 class GitJaspr(
@@ -354,10 +359,14 @@ class GitJaspr(
      * is `[1/N]` and the base is `[N/N]`) to match the row labels in `jaspr compare`. Rendered with
      * [Theme.entity] (cyan in [DefaultTheme]) to contrast with the bold flag-key / column header
      * without being a warning color.
+     *
+     * The stack identifier is the resolved named-stack name when available, falling back to the
+     * local branch name. Once the stack has been pushed, the fallback should rarely trigger.
      */
     private fun navBanner(state: NavState, theme: Theme): String {
         val positionFromTop = state.stack.size - state.cursorIndex
-        return theme.entity("Navigating [$positionFromTop/${state.stack.size}]")
+        val name = state.stackName ?: state.headBeforeDetach
+        return theme.entity("Navigating $name [$positionFromTop/${state.stack.size}]")
     }
 
     /**
@@ -2762,7 +2771,10 @@ class GitJaspr(
         val newCursor = state.cursorIndex + n
         return if (newCursor == updatedStack.lastIndex) {
             endNavSession(state.copy(stack = updatedStack))
-            NavMoveResult.ReachedTop(replayedCount = n, branchName = state.headBeforeDetach)
+            NavMoveResult.ReachedTop(
+                replayedCount = n,
+                restoredName = state.stackName ?: state.headBeforeDetach,
+            )
         } else {
             val newState = state.copy(stack = updatedStack, cursorIndex = newCursor)
             writeNavState(newState)
@@ -2783,7 +2795,7 @@ class GitJaspr(
         endNavSession(state.copy(stack = updatedStack))
         return NavMoveResult.ReachedTop(
             replayedCount = aboveCount,
-            branchName = state.headBeforeDetach,
+            restoredName = state.stackName ?: state.headBeforeDetach,
         )
     }
 
@@ -2839,7 +2851,20 @@ class GitJaspr(
                         ),
             )
         }
-        return NavState(headBeforeDetach = branchName, stack = stack, cursorIndex = stack.lastIndex)
+        // Resolve the named stack once at session start; subsequent moves read this for free.
+        // Store the parsed leaf name (e.g., "my-feature"), not the full ref
+        // ("jaspr-named/main/my-feature"), so it's safe to print directly.
+        val stackName =
+            (getExistingStackName(commits) as? Found)?.let { found ->
+                RemoteNamedStackRef.parse(found.name, config.remoteNamedStackBranchPrefix)
+                    ?.stackName
+            }
+        return NavState(
+            headBeforeDetach = branchName,
+            stack = stack,
+            cursorIndex = stack.lastIndex,
+            stackName = stackName,
+        )
     }
 
     /**
