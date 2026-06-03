@@ -3018,7 +3018,14 @@ class GitJaspr(
 
         gitClient.resetSoft(splitState.unsplitSha)
         gitClient.add(".")
-        gitClient.commit(amend = true)
+        // Skip the amend when nothing actually changed since the split: HEAD is already
+        // pointing at the original commit (the resetSoft did that), and amending would
+        // produce a new commit object with a fresh committer date for no functional reason.
+        // After `add(".")`, hasUncommittedChangesToTrackedFiles compares the staged tree to
+        // HEAD's tree -- exactly the condition we want.
+        if (gitClient.hasUncommittedChangesToTrackedFiles()) {
+            gitClient.commit(amend = true)
+        }
 
         val restoredCommit = gitClient.log(GitClient.HEAD, 1).single()
 

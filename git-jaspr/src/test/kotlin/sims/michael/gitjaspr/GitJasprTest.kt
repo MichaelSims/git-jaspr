@@ -1118,7 +1118,7 @@ interface GitJasprTest {
 
     @Nav
     @Test
-    fun `unsplit restores original commit`() {
+    fun `unsplit preserves SHA when no edits since split`() {
         withTestSetup(useFakeRemote) {
             createCommitsFrom(
                 testCase {
@@ -1132,6 +1132,7 @@ interface GitJasprTest {
                     checkout = "development"
                 }
             )
+            val originalB = localGit.log(GitClient.HEAD, 1).single().hash
 
             // Split B, then immediately unsplit
             gitJaspr.split()
@@ -1139,7 +1140,11 @@ interface GitJasprTest {
 
             val subject = gitJaspr.unsplit()
             assertEquals("B", subject)
-            assertEquals("B", localGit.log(GitClient.HEAD, 1).single().shortMessage)
+            val restored = localGit.log(GitClient.HEAD, 1).single()
+            assertEquals("B", restored.shortMessage)
+            // No edits between split and unsplit -- the restored commit should be the
+            // original B, not a freshly-amended replacement with a new SHA.
+            assertEquals(originalB, restored.hash)
             assertNull(gitJaspr.readSplitState())
         }
     }
@@ -1160,6 +1165,7 @@ interface GitJasprTest {
                     checkout = "development"
                 }
             )
+            val originalB = localGit.log(GitClient.HEAD, 1).single().hash
 
             // Split B
             gitJaspr.split()
@@ -1174,6 +1180,8 @@ interface GitJasprTest {
             val head = localGit.log(GitClient.HEAD, 1).single()
             assertEquals("B", head.shortMessage)
             assertEquals("B", head.id) // commit-id preserved
+            // Content changed during the split, so the restored commit must be a new SHA.
+            assertNotEquals(originalB, head.hash)
 
             // The working tree should reflect the modifications
             assertFalse(localRepo.resolve("B.txt").exists())
