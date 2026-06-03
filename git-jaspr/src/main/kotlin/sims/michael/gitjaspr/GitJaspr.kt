@@ -96,16 +96,34 @@ class GitJaspr(
      * report. Layers a [cachedStrategy] on top of a [cachePersistingStrategy] so a cache hit serves
      * PRs without a GitHub round-trip, and a cache miss (different stack, new commits) falls
      * through to a fresh fetch that re-populates the cache.
+     *
+     * Also skips `git fetch origin` when the nav-status cache file has been written within
+     * [NAV_CACHE_FRESHNESS_MS]. Nav workflows are bursty (look around with `jaspr status`, then
+     * walk the stack with several `up` / `down` moves in seconds), so a recent cache write means
+     * the remote refs were just refreshed and another fetch would be wasted network. Explicit
+     * `jaspr status` always fetches and is the user's escape hatch for guaranteed-fresh data.
      */
     suspend fun getStatusStringForNav(
         refSpec: RefSpec = RefSpec(DEFAULT_LOCAL_OBJECT, DEFAULT_TARGET_REF),
         theme: Theme = MonoTheme,
     ): String {
-        gitClient.fetch(config.remoteName)
+        if (!isNavStatusCacheFresh()) gitClient.fetch(config.remoteName)
         val baseStrategy = cachePersistingStrategy(defaultStrategy())
         val cache = readNavStatusCache()
         val strategy = if (cache != null) cachedStrategy(baseStrategy, cache) else baseStrategy
         return getStatusString(refSpec, theme, strategy)
+    }
+
+    /**
+     * True if the nav-status cache exists and was written within [NAV_CACHE_FRESHNESS_MS]. Used to
+     * short-circuit the per-nav-move `git fetch` when the remote refs were almost certainly just
+     * refreshed.
+     */
+    private fun isNavStatusCacheFresh(): Boolean {
+        val file = navStatusCacheFile
+        if (!file.exists()) return false
+        val age = System.currentTimeMillis() - file.lastModified()
+        return age in 0..NAV_CACHE_FRESHNESS_MS
     }
 
     /**
@@ -3631,6 +3649,14 @@ class GitJaspr(
         private const val POST_CHECKOUT_HOOK_RESOURCE = "post-checkout-jaspr-section"
         private const val NAV_HOOK_BEGIN_MARKER = "# JASPR-NAV-HOOK-BEGIN"
         private const val NAV_HOOK_END_MARKER = "# JASPR-NAV-HOOK-END"
+
+        /**
+         * How recent the nav-status cache must be for [getStatusStringForNav] to skip the `git
+         * fetch origin`. 60s is large enough to cover a fast review walk (status, then several nav
+         * moves in quick succession) and small enough that anyone who walks away and comes back
+         * will get a fresh fetch automatically.
+         */
+        private const val NAV_CACHE_FRESHNESS_MS = 60_000L
     }
 }
 
