@@ -1222,6 +1222,121 @@ interface GitJasprTest {
         }
     }
 
+    @Nav
+    @Test
+    fun `status during nav reports against the pre-nav stack`() {
+        withTestSetup(useFakeRemote) {
+            createCommitsFrom(
+                testCase {
+                    repository {
+                        commit { title = "one" }
+                        commit { title = "two" }
+                        commit {
+                            title = "three"
+                            localRefs += "development"
+                        }
+                    }
+                    checkout = "development"
+                }
+            )
+            gitJaspr.push(stackName = "nav-status-stack")
+
+            // Navigate to the bottom; banner should read [3/3] (cursor at the base, top-first
+            // numbering matches compare's `[N]` row labels).
+            gitJaspr.navigateToBottom(DEFAULT_TARGET_REF)
+
+            val output = gitJaspr.getStatusString()
+
+            // Banner present, on its own line at the very top.
+            assertTrue(
+                output.lines().first().contains("Navigating [3/3]"),
+                "Expected banner on first line; output was:\n$output",
+            )
+            // The cursor row is marked by coloring its [ ] brackets via theme.entity; under
+            // MonoTheme the coloring is a no-op, so we don't assert it in this test. See the
+            // status preview tests for visual coverage in the colored theme.
+            // Divergence math operates against the full pre-nav stack -- not "behind by 2".
+            assertTrue(
+                output.contains("up to date with the remote stack"),
+                "Expected up-to-date message; output was:\n$output",
+            )
+            assertFalse(
+                output.contains("behind the remote stack"),
+                "Did not expect a behind-warning during nav; output was:\n$output",
+            )
+            assertFalse(
+                output.contains("remote-only"),
+                "Did not expect remote-only callout during nav; output was:\n$output",
+            )
+        }
+    }
+
+    @Nav
+    @Test
+    fun `compare during nav uses the pre-nav stack`() {
+        withTestSetup(useFakeRemote) {
+            createCommitsFrom(
+                testCase {
+                    repository {
+                        commit { title = "one" }
+                        commit { title = "two" }
+                        commit {
+                            title = "three"
+                            localRefs += "development"
+                        }
+                    }
+                    checkout = "development"
+                }
+            )
+            gitJaspr.push(stackName = "nav-compare-stack")
+
+            gitJaspr.navigateToBottom(DEFAULT_TARGET_REF)
+
+            val output = gitJaspr.getCompareString(theme = MonoTheme)
+
+            assertTrue(
+                output.lines().first().contains("Navigating [3/3]"),
+                "Expected banner on first line; output was:\n$output",
+            )
+            // The cursor row is marked by coloring its [N] label; the coloring is a no-op
+            // under MonoTheme. See the status preview tests for visual coverage.
+            // All three local commits render -- no row is `[remote-only]` because the pre-nav
+            // stack matches the remote.
+            assertFalse(
+                output.contains("remote-only"),
+                "Did not expect remote-only rows; output was:\n$output",
+            )
+            assertTrue(output.contains("one"), "Expected 'one' in output:\n$output")
+            assertTrue(output.contains("two"), "Expected 'two' in output:\n$output")
+            assertTrue(output.contains("three"), "Expected 'three' in output:\n$output")
+        }
+    }
+
+    @Test
+    fun `status without nav has no banner or cursor marker`() {
+        withTestSetup(useFakeRemote) {
+            createCommitsFrom(
+                testCase {
+                    repository {
+                        commit { title = "one" }
+                        commit {
+                            title = "two"
+                            localRefs += "development"
+                        }
+                    }
+                    checkout = "development"
+                }
+            )
+            gitJaspr.push(stackName = "no-nav-stack")
+
+            val output = gitJaspr.getStatusString()
+            assertFalse(
+                output.contains("Navigating ["),
+                "Did not expect a nav banner outside of a nav session; output was:\n$output",
+            )
+        }
+    }
+
     // endregion
 
     // region fold tests

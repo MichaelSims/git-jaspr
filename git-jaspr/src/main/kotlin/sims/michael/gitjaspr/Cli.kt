@@ -1324,6 +1324,7 @@ class Down : GitJasprSubcommand(helpText = "Move down in the stack (toward the t
             jaspr.clearNavState()
         }
         jaspr.navigateDown(targetOpts.target, n ?: 1)
+        print(jaspr.getStatusString(RefSpec(DEFAULT_LOCAL_OBJECT, targetOpts.target), theme))
     }
 }
 
@@ -1341,6 +1342,7 @@ class Bottom : GitJasprSubcommand(helpText = "Move to the bottom of the stack") 
             jaspr.clearNavState()
         }
         jaspr.navigateToBottom(targetOpts.target)
+        print(jaspr.getStatusString(RefSpec(DEFAULT_LOCAL_OBJECT, targetOpts.target), theme))
     }
 }
 
@@ -1353,7 +1355,9 @@ class Up : GitJasprSubcommand(helpText = "Move up in the stack (replay commits t
         requireNoActiveSplit(jaspr)
         if (!jaspr.navigateUp(n ?: 1, targetOpts.target)) {
             renderer.info { "Already at the top of the stack." }
+            return
         }
+        print(jaspr.getStatusString(RefSpec(DEFAULT_LOCAL_OBJECT, targetOpts.target), theme))
     }
 }
 
@@ -1366,7 +1370,9 @@ class Top :
         jaspr.clearSplitState()
         if (!jaspr.navigateToTop(targetOpts.target)) {
             renderer.info { "Already at the top of the stack." }
+            return
         }
+        print(jaspr.getStatusString(RefSpec(DEFAULT_LOCAL_OBJECT, targetOpts.target), theme))
     }
 }
 

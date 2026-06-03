@@ -224,12 +224,18 @@ private fun <T> longestCommonSubsequence(a: List<T>, b: List<T>): List<T> {
     return out.toList()
 }
 
-/** Renders rows in the BOLD_ASTERISK_DIM style accepted in ADR 0002. */
+/**
+ * Renders rows in the BOLD_ASTERISK_DIM style accepted in ADR 0002.
+ *
+ * When [cursorSha] is non-null, the row whose LOCAL commit hash matches is rendered with
+ * [Theme.emphasis] (bold in [DefaultTheme]) so it visibly pops without disturbing column width.
+ */
 fun renderCompare(
     rows: List<CompareRow>,
     namedStackRef: String,
     theme: Theme,
     maxSubjectLength: Int = DEFAULT_MAX_SUBJECT_LENGTH,
+    cursorSha: String? = null,
 ): String = buildString {
     val localIds = rows.mapNotNull { it.local?.id }.toSet()
     val remoteIds = rows.mapNotNull { it.remote?.id }.toSet()
@@ -254,7 +260,11 @@ fun renderCompare(
         val leftStyled = styleCell(leftRaw.padEnd(leftWidth), row, isLocal = true, theme)
         val rightStyled = styleCell(rightRaw, row, isLocal = false, theme)
 
-        appendLine("$leftStyled${marker.padEnd(markerWidth)}$rightStyled")
+        val rowLine = "$leftStyled${marker.padEnd(markerWidth)}$rightStyled"
+        appendLine(
+            if (cursorSha != null && row.local?.hash == cursorSha) theme.emphasis(rowLine)
+            else rowLine
+        )
     }
 }
 

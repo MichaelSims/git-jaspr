@@ -589,6 +589,100 @@ class StatusPreviewTest {
 
     @Test
     @Order(12)
+    fun `nav - status cursor mid-stack`(testInfo: TestInfo) {
+        withTestSetup {
+            createCommitsFrom(
+                testCase {
+                    repository {
+                        commit {
+                            title = "one"
+                            willPassVerification = true
+                            remoteRefs += buildRemoteRef("one")
+                        }
+                        commit {
+                            title = "two"
+                            willPassVerification = true
+                            remoteRefs += buildRemoteRef("two")
+                        }
+                        commit {
+                            title = "three"
+                            willPassVerification = true
+                            remoteRefs += buildRemoteRef("three")
+                        }
+                        commit {
+                            title = "four"
+                            willPassVerification = true
+                            remoteRefs += buildRemoteRef("four")
+                        }
+                        commit {
+                            title = "five"
+                            willPassVerification = true
+                            localRefs += "development"
+                            remoteRefs += buildRemoteRef("five")
+                        }
+                    }
+                    checkout = "development"
+                }
+            )
+            gitJaspr.push(stackName = "preview-stack")
+            markAllPullRequestsHealthy()
+
+            // 5-commit stack; navigate down 2 so the cursor sits at "three" (the middle).
+            // Expected: banner reads "Navigating [3/5]", cursor arrow on the row for "three".
+            gitJaspr.navigateDown(DEFAULT_TARGET_REF, 2)
+
+            renderAndAppendStatus(testInfo)
+        }
+    }
+
+    @Test
+    @Order(13)
+    fun `nav - compare cursor mid-stack`(testInfo: TestInfo) {
+        withTestSetup {
+            createCommitsFrom(
+                testCase {
+                    repository {
+                        commit {
+                            title = "one"
+                            willPassVerification = true
+                            remoteRefs += buildRemoteRef("one")
+                        }
+                        commit {
+                            title = "two"
+                            willPassVerification = true
+                            remoteRefs += buildRemoteRef("two")
+                        }
+                        commit {
+                            title = "three"
+                            willPassVerification = true
+                            remoteRefs += buildRemoteRef("three")
+                        }
+                        commit {
+                            title = "four"
+                            willPassVerification = true
+                            remoteRefs += buildRemoteRef("four")
+                        }
+                        commit {
+                            title = "five"
+                            willPassVerification = true
+                            localRefs += "development"
+                            remoteRefs += buildRemoteRef("five")
+                        }
+                    }
+                    checkout = "development"
+                }
+            )
+            gitJaspr.push(stackName = "preview-stack")
+
+            // Same shape as the status mid-stack scenario above, but rendered via compare.
+            gitJaspr.navigateDown(DEFAULT_TARGET_REF, 2)
+
+            renderAndAppendCompare(testInfo)
+        }
+    }
+
+    @Test
+    @Order(14)
     fun `compare - long subjects truncate with ellipsis`(testInfo: TestInfo) {
         withTestSetup {
             createCommitsFrom(
