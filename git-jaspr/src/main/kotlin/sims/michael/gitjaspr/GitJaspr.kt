@@ -2643,8 +2643,8 @@ class GitJaspr(
     }
 
     /**
-     * Navigate up N commits by cherry-picking from the saved stack above the current HEAD. If all
-     * remaining commits are replayed, restores the source branch and ends the session.
+     * Navigate up N commits from the saved stack above the current HEAD. If all remaining commits
+     * are replayed, restores the source branch and ends the session.
      *
      * @return true if navigation was performed, false if there was no active session (caller can
      *   render a friendly message rather than treating it as an error)
@@ -2658,13 +2658,8 @@ class GitJaspr(
             "Cannot move up $n commit(s) — only $aboveCount commit(s) above current position."
         }
 
-        val updatedStack = state.stack.toMutableList()
-        for (i in 1..n) {
-            val entry = updatedStack[state.cursorIndex + i]
-            val newCommit =
-                gitClient.cherryPick(gitClient.log(entry.sha, 1).single(), commitIdentOverride)
-            updatedStack[state.cursorIndex + i] = entry.copy(sha = newCommit.hash)
-        }
+        val updatedStack =
+            replayEntries(state.stack, (state.cursorIndex + 1)..(state.cursorIndex + n))
 
         val newCursor = state.cursorIndex + n
         if (newCursor == updatedStack.lastIndex) { // We've replayed all commits, end the session
@@ -2686,16 +2681,39 @@ class GitJaspr(
         val aboveCount = state.stack.size - state.cursorIndex - 1
         require(aboveCount > 0) { "Already at the top of the stack." }
 
-        val updatedStack = state.stack.toMutableList()
-        for (i in (state.cursorIndex + 1)..updatedStack.lastIndex) {
-            val entry = updatedStack[i]
-            val newCommit =
-                gitClient.cherryPick(gitClient.log(entry.sha, 1).single(), commitIdentOverride)
-            updatedStack[i] = entry.copy(sha = newCommit.hash)
-        }
+        val updatedStack =
+            replayEntries(state.stack, (state.cursorIndex + 1)..state.stack.lastIndex)
 
         endNavSession(state.copy(stack = updatedStack))
         return true
+    }
+
+    /**
+     * Move HEAD up through the entries of [stack] in [range], returning the (possibly updated)
+     * stack. For each entry, if its git parent SHA matches the current HEAD, the entry is checked
+     * out as-is (preserving its SHA). Otherwise it is cherry-picked onto HEAD and the rewritten SHA
+     * replaces the entry in the returned list.
+     *
+     * Comparing against the entry's git parent (rather than against the previous entry's SHA in the
+     * returned list) matters once a cherry-pick has happened earlier in the replay: the previous
+     * entry's SHA has been overwritten with the rewritten one, but the next entry (not yet touched)
+     * still carries the original commit whose actual git parent is the unmodified previous SHA.
+     */
+    private fun replayEntries(stack: List<StackEntry>, range: IntRange): List<StackEntry> {
+        val result = stack.toMutableList()
+        for (i in range) {
+            val entry = result[i]
+            val entryCommit = gitClient.log(entry.sha, 1).single()
+            val parentSha = gitClient.getParents(entryCommit).singleOrNull()?.hash
+            val headSha = gitClient.log(GitClient.HEAD, 1).single().hash
+            if (parentSha == headSha) {
+                gitClient.checkout(entry.sha)
+            } else {
+                val newCommit = gitClient.cherryPick(entryCommit, commitIdentOverride)
+                result[i] = entry.copy(sha = newCommit.hash)
+            }
+        }
+        return result
     }
 
     /**
