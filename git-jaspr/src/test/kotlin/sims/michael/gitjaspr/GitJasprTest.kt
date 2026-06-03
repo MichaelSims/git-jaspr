@@ -5,6 +5,7 @@ import kotlin.test.assertContains
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
 import kotlin.test.assertFalse
+import kotlin.test.assertNotEquals
 import kotlin.test.assertNotNull
 import kotlin.test.assertNull
 import kotlinx.coroutines.delay
@@ -326,7 +327,7 @@ interface GitJasprTest {
     }
 
     @Test
-    fun `up replays one commit via cherry-pick`() {
+    fun `up checks out next existing commit when no amend has occurred`() {
         withTestSetup(useFakeRemote) {
             createCommitsFrom(
                 testCase {
@@ -350,15 +351,15 @@ interface GitJasprTest {
 
             gitJaspr.navigateUp(1)
 
-            // Should still be detached, with "two" replayed on top
+            // HEAD should be the original "two" SHA -- a plain checkout, not a cherry-pick
             assertTrue(localGit.isHeadDetached())
-            assertEquals("two", localGit.log(GitClient.HEAD, 1).single().shortMessage)
+            assertEquals(stack[1].hash, localGit.log(GitClient.HEAD, 1).single().hash)
             assertNotNull(gitJaspr.readNavState())
         }
     }
 
     @Test
-    fun `top replays all remaining commits and restores branch`() {
+    fun `top checks out remaining commits when no amend has occurred`() {
         withTestSetup(useFakeRemote) {
             createCommitsFrom(
                 testCase {
@@ -374,6 +375,8 @@ interface GitJasprTest {
                 }
             )
             localGit.fetch(remoteName)
+            val originalStack =
+                localGit.getLocalCommitStack(remoteName, GitClient.HEAD, DEFAULT_TARGET_REF)
 
             // Navigate to bottom, then back to top
             gitJaspr.navigateToBottom(DEFAULT_TARGET_REF)
@@ -384,11 +387,11 @@ interface GitJasprTest {
             assertEquals("development", localGit.getCurrentBranchName())
             assertNull(gitJaspr.readNavState())
 
-            // Stack should still have 3 commits with the same messages
+            // Stack should still have the same 3 commits at the SAME SHAs (plain checkouts,
+            // not cherry-picks) since nothing was amended.
             val newStack =
                 localGit.getLocalCommitStack(remoteName, GitClient.HEAD, DEFAULT_TARGET_REF)
-            assertEquals(3, newStack.size)
-            assertEquals(listOf("one", "two", "three"), newStack.map(Commit::shortMessage))
+            assertEquals(originalStack.map(Commit::hash), newStack.map(Commit::hash))
         }
     }
 
@@ -550,13 +553,105 @@ interface GitJasprTest {
             gitJaspr.navigateDown(DEFAULT_TARGET_REF, 1)
             assertEquals("A", localGit.log(GitClient.HEAD, 1).single().shortMessage)
 
-            // Nav up 1: should cherry-pick the amended B, not the original
+            // Nav up 1: should check out the amended B' (its git parent A still matches HEAD,
+            // so no cherry-pick is required)
             gitJaspr.navigateUp(1, DEFAULT_TARGET_REF)
             val replayedB = localGit.log(GitClient.HEAD, 1).single()
             assertEquals("B", replayedB.shortMessage)
 
             // The replayed B should contain the amended content
             assertTrue(localRepo.resolve("amend_fix.txt").readText().contains("amended content"))
+        }
+    }
+
+    @Nav
+    @Test
+    fun `up cherry-picks remaining commits when amend exists below the cursor`() {
+        withTestSetup(useFakeRemote) {
+            createCommitsFrom(
+                testCase {
+                    repository {
+                        commit { title = "A" }
+                        commit { title = "B" }
+                        commit {
+                            title = "C"
+                            localRefs += "development"
+                        }
+                    }
+                    checkout = "development"
+                }
+            )
+            val originalStack =
+                localGit.getLocalCommitStack(remoteName, GitClient.HEAD, DEFAULT_TARGET_REF)
+
+            // Bottom -> HEAD at A
+            gitJaspr.navigateToBottom(DEFAULT_TARGET_REF)
+            assertEquals(originalStack[0].hash, localGit.log(GitClient.HEAD, 1).single().hash)
+
+            // Amend A: changes its SHA, so subsequent entries' stored parents (the original A)
+            // no longer match HEAD. Replay must cherry-pick B and C onto the amended chain.
+            localRepo.resolve("amend.txt").writeText("amended\n")
+            localGit.add("amend.txt")
+            localGit.commit("A", footerLines = mapOf(COMMIT_ID_LABEL to "A"), amend = true)
+
+            // Up 2 reaches the top and ends the session, restoring "development" to the new tip.
+            gitJaspr.navigateUp(2, DEFAULT_TARGET_REF)
+
+            val newStack =
+                localGit.getLocalCommitStack(remoteName, GitClient.HEAD, DEFAULT_TARGET_REF)
+            assertEquals(listOf("A", "B", "C"), newStack.map(Commit::shortMessage))
+            for (i in originalStack.indices) {
+                assertNotEquals(
+                    originalStack[i].hash,
+                    newStack[i].hash,
+                    "Entry $i should have a rewritten SHA",
+                )
+            }
+            // Amend propagated through the cherry-picked B and C.
+            assertTrue(localRepo.resolve("amend.txt").readText().contains("amended"))
+        }
+    }
+
+    @Nav
+    @Test
+    fun `top cherry-picks remaining commits when amend exists below the cursor`() {
+        withTestSetup(useFakeRemote) {
+            createCommitsFrom(
+                testCase {
+                    repository {
+                        commit { title = "A" }
+                        commit { title = "B" }
+                        commit {
+                            title = "C"
+                            localRefs += "development"
+                        }
+                    }
+                    checkout = "development"
+                }
+            )
+            val originalStack =
+                localGit.getLocalCommitStack(remoteName, GitClient.HEAD, DEFAULT_TARGET_REF)
+
+            gitJaspr.navigateToBottom(DEFAULT_TARGET_REF)
+
+            // Amend A
+            localRepo.resolve("amend.txt").writeText("amended\n")
+            localGit.add("amend.txt")
+            localGit.commit("A", footerLines = mapOf(COMMIT_ID_LABEL to "A"), amend = true)
+
+            gitJaspr.navigateToTop(DEFAULT_TARGET_REF)
+
+            val newStack =
+                localGit.getLocalCommitStack(remoteName, GitClient.HEAD, DEFAULT_TARGET_REF)
+            assertEquals(listOf("A", "B", "C"), newStack.map(Commit::shortMessage))
+            for (i in originalStack.indices) {
+                assertNotEquals(
+                    originalStack[i].hash,
+                    newStack[i].hash,
+                    "Entry $i should have a rewritten SHA",
+                )
+            }
+            assertTrue(localRepo.resolve("amend.txt").readText().contains("amended"))
         }
     }
 
