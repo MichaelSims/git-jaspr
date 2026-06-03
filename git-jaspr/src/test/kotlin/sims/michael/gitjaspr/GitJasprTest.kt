@@ -409,7 +409,7 @@ interface GitJasprTest {
                     checkout = "development"
                 }
             )
-            assertFalse(gitJaspr.navigateUp(1))
+            assertEquals(NavMoveResult.NoSession, gitJaspr.navigateUp(1))
             assertEquals("development", localGit.getCurrentBranchName())
         }
     }
@@ -428,7 +428,7 @@ interface GitJasprTest {
                     checkout = "development"
                 }
             )
-            assertFalse(gitJaspr.navigateToTop())
+            assertEquals(NavMoveResult.NoSession, gitJaspr.navigateToTop())
             assertEquals("development", localGit.getCurrentBranchName())
         }
     }

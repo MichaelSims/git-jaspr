@@ -1323,8 +1323,8 @@ class Down : GitJasprSubcommand(helpText = "Move down in the stack (toward the t
             }
             jaspr.clearNavState()
         }
-        jaspr.navigateDown(targetOpts.target, n ?: 1)
-        print(jaspr.getStatusString(RefSpec(DEFAULT_LOCAL_OBJECT, targetOpts.target), theme))
+        val newState = jaspr.navigateDown(targetOpts.target, n ?: 1)
+        print(jaspr.getNavPositionString(newState, theme))
     }
 }
 
@@ -1341,8 +1341,8 @@ class Bottom : GitJasprSubcommand(helpText = "Move to the bottom of the stack") 
             }
             jaspr.clearNavState()
         }
-        jaspr.navigateToBottom(targetOpts.target)
-        print(jaspr.getStatusString(RefSpec(DEFAULT_LOCAL_OBJECT, targetOpts.target), theme))
+        val newState = jaspr.navigateToBottom(targetOpts.target)
+        print(jaspr.getNavPositionString(newState, theme))
     }
 }
 
@@ -1353,11 +1353,12 @@ class Up : GitJasprSubcommand(helpText = "Move up in the stack (replay commits t
     override suspend fun doRun() {
         val jaspr = appWiring.gitJaspr
         requireNoActiveSplit(jaspr)
-        if (!jaspr.navigateUp(n ?: 1, targetOpts.target)) {
-            renderer.info { "Already at the top of the stack." }
-            return
+        when (val result = jaspr.navigateUp(n ?: 1, targetOpts.target)) {
+            NavMoveResult.NoSession -> renderer.info { "Already at the top of the stack." }
+            is NavMoveResult.MovedWithin -> print(jaspr.getNavPositionString(result.state, theme))
+            is NavMoveResult.ReachedTop ->
+                renderer.info { describeReachedTop(result.replayedCount, result.branchName) }
         }
-        print(jaspr.getStatusString(RefSpec(DEFAULT_LOCAL_OBJECT, targetOpts.target), theme))
     }
 }
 
@@ -1368,12 +1369,18 @@ class Top :
     override suspend fun doRun() {
         val jaspr = appWiring.gitJaspr
         jaspr.clearSplitState()
-        if (!jaspr.navigateToTop(targetOpts.target)) {
-            renderer.info { "Already at the top of the stack." }
-            return
+        when (val result = jaspr.navigateToTop(targetOpts.target)) {
+            NavMoveResult.NoSession -> renderer.info { "Already at the top of the stack." }
+            is NavMoveResult.MovedWithin -> print(jaspr.getNavPositionString(result.state, theme))
+            is NavMoveResult.ReachedTop ->
+                renderer.info { describeReachedTop(result.replayedCount, result.branchName) }
         }
-        print(jaspr.getStatusString(RefSpec(DEFAULT_LOCAL_OBJECT, targetOpts.target), theme))
     }
+}
+
+private fun describeReachedTop(count: Int, branchName: String): String {
+    val noun = if (count == 1) "commit" else "commits"
+    return "Replayed $count $noun, back on `$branchName`."
 }
 
 class Nav : SuspendingCliktCommand(name = "nav") {

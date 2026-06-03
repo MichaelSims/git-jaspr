@@ -25,6 +25,19 @@ import sims.michael.gitjaspr.RemoteRefEncoding.REV_NUM_DELIMITER
 import sims.michael.gitjaspr.RemoteRefEncoding.RemoteNamedStackRef
 import sims.michael.gitjaspr.RemoteRefEncoding.RemoteRef
 
+/**
+ * Result of a `jaspr up` / `jaspr top` invocation. Lets the caller distinguish between "no nav
+ * session existed", "cursor moved inside the stack", and "cursor reached the top and the source
+ * branch was restored" without having to read state from disk.
+ */
+sealed interface NavMoveResult {
+    data object NoSession : NavMoveResult
+
+    data class MovedWithin(val state: NavState) : NavMoveResult
+
+    data class ReachedTop(val replayedCount: Int, val branchName: String) : NavMoveResult
+}
+
 class GitJaspr(
     private val ghClient: GitHubClient,
     private val gitClient: GitClient,
@@ -345,6 +358,43 @@ class GitJaspr(
     private fun navBanner(state: NavState, theme: Theme): String {
         val positionFromTop = state.stack.size - state.cursorIndex
         return theme.entity("Navigating [$positionFromTop/${state.stack.size}]")
+    }
+
+    /**
+     * Lightweight position display printed after a nav move. Reads commit messages from local git
+     * (no network, no PR fetch). Use this instead of [getStatusString] when the caller only needs
+     * to confirm "where am I in the stack" rather than full PR/check status.
+     *
+     * Rows are top-first to match `jaspr compare`. Three visual zones:
+     * - The cursor row is prefixed with `→` and wrapped in [Theme.emphasis] (bold).
+     * - Above-cursor rows are wrapped in [Theme.muted] (dim) to signal that they're unreachable
+     *   from HEAD; they'll be cherry-picked back in on `jaspr up` / `jaspr top`.
+     * - Below-cursor (already-traversed) rows are unstyled.
+     *
+     * The SHA is never styled with [Theme.hash] here so each row reads at a single intensity level.
+     * This is a deliberate departure from [getStatusString], which uses [Theme.hash] to signal
+     * "secondary info" -- the position display is a "where am I" view where per-zone consistency
+     * matters more than the SHA-as-secondary convention.
+     */
+    fun getNavPositionString(state: NavState, theme: Theme): String = buildString {
+        appendLine(navBanner(state, theme))
+        for (originalIndex in state.stack.lastIndex downTo 0) {
+            val entry = state.stack[originalIndex]
+            val commit = gitClient.log(entry.sha, 1).single()
+            val displayIndex = state.stack.size - originalIndex
+            val isCursor = originalIndex == state.cursorIndex
+            val isAboveCursor = originalIndex > state.cursorIndex
+            val prefix = if (isCursor) "→ " else "  "
+            val sha7 = entry.sha.take(7)
+            val line = "$prefix[$displayIndex]  $sha7  ${commit.shortMessage}"
+            appendLine(
+                when {
+                    isCursor -> theme.emphasis(line)
+                    isAboveCursor -> theme.muted(line)
+                    else -> line
+                }
+            )
+        }
     }
 
     data class StackNameSuggestions(
@@ -2653,7 +2703,7 @@ class GitJaspr(
      * Navigate down N commits in the stack (toward the target branch). Detaches HEAD and writes nav
      * state.
      */
-    fun navigateDown(targetRef: String, n: Int) {
+    fun navigateDown(targetRef: String, n: Int): NavState {
         val existingState = readNavState()
         val state =
             if (existingState != null && gitClient.isHeadDetached()) {
@@ -2668,12 +2718,14 @@ class GitJaspr(
         }
 
         gitClient.checkout(state.stack[targetIndex].sha)
-        writeNavState(state.copy(cursorIndex = targetIndex))
+        val newState = state.copy(cursorIndex = targetIndex)
+        writeNavState(newState)
         installNavSessionHook()
+        return newState
     }
 
     /** Navigate to the bottom of the stack (first commit above the target branch). */
-    fun navigateToBottom(targetRef: String) {
+    fun navigateToBottom(targetRef: String): NavState {
         val existingState = readNavState()
         val state =
             if (existingState != null && gitClient.isHeadDetached()) {
@@ -2685,19 +2737,18 @@ class GitJaspr(
         require(state.cursorIndex > 0) { "Already at the bottom of the stack." }
 
         gitClient.checkout(state.stack.first().sha)
-        writeNavState(state.copy(cursorIndex = 0))
+        val newState = state.copy(cursorIndex = 0)
+        writeNavState(newState)
         installNavSessionHook()
+        return newState
     }
 
     /**
      * Navigate up N commits from the saved stack above the current HEAD. If all remaining commits
      * are replayed, restores the source branch and ends the session.
-     *
-     * @return true if navigation was performed, false if there was no active session (caller can
-     *   render a friendly message rather than treating it as an error)
      */
-    fun navigateUp(n: Int, targetRef: String? = null): Boolean {
-        val state = activeNavSessionOrNull(targetRef) ?: return false
+    fun navigateUp(n: Int, targetRef: String? = null): NavMoveResult {
+        val state = activeNavSessionOrNull(targetRef) ?: return NavMoveResult.NoSession
 
         val aboveCount = state.stack.size - state.cursorIndex - 1
         require(aboveCount > 0) { "Already at the top of the stack." }
@@ -2709,21 +2760,19 @@ class GitJaspr(
             replayEntries(state.stack, (state.cursorIndex + 1)..(state.cursorIndex + n))
 
         val newCursor = state.cursorIndex + n
-        if (newCursor == updatedStack.lastIndex) { // We've replayed all commits, end the session
+        return if (newCursor == updatedStack.lastIndex) {
             endNavSession(state.copy(stack = updatedStack))
+            NavMoveResult.ReachedTop(replayedCount = n, branchName = state.headBeforeDetach)
         } else {
-            writeNavState(state.copy(stack = updatedStack, cursorIndex = newCursor))
+            val newState = state.copy(stack = updatedStack, cursorIndex = newCursor)
+            writeNavState(newState)
+            NavMoveResult.MovedWithin(newState)
         }
-        return true
     }
 
-    /**
-     * Navigate to the top of the stack by replaying all remaining commits.
-     *
-     * @return true if navigation was performed, false if there was no active session
-     */
-    fun navigateToTop(targetRef: String? = null): Boolean {
-        val state = activeNavSessionOrNull(targetRef) ?: return false
+    /** Navigate to the top of the stack by replaying all remaining commits. */
+    fun navigateToTop(targetRef: String? = null): NavMoveResult {
+        val state = activeNavSessionOrNull(targetRef) ?: return NavMoveResult.NoSession
 
         val aboveCount = state.stack.size - state.cursorIndex - 1
         require(aboveCount > 0) { "Already at the top of the stack." }
@@ -2732,7 +2781,10 @@ class GitJaspr(
             replayEntries(state.stack, (state.cursorIndex + 1)..state.stack.lastIndex)
 
         endNavSession(state.copy(stack = updatedStack))
-        return true
+        return NavMoveResult.ReachedTop(
+            replayedCount = aboveCount,
+            branchName = state.headBeforeDetach,
+        )
     }
 
     /**
