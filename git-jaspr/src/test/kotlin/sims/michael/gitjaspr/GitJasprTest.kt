@@ -1345,6 +1345,123 @@ interface GitJasprTest {
         }
     }
 
+    @Nav
+    @Test
+    fun `getStatusStringForNav populates the nav status cache when none exists`() {
+        withTestSetup(useFakeRemote) {
+            createCommitsFrom(
+                testCase {
+                    repository {
+                        commit { title = "one" }
+                        commit {
+                            title = "two"
+                            localRefs += "development"
+                        }
+                    }
+                    checkout = "development"
+                }
+            )
+            gitJaspr.push(stackName = "cache-stack")
+            gitJaspr.navigateToBottom(DEFAULT_TARGET_REF)
+
+            // The push above writes the cache as a side effect of its post-push status print;
+            // clear it so we're exercising the cold path explicitly.
+            gitJaspr.clearNavStatusCache()
+            assertNull(gitJaspr.readNavStatusCache())
+            gitJaspr.getStatusStringForNav()
+
+            val cache = gitJaspr.readNavStatusCache()
+            assertNotNull(cache)
+            // Two pushed commits with commit-ids, so the cache should carry two PRs.
+            assertEquals(2, cache.pullRequestsByCommitId.size)
+        }
+    }
+
+    @Nav
+    @Test
+    fun `nav finish clears the nav status cache`() {
+        withTestSetup(useFakeRemote) {
+            createCommitsFrom(
+                testCase {
+                    repository {
+                        commit { title = "one" }
+                        commit {
+                            title = "two"
+                            localRefs += "development"
+                        }
+                    }
+                    checkout = "development"
+                }
+            )
+            gitJaspr.push(stackName = "cache-stack")
+            gitJaspr.navigateToBottom(DEFAULT_TARGET_REF)
+            gitJaspr.getStatusStringForNav() // populate cache
+
+            assertNotNull(gitJaspr.readNavStatusCache())
+
+            gitJaspr.finishNavSession()
+            assertNull(gitJaspr.readNavStatusCache())
+        }
+    }
+
+    @Nav
+    @Test
+    fun `nav cancel clears the nav status cache`() {
+        withTestSetup(useFakeRemote) {
+            createCommitsFrom(
+                testCase {
+                    repository {
+                        commit { title = "one" }
+                        commit {
+                            title = "two"
+                            localRefs += "development"
+                        }
+                    }
+                    checkout = "development"
+                }
+            )
+            gitJaspr.push(stackName = "cache-stack")
+            gitJaspr.navigateToBottom(DEFAULT_TARGET_REF)
+            gitJaspr.getStatusStringForNav() // populate cache
+
+            assertNotNull(gitJaspr.readNavStatusCache())
+
+            gitJaspr.cancelNavSession()
+            assertNull(gitJaspr.readNavStatusCache())
+        }
+    }
+
+    @Test
+    fun `getStatusString outside of nav still writes the cache so nav can pre-warm`() {
+        withTestSetup(useFakeRemote) {
+            createCommitsFrom(
+                testCase {
+                    repository {
+                        commit { title = "one" }
+                        commit {
+                            title = "two"
+                            localRefs += "development"
+                        }
+                    }
+                    checkout = "development"
+                }
+            )
+            gitJaspr.push(stackName = "prewarm-stack")
+
+            // No nav session active. Explicit status should still persist PRs to the cache so a
+            // subsequent `jaspr bottom` / `jaspr up` can serve from cache without re-fetching.
+            // (The push above also writes the cache via its post-push status print; clear it so
+            // we're exercising the explicit-status path directly.)
+            gitJaspr.clearNavStatusCache()
+            assertNull(gitJaspr.readNavStatusCache())
+            gitJaspr.getStatusString()
+
+            val cache = gitJaspr.readNavStatusCache()
+            assertNotNull(cache)
+            assertEquals(2, cache.pullRequestsByCommitId.size)
+        }
+    }
+
     // endregion
 
     // region fold tests

@@ -66,12 +66,17 @@ class GitJaspr(
                 ghClient.getPullRequests(commits)
         }
 
+    /**
+     * Explicit `jaspr status`: always fetch fresh from GitHub. If a nav session is active, persists
+     * the fresh PR data to the cache so subsequent [getStatusStringForNav] calls can skip the
+     * GitHub round-trip.
+     */
     suspend fun getStatusString(
         refSpec: RefSpec = RefSpec(DEFAULT_LOCAL_OBJECT, DEFAULT_TARGET_REF),
         theme: Theme = MonoTheme,
     ): String {
         gitClient.fetch(config.remoteName)
-        return getStatusString(refSpec, theme, defaultStrategy())
+        return getStatusString(refSpec, theme, explicitStatusStrategy())
     }
 
     suspend fun getStatusString(
@@ -79,15 +84,85 @@ class GitJaspr(
         remoteBranches: List<RemoteBranch>,
         theme: Theme = MonoTheme,
     ): String {
-        val strategy = defaultStrategy()
         return getStatusString(
             refSpec,
             theme,
-            object : GetStatusStringStrategy by strategy {
-                override fun getRemoteBranches() = remoteBranches
-            },
+            explicitStatusStrategy(remoteBranchesOverride = remoteBranches),
         )
     }
+
+    /**
+     * Nav-aware status used by `jaspr up` / `down` / `top` / `bottom` to print a quick post-move
+     * report. Layers a [cachedStrategy] on top of a [cachePersistingStrategy] so a cache hit serves
+     * PRs without a GitHub round-trip, and a cache miss (different stack, new commits) falls
+     * through to a fresh fetch that re-populates the cache.
+     */
+    suspend fun getStatusStringForNav(
+        refSpec: RefSpec = RefSpec(DEFAULT_LOCAL_OBJECT, DEFAULT_TARGET_REF),
+        theme: Theme = MonoTheme,
+    ): String {
+        gitClient.fetch(config.remoteName)
+        val baseStrategy = cachePersistingStrategy(defaultStrategy())
+        val cache = readNavStatusCache()
+        val strategy = if (cache != null) cachedStrategy(baseStrategy, cache) else baseStrategy
+        return getStatusString(refSpec, theme, strategy)
+    }
+
+    /**
+     * Strategy factory for explicit `jaspr status` invocations. Always persists the fetched PR data
+     * so that a subsequent `jaspr bottom` / `jaspr up` can serve from cache without re-fetching
+     * from GitHub (the typical "look around, then dive in" workflow).
+     */
+    private fun explicitStatusStrategy(
+        remoteBranchesOverride: List<RemoteBranch>? = null
+    ): GetStatusStringStrategy {
+        val defaultBase = defaultStrategy()
+        val base =
+            if (remoteBranchesOverride != null) {
+                object : GetStatusStringStrategy by defaultBase {
+                    override fun getRemoteBranches() = remoteBranchesOverride
+                }
+            } else defaultBase
+        return cachePersistingStrategy(base)
+    }
+
+    /**
+     * Returns a strategy that serves [GetStatusStringStrategy.getPullRequests] from [cache] when
+     * the cache covers every requested commit-id. If any requested id is missing (the user has
+     * switched stacks, added a new commit, etc.), falls through to [base] so a fresh fetch can
+     * happen. The wrapping [cachePersistingStrategy] then re-populates the cache.
+     */
+    private fun cachedStrategy(
+        base: GetStatusStringStrategy,
+        cache: NavStatusCache,
+    ): GetStatusStringStrategy =
+        object : GetStatusStringStrategy by base {
+            override suspend fun getPullRequests(commits: List<Commit>): List<PullRequest> {
+                val requestedIds = commits.mapNotNull { it.id }
+                val allCached =
+                    requestedIds.isNotEmpty() &&
+                        requestedIds.all { it in cache.pullRequestsByCommitId }
+                return if (allCached) {
+                    requestedIds.mapNotNull { cache.pullRequestsByCommitId[it] }
+                } else {
+                    base.getPullRequests(commits)
+                }
+            }
+        }
+
+    /**
+     * Returns a strategy that wraps [base] and, after every fresh [getPullRequests] call, persists
+     * the returned PRs (keyed by commit-id) to the nav-status cache.
+     */
+    private fun cachePersistingStrategy(base: GetStatusStringStrategy): GetStatusStringStrategy =
+        object : GetStatusStringStrategy by base {
+            override suspend fun getPullRequests(commits: List<Commit>): List<PullRequest> {
+                val prs = base.getPullRequests(commits)
+                val byId = prs.mapNotNull { pr -> pr.commitId?.let { it to pr } }.toMap()
+                writeNavStatusCache(NavStatusCache(byId))
+                return prs
+            }
+        }
 
     suspend fun getStatusString(
         refSpec: RefSpec = RefSpec(DEFAULT_LOCAL_OBJECT, DEFAULT_TARGET_REF),
@@ -2649,6 +2724,29 @@ class GitJaspr(
 
     fun isSplitInProgress() = readSplitState() != null
 
+    private val navStatusCacheFile
+        get() = getJasprDir().resolve("nav-status-cache.json")
+
+    fun readNavStatusCache(): NavStatusCache? {
+        val file = navStatusCacheFile
+        if (!file.exists()) return null
+        return try {
+            json.decodeFromString<NavStatusCache>(file.readText())
+        } catch (e: Exception) {
+            logger.warn("Failed to read nav status cache, clearing", e)
+            clearNavStatusCache()
+            null
+        }
+    }
+
+    fun writeNavStatusCache(cache: NavStatusCache) {
+        navStatusCacheFile.writeText(json.encodeToString(cache))
+    }
+
+    fun clearNavStatusCache() {
+        navStatusCacheFile.delete()
+    }
+
     /**
      * Navigate down N commits in the stack (toward the target branch). Detaches HEAD and writes nav
      * state.
@@ -2922,6 +3020,7 @@ class GitJaspr(
 
         gitClient.checkout(state.headBeforeDetach)
         clearNavState()
+        clearNavStatusCache()
         return orphanedShas
     }
 
@@ -2934,6 +3033,7 @@ class GitJaspr(
         gitClient.branch(state.headBeforeDetach, startPoint = newTip, force = true)
         gitClient.checkout(state.headBeforeDetach)
         clearNavState()
+        clearNavStatusCache()
     }
 
     /**

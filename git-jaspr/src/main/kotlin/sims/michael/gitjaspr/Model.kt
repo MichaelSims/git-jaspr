@@ -73,6 +73,7 @@ data class RemoteCommitStatus(
             approved == true
 }
 
+@Serializable
 data class PullRequest(
     val id: String?,
     val commitId: String?,
@@ -142,6 +143,16 @@ data class SplitState(
     /** SHA to soft-reset to when unsplitting (the original commit before the mixed reset). */
     val unsplitSha: String
 )
+
+/**
+ * Status data cache persisted in `.git/jaspr/nav-status-cache.json`. Lets post-nav status output
+ * skip the slow GitHub PR fetch when the user is moving through a stack. Recomputed and overwritten
+ * by every explicit `jaspr status` invocation; cleared at the end of a nav session.
+ *
+ * Keyed by jaspr commit-id (not git SHA) so the cache survives amends: amending a commit changes
+ * its SHA but its commit-id (and therefore the associated PR) is stable.
+ */
+@Serializable data class NavStatusCache(val pullRequestsByCommitId: Map<String, PullRequest>)
 
 class GitJasprException(override val message: String) : RuntimeException(message) {
     constructor(message: String, cause: Throwable) : this(message) {
