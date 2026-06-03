@@ -1306,7 +1306,10 @@ class GitJaspr(
         )
 
         if (localBranchesToDelete.isNotEmpty()) {
-            gitClient.deleteBranches(localBranchesToDelete)
+            // Force-delete: the remote was already removed above and the user explicitly opted
+            // into cleaning these branches. JGit's default merged-into-HEAD check would refuse
+            // for abandoned named-stack branches (which by definition carry unique commits).
+            gitClient.deleteBranches(localBranchesToDelete, force = true)
             renderer.info {
                 "Removed ${localBranchesToDelete.size} local " +
                     "${branchOrBranches(localBranchesToDelete.size)}: " +
@@ -2431,7 +2434,10 @@ class GitJaspr(
         gitClient.push(listOf(RefSpec(FORCE_PUSH_PREFIX, stackRef)), remoteName)
         renderer.info { "Deleted remote stack branch ${entity(stackRef)}" }
         if (localBranchesToDelete.isNotEmpty()) {
-            gitClient.deleteBranches(localBranchesToDelete)
+            // Force-delete: the remote was already removed above and the user explicitly opted
+            // into deleting this stack. The merged-into-HEAD safety check would otherwise
+            // block any local branch whose commits aren't reachable from the current HEAD.
+            gitClient.deleteBranches(localBranchesToDelete, force = true)
             for (branch in localBranchesToDelete) {
                 renderer.info { "Deleted local branch '${entity(branch)}'" }
             }
