@@ -97,8 +97,16 @@ class GitJaspr(
         logger.trace("getStatusString {}", refSpec)
         val remoteName = config.remoteName
 
+        // During a nav session HEAD is detached at the cursor, so walking from HEAD only sees
+        // the cursor commit and its ancestors -- a prefix of the real stack. Walk from the
+        // pre-nav branch instead so divergence math operates on the full local stack.
+        val navState = if (isNavSessionActive()) readNavState() else null
+        val effectiveRefSpec =
+            if (navState != null) refSpec.copy(localRef = navState.headBeforeDetach) else refSpec
+
         val remoteBranches = strategy.getRemoteBranches()
-        val stack = strategy.getLocalCommitStack(refSpec.localRef, refSpec.remoteRef)
+        val stack =
+            strategy.getLocalCommitStack(effectiveRefSpec.localRef, effectiveRefSpec.remoteRef)
         if (stack.isEmpty()) return theme.muted("Stack is empty.") + "\n"
 
         val statuses = getRemoteCommitStatuses(stack, remoteBranches, strategy)
@@ -112,17 +120,18 @@ class GitJaspr(
                 .filter { (_, statuses) -> statuses.size > 1 }
 
         val numCommitsBehindBase =
-            strategy.logRange(stack.last().hash, "$remoteName/${refSpec.remoteRef}").size
+            strategy.logRange(stack.last().hash, "$remoteName/${effectiveRefSpec.remoteRef}").size
         return buildStatusString(
             statuses,
             commitsWithDuplicateIds,
             numCommitsBehindBase,
             remoteName,
-            refSpec,
+            effectiveRefSpec,
             stack,
             remoteBranches,
             strategy,
             theme,
+            navState,
         )
     }
 
@@ -136,8 +145,12 @@ class GitJaspr(
         remoteBranches: List<RemoteBranch>,
         strategy: GetStatusStringStrategy,
         theme: Theme,
+        navState: NavState?,
     ): String = buildString {
+        if (navState != null) appendLine(navBanner(navState, theme))
         append(theme.heading(HEADER))
+
+        val cursorSha = navState?.stack?.getOrNull(navState.cursorIndex)?.sha
 
         val stackChecks =
             if (numCommitsBehindBase != 0) {
@@ -154,19 +167,32 @@ class GitJaspr(
 
         for (statusAndStackCheck in statuses.reversed().zip(stackChecks.reversed())) {
             val (status, stackCheck) = statusAndStackCheck
-            append("[")
-            val flags = status.toStatusList(commitsWithDuplicateIds)
-            val statusList = flags + if (stackCheck) SUCCESS else EMPTY
-            append(statusList.joinToString(separator = "") { it.styledEmoji(theme) })
-            append("] ")
-            append(theme.hash(status.localCommit.hash))
-            append(" : ")
-            val permalink = status.pullRequest?.permalink
-            if (permalink != null) {
-                append(theme.url(status.pullRequest.permalink))
+            val isCursor = navState != null && status.localCommit.hash == cursorSha
+            val lineContent = buildString {
+                append("[")
+                val flags = status.toStatusList(commitsWithDuplicateIds)
+                val statusList = flags + if (stackCheck) SUCCESS else EMPTY
+                // On the cursor row, skip styles that use ANSI intensity (dim) -- their inner
+                // resets fight the outer bold wrap and the result reads as visually uneven.
+                // Specifically: theme.muted on EMPTY and theme.hash on the SHA both use dim.
+                append(
+                    statusList.joinToString(separator = "") { flag ->
+                        if (isCursor && flag == EMPTY) flag.emoji else flag.styledEmoji(theme)
+                    }
+                )
+                append("] ")
+                append(
+                    if (isCursor) status.localCommit.hash else theme.hash(status.localCommit.hash)
+                )
                 append(" : ")
+                val permalink = status.pullRequest?.permalink
+                if (permalink != null) {
+                    append(theme.url(status.pullRequest.permalink))
+                    append(" : ")
+                }
+                append(theme.value(status.localCommit.shortMessage))
             }
-            appendLine(theme.value(status.localCommit.shortMessage))
+            appendLine(if (isCursor) theme.emphasis(lineContent) else lineContent)
         }
 
         appendNamedStackInfo(stack, remoteBranches, theme, strategy)
@@ -310,6 +336,17 @@ class GitJaspr(
         appendLine(theme.warning("! ${parts.joinToString(", ")}. Run `jaspr compare` for details."))
     }
 
+    /**
+     * Banner shown at the top of nav-aware command output. Position counts from the top (so the tip
+     * is `[1/N]` and the base is `[N/N]`) to match the row labels in `jaspr compare`. Rendered with
+     * [Theme.entity] (cyan in [DefaultTheme]) to contrast with the bold flag-key / column header
+     * without being a warning color.
+     */
+    private fun navBanner(state: NavState, theme: Theme): String {
+        val positionFromTop = state.stack.size - state.cursorIndex
+        return theme.entity("Navigating [$positionFromTop/${state.stack.size}]")
+    }
+
     data class StackNameSuggestions(
         val candidates: List<String>,
         val ambiguousStackNames: List<String> = emptyList(),
@@ -410,8 +447,15 @@ class GitJaspr(
         val remoteName = config.remoteName
         gitClient.fetch(remoteName)
         val remoteBranches = gitClient.getRemoteBranches(remoteName)
+
+        // During a nav session HEAD is detached at the cursor, which would collapse the LOCAL
+        // column to just the cursor's prefix. Walk from the pre-nav branch instead.
+        val navState = if (isNavSessionActive()) readNavState() else null
+        val effectiveLocalRef = navState?.headBeforeDetach ?: refSpec.localRef
+        val cursorSha = navState?.stack?.getOrNull(navState.cursorIndex)?.sha
+
         val localStack =
-            gitClient.getLocalCommitStack(remoteName, refSpec.localRef, refSpec.remoteRef)
+            gitClient.getLocalCommitStack(remoteName, effectiveLocalRef, refSpec.remoteRef)
         if (localStack.isEmpty()) return theme.muted("Stack is empty.") + "\n"
 
         val stackName =
@@ -438,7 +482,10 @@ class GitJaspr(
 
         return DivergenceClassifier(config.workingDirectory, getJasprDir()).use { classifier ->
             val rows = alignStacks(localStack, remoteStack, classifier)
-            renderCompare(rows, "$remoteName/$stackName", theme)
+            buildString {
+                if (navState != null) appendLine(navBanner(navState, theme))
+                append(renderCompare(rows, "$remoteName/$stackName", theme, cursorSha = cursorSha))
+            }
         }
     }
 
