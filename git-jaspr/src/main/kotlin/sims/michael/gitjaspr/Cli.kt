@@ -1386,6 +1386,10 @@ private fun describeReachedTop(count: Int, restoredName: String): String {
 class Nav : SuspendingCliktCommand(name = "nav") {
     override fun help(context: Context) = "Navigation session management"
 
+    // `jaspr nav abort` is a hidden alias for `jaspr nav cancel`. Matches the verb users will
+    // reach for from git muscle memory (`git rebase --abort`, etc.) without bloating help.
+    override fun aliases(): Map<String, List<String>> = mapOf("abort" to listOf("cancel"))
+
     override suspend fun run() = Unit
 }
 
