@@ -64,7 +64,7 @@ class GitJaspr(
     interface GetStatusStringStrategy {
         fun getRemoteBranches(): List<RemoteBranch>
 
-        fun getLocalCommitStack(localRef: String, remoteRef: String): List<Commit>
+        fun getCommitStack(localRef: String, remoteRef: String): List<Commit>
 
         fun logRange(since: String, until: String): List<Commit>
 
@@ -75,8 +75,8 @@ class GitJaspr(
         object : GetStatusStringStrategy {
             override fun getRemoteBranches() = gitClient.getRemoteBranches(config.remoteName)
 
-            override fun getLocalCommitStack(localRef: String, remoteRef: String) =
-                gitClient.getLocalCommitStack(config.remoteName, localRef, remoteRef)
+            override fun getCommitStack(localRef: String, remoteRef: String) =
+                gitClient.getCommitStack(config.remoteName, localRef, remoteRef)
 
             override fun logRange(since: String, until: String) = gitClient.logRange(since, until)
 
@@ -123,8 +123,7 @@ class GitJaspr(
             if (navState != null) refSpec.copy(localRef = navState.headBeforeDetach) else refSpec
 
         val remoteBranches = strategy.getRemoteBranches()
-        val stack =
-            strategy.getLocalCommitStack(effectiveRefSpec.localRef, effectiveRefSpec.remoteRef)
+        val stack = strategy.getCommitStack(effectiveRefSpec.localRef, effectiveRefSpec.remoteRef)
         if (stack.isEmpty()) return theme.muted("Stack is empty.") + "\n"
 
         val statuses = getRemoteCommitStatuses(stack, remoteBranches, strategy)
@@ -333,7 +332,7 @@ class GitJaspr(
                 ?: return
         val remoteStack =
             try {
-                strategy.getLocalCommitStack("$remoteName/$stackName", targetRef)
+                strategy.getCommitStack("$remoteName/$stackName", targetRef)
             } catch (e: Exception) {
                 logger.debug("Failed to walk remote stack '{}': {}", stackName, e.message)
                 return
@@ -513,8 +512,7 @@ class GitJaspr(
         val effectiveLocalRef = navState?.headBeforeDetach ?: refSpec.localRef
         val cursorSha = navState?.stack?.getOrNull(navState.cursorIndex)?.sha
 
-        val localStack =
-            gitClient.getLocalCommitStack(remoteName, effectiveLocalRef, refSpec.remoteRef)
+        val localStack = gitClient.getCommitStack(remoteName, effectiveLocalRef, refSpec.remoteRef)
         if (localStack.isEmpty()) return theme.muted("Stack is empty.") + "\n"
 
         val stackName =
@@ -533,11 +531,7 @@ class GitJaspr(
         val namedStackRef =
             checkNotNull(RemoteNamedStackRef.parse(stackName, config.remoteNamedStackBranchPrefix))
         val remoteStack =
-            gitClient.getLocalCommitStack(
-                remoteName,
-                "$remoteName/$stackName",
-                namedStackRef.targetRef,
-            )
+            gitClient.getCommitStack(remoteName, "$remoteName/$stackName", namedStackRef.targetRef)
 
         return DivergenceClassifier(config.workingDirectory, getJasprDir()).use { classifier ->
             val rows = alignStacks(localStack, remoteStack, classifier)
@@ -566,7 +560,7 @@ class GitJaspr(
 
             val localStack =
                 try {
-                    gitClient.getLocalCommitStack(remoteName, refSpec.localRef, refSpec.remoteRef)
+                    gitClient.getCommitStack(remoteName, refSpec.localRef, refSpec.remoteRef)
                 } catch (e: Exception) {
                     logger.debug("Failed to walk local stack for graph: {}", e.message)
                     return@buildList
@@ -601,8 +595,7 @@ class GitJaspr(
         val remoteName = config.remoteName
         gitClient.fetch(remoteName)
         val remoteBranches = gitClient.getRemoteBranches(remoteName)
-        val localStack =
-            gitClient.getLocalCommitStack(remoteName, refSpec.localRef, refSpec.remoteRef)
+        val localStack = gitClient.getCommitStack(remoteName, refSpec.localRef, refSpec.remoteRef)
         if (localStack.isEmpty()) return theme.muted("Stack is empty; nothing to pull.") + "\n"
 
         val stackName =
@@ -622,7 +615,7 @@ class GitJaspr(
             checkNotNull(RemoteNamedStackRef.parse(stackName, config.remoteNamedStackBranchPrefix))
         val remoteStackRef = "$remoteName/$stackName"
         val remoteStack =
-            gitClient.getLocalCommitStack(remoteName, remoteStackRef, namedStackRef.targetRef)
+            gitClient.getCommitStack(remoteName, remoteStackRef, namedStackRef.targetRef)
         val remoteTipSha = gitClient.log(remoteStackRef, 1).single().hash
 
         val targetRefFull = "$remoteName/${namedStackRef.targetRef}"
@@ -700,7 +693,7 @@ class GitJaspr(
         }
 
         val newLocalStack =
-            gitClient.getLocalCommitStack(config.remoteName, refSpec.localRef, refSpec.remoteRef)
+            gitClient.getCommitStack(config.remoteName, refSpec.localRef, refSpec.remoteRef)
         val newRemoteTipSha = gitClient.log(remoteStackRef, 1).single().hash
         val newPlan =
             getPullPlan(newLocalStack, remoteStack, newRemoteTipSha, baseRelation, emptySet())
@@ -927,12 +920,11 @@ class GitJaspr(
         gitClient.fetch(remoteName)
 
         val targetRef = refSpec.remoteRef
-        fun getLocalCommitStack() =
-            gitClient.getLocalCommitStack(remoteName, refSpec.localRef, targetRef)
-        val originalStack = resolveCount(getLocalCommitStack(), count)
+        fun getCommitStack() = gitClient.getCommitStack(remoteName, refSpec.localRef, targetRef)
+        val originalStack = resolveCount(getCommitStack(), count)
         val stackWithIds =
             if (addCommitIdsToLocalStack(originalStack)) {
-                resolveCount(getLocalCommitStack(), count)
+                resolveCount(getCommitStack(), count)
             } else {
                 originalStack
             }
@@ -1134,7 +1126,7 @@ class GitJaspr(
 
         val fullStack =
             resolveCount(
-                gitClient.getLocalCommitStack(remoteName, refSpec.localRef, refSpec.remoteRef),
+                gitClient.getCommitStack(remoteName, refSpec.localRef, refSpec.remoteRef),
                 count,
             )
         if (fullStack.isEmpty()) {
@@ -1258,7 +1250,7 @@ class GitJaspr(
         gitClient.fetch(remoteName)
         val fullStack =
             resolveCount(
-                gitClient.getLocalCommitStack(remoteName, refSpec.localRef, refSpec.remoteRef),
+                gitClient.getCommitStack(remoteName, refSpec.localRef, refSpec.remoteRef),
                 count,
             )
         val (filteredStack, excludedCommits) = filterStackByDontPushOrDraft(fullStack)
@@ -1315,7 +1307,7 @@ class GitJaspr(
                 }
 
                 val stack =
-                    worktreeGit.getLocalCommitStack(
+                    worktreeGit.getCommitStack(
                         remoteName,
                         autoMergeRefSpec.localRef,
                         autoMergeRefSpec.remoteRef,
@@ -1487,7 +1479,7 @@ class GitJaspr(
             if (parts != null) {
                 // Named stack branch - check if it has commits not in its target
                 val stack =
-                    gitClient.getLocalCommitStack(
+                    gitClient.getCommitStack(
                         config.remoteName,
                         "${config.remoteName}/$branchName",
                         parts.targetRef,
@@ -1524,7 +1516,7 @@ class GitJaspr(
                 RemoteNamedStackRef.parse(branch.name, config.remoteNamedStackBranchPrefix)
                     ?: return@mapNotNull null
             val stack =
-                gitClient.getLocalCommitStack(
+                gitClient.getCommitStack(
                     config.remoteName,
                     "${config.remoteName}/${branch.name}",
                     parts.targetRef,
@@ -2305,10 +2297,10 @@ class GitJaspr(
 
         val targetRef = refSpec.remoteRef
         val stack =
-            gitClient.getLocalCommitStack(remoteName, refSpec.localRef, targetRef).let { original ->
+            gitClient.getCommitStack(remoteName, refSpec.localRef, targetRef).let { original ->
                 filterStackByDontPushPattern(
                         if (addCommitIdsToLocalStack(original)) {
-                            gitClient.getLocalCommitStack(remoteName, refSpec.localRef, targetRef)
+                            gitClient.getCommitStack(remoteName, refSpec.localRef, targetRef)
                         } else {
                             original
                         }
@@ -2389,7 +2381,7 @@ class GitJaspr(
 
     /**
      * Returns all named stacks on the remote with their health flags computed in one pass. Costs an
-     * extra [GitClient.getLocalCommitStack] per stack relative to [getAllNamedStacks]; prefer
+     * extra [GitClient.getCommitStack] per stack relative to [getAllNamedStacks]; prefer
      * [getAllNamedStacks] when callers don't need the status.
      */
     fun getAllNamedStacksWithStatus(): List<NamedStackWithStatus> {
@@ -2408,7 +2400,7 @@ class GitJaspr(
                     RemoteNamedStackRef.parse(branch.name, config.remoteNamedStackBranchPrefix)
                         ?: return@mapNotNull null
                 val stack =
-                    gitClient.getLocalCommitStack(
+                    gitClient.getCommitStack(
                         remoteName,
                         "$remoteName/${branch.name}",
                         ref.targetRef,
@@ -2837,7 +2829,7 @@ class GitJaspr(
 
         val remoteName = config.remoteName
         gitClient.fetch(remoteName)
-        val commits = gitClient.getLocalCommitStack(remoteName, GitClient.HEAD, targetRef)
+        val commits = gitClient.getCommitStack(remoteName, GitClient.HEAD, targetRef)
         require(commits.isNotEmpty()) { "Stack is empty." }
 
         val stack = commits.map { commit ->
@@ -2881,7 +2873,7 @@ class GitJaspr(
         gitClient.fetch(remoteName)
 
         // Walk from HEAD to the merge base to get what's actually materialized
-        val actualBelow = gitClient.getLocalCommitStack(remoteName, GitClient.HEAD, targetRef)
+        val actualBelow = gitClient.getCommitStack(remoteName, GitClient.HEAD, targetRef)
 
         // The expected "below" portion of the stack
         val expectedBelow = state.stack.subList(0, state.cursorIndex + 1)
@@ -3265,7 +3257,7 @@ class GitJaspr(
 
         val branchStacks = buildList {
             for (branch in gitClient.getBranchNames()) {
-                val commits = gitClient.getLocalCommitStack(remoteName, branch, targetRef)
+                val commits = gitClient.getCommitStack(remoteName, branch, targetRef)
                 val hasJasprCommits = commits.any { commit -> commit.id != null }
                 if (hasJasprCommits) {
                     add(BranchStack(branch, commits))

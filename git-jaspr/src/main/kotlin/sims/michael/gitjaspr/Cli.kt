@@ -1527,7 +1527,7 @@ class Fixup : GitJasprSubcommand(helpText = "Create a fixup commit targeting a s
         }
 
         gitClient.fetch(remoteName)
-        val stack = gitClient.getLocalCommitStack(remoteName, GitClient.HEAD, targetOpts.target)
+        val stack = gitClient.getCommitStack(remoteName, GitClient.HEAD, targetOpts.target)
         if (stack.isEmpty()) {
             renderer.error { "Stack is empty." }
             throw ProgramResult(1)
@@ -1789,7 +1789,7 @@ class PreviewTheme :
             object : GitJaspr.GetStatusStringStrategy {
                 override fun getRemoteBranches() = remoteBranches
 
-                override fun getLocalCommitStack(localRef: String, remoteRef: String) = commits
+                override fun getCommitStack(localRef: String, remoteRef: String) = commits
 
                 override fun logRange(since: String, until: String) = emptyList<Commit>()
 

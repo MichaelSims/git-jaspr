@@ -31,7 +31,7 @@ interface GitClient {
 
     fun hasUncommittedChangesToTrackedFiles(): Boolean
 
-    fun getLocalCommitStack(
+    fun getCommitStack(
         remoteName: String,
         localObjectName: String,
         targetRefName: String,

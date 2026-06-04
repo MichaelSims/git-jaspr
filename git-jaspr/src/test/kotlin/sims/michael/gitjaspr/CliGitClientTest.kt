@@ -295,7 +295,7 @@ class CliGitClientTest : GitClientTest {
     }
 
     @Test
-    fun `compare getLocalCommitStack`() {
+    fun `compare getCommitStack`() {
         withTestSetup {
             createCommitsFrom(
                 testCase {
@@ -324,8 +324,8 @@ class CliGitClientTest : GitClientTest {
             val cliGit = CliGitClient(localGit.workingDirectory)
             val git = JGitClient(localGit.workingDirectory)
             assertEquals(
-                cliGit.getLocalCommitStack(remoteName, DEFAULT_TARGET_REF, DEFAULT_TARGET_REF),
-                git.getLocalCommitStack(remoteName, DEFAULT_TARGET_REF, DEFAULT_TARGET_REF),
+                cliGit.getCommitStack(remoteName, DEFAULT_TARGET_REF, DEFAULT_TARGET_REF),
+                git.getCommitStack(remoteName, DEFAULT_TARGET_REF, DEFAULT_TARGET_REF),
             )
         }
     }

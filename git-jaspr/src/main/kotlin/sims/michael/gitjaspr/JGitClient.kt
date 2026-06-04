@@ -133,12 +133,12 @@ class JGitClient(
         }
     }
 
-    override fun getLocalCommitStack(
+    override fun getCommitStack(
         remoteName: String,
         localObjectName: String,
         targetRefName: String,
     ): List<Commit> {
-        logger.trace("getLocalCommitStack {} {} {}", remoteName, localObjectName, targetRefName)
+        logger.trace("getCommitStack {} {} {}", remoteName, localObjectName, targetRefName)
         return useGit { git ->
             val r = git.repository
             val trackingBranch =

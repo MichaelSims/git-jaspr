@@ -171,7 +171,7 @@ interface GitJasprTest {
                 }
             )
             localGit.fetch(remoteName)
-            val stack = localGit.getLocalCommitStack(remoteName, GitClient.HEAD, DEFAULT_TARGET_REF)
+            val stack = localGit.getCommitStack(remoteName, GitClient.HEAD, DEFAULT_TARGET_REF)
             assertEquals(3, stack.size)
 
             gitJaspr.navigateDown(DEFAULT_TARGET_REF, 1)
@@ -206,7 +206,7 @@ interface GitJasprTest {
                 }
             )
             localGit.fetch(remoteName)
-            val stack = localGit.getLocalCommitStack(remoteName, GitClient.HEAD, DEFAULT_TARGET_REF)
+            val stack = localGit.getCommitStack(remoteName, GitClient.HEAD, DEFAULT_TARGET_REF)
 
             gitJaspr.navigateDown(DEFAULT_TARGET_REF, 2)
 
@@ -276,7 +276,7 @@ interface GitJasprTest {
                 }
             )
             localGit.fetch(remoteName)
-            val stack = localGit.getLocalCommitStack(remoteName, GitClient.HEAD, DEFAULT_TARGET_REF)
+            val stack = localGit.getCommitStack(remoteName, GitClient.HEAD, DEFAULT_TARGET_REF)
 
             gitJaspr.navigateToBottom(DEFAULT_TARGET_REF)
 
@@ -303,7 +303,7 @@ interface GitJasprTest {
                 }
             )
             localGit.fetch(remoteName)
-            val stack = localGit.getLocalCommitStack(remoteName, GitClient.HEAD, DEFAULT_TARGET_REF)
+            val stack = localGit.getCommitStack(remoteName, GitClient.HEAD, DEFAULT_TARGET_REF)
 
             gitJaspr.navigateDown(DEFAULT_TARGET_REF, 1)
             val firstState = gitJaspr.readNavState()
@@ -343,7 +343,7 @@ interface GitJasprTest {
                 }
             )
             localGit.fetch(remoteName)
-            val stack = localGit.getLocalCommitStack(remoteName, GitClient.HEAD, DEFAULT_TARGET_REF)
+            val stack = localGit.getCommitStack(remoteName, GitClient.HEAD, DEFAULT_TARGET_REF)
 
             // Navigate down 2, then up 1
             gitJaspr.navigateDown(DEFAULT_TARGET_REF, 2)
@@ -376,7 +376,7 @@ interface GitJasprTest {
             )
             localGit.fetch(remoteName)
             val originalStack =
-                localGit.getLocalCommitStack(remoteName, GitClient.HEAD, DEFAULT_TARGET_REF)
+                localGit.getCommitStack(remoteName, GitClient.HEAD, DEFAULT_TARGET_REF)
 
             // Navigate to bottom, then back to top
             gitJaspr.navigateToBottom(DEFAULT_TARGET_REF)
@@ -389,8 +389,7 @@ interface GitJasprTest {
 
             // Stack should still have the same 3 commits at the SAME SHAs (plain checkouts,
             // not cherry-picks) since nothing was amended.
-            val newStack =
-                localGit.getLocalCommitStack(remoteName, GitClient.HEAD, DEFAULT_TARGET_REF)
+            val newStack = localGit.getCommitStack(remoteName, GitClient.HEAD, DEFAULT_TARGET_REF)
             assertEquals(originalStack.map(Commit::hash), newStack.map(Commit::hash))
         }
     }
@@ -473,8 +472,7 @@ interface GitJasprTest {
             assertNull(gitJaspr.readNavState())
 
             // Final stack should be A -> B -> E -> C -> D
-            val finalStack =
-                localGit.getLocalCommitStack(remoteName, GitClient.HEAD, DEFAULT_TARGET_REF)
+            val finalStack = localGit.getCommitStack(remoteName, GitClient.HEAD, DEFAULT_TARGET_REF)
             assertEquals(listOf("A", "B", "E", "C", "D"), finalStack.map(Commit::shortMessage))
         }
     }
@@ -516,8 +514,7 @@ interface GitJasprTest {
             assertFalse(localGit.isHeadDetached())
 
             // Final stack should be A -> B -> C -> D (same order, new SHAs)
-            val finalStack =
-                localGit.getLocalCommitStack(remoteName, GitClient.HEAD, DEFAULT_TARGET_REF)
+            val finalStack = localGit.getCommitStack(remoteName, GitClient.HEAD, DEFAULT_TARGET_REF)
             assertEquals(listOf("A", "B", "C", "D"), finalStack.map(Commit::shortMessage))
         }
     }
@@ -582,7 +579,7 @@ interface GitJasprTest {
                 }
             )
             val originalStack =
-                localGit.getLocalCommitStack(remoteName, GitClient.HEAD, DEFAULT_TARGET_REF)
+                localGit.getCommitStack(remoteName, GitClient.HEAD, DEFAULT_TARGET_REF)
 
             // Bottom -> HEAD at A
             gitJaspr.navigateToBottom(DEFAULT_TARGET_REF)
@@ -597,8 +594,7 @@ interface GitJasprTest {
             // Up 2 reaches the top and ends the session, restoring "development" to the new tip.
             gitJaspr.navigateUp(2, DEFAULT_TARGET_REF)
 
-            val newStack =
-                localGit.getLocalCommitStack(remoteName, GitClient.HEAD, DEFAULT_TARGET_REF)
+            val newStack = localGit.getCommitStack(remoteName, GitClient.HEAD, DEFAULT_TARGET_REF)
             assertEquals(listOf("A", "B", "C"), newStack.map(Commit::shortMessage))
             for (i in originalStack.indices) {
                 assertNotEquals(
@@ -630,7 +626,7 @@ interface GitJasprTest {
                 }
             )
             val originalStack =
-                localGit.getLocalCommitStack(remoteName, GitClient.HEAD, DEFAULT_TARGET_REF)
+                localGit.getCommitStack(remoteName, GitClient.HEAD, DEFAULT_TARGET_REF)
 
             gitJaspr.navigateToBottom(DEFAULT_TARGET_REF)
 
@@ -641,8 +637,7 @@ interface GitJasprTest {
 
             gitJaspr.navigateToTop(DEFAULT_TARGET_REF)
 
-            val newStack =
-                localGit.getLocalCommitStack(remoteName, GitClient.HEAD, DEFAULT_TARGET_REF)
+            val newStack = localGit.getCommitStack(remoteName, GitClient.HEAD, DEFAULT_TARGET_REF)
             assertEquals(listOf("A", "B", "C"), newStack.map(Commit::shortMessage))
             for (i in originalStack.indices) {
                 assertNotEquals(
@@ -698,8 +693,7 @@ interface GitJasprTest {
             assertFalse(localGit.isHeadDetached())
 
             // Final stack should be A -> C -> D (B was dropped)
-            val finalStack =
-                localGit.getLocalCommitStack(remoteName, GitClient.HEAD, DEFAULT_TARGET_REF)
+            val finalStack = localGit.getCommitStack(remoteName, GitClient.HEAD, DEFAULT_TARGET_REF)
             assertEquals(listOf("A", "C", "D"), finalStack.map(Commit::shortMessage))
         }
     }
@@ -799,8 +793,7 @@ interface GitJasprTest {
             assertEquals(listOf("C", "D"), discarded.map(StackEntry::commitId))
 
             // Stack should now be just A -> B
-            val finalStack =
-                localGit.getLocalCommitStack(remoteName, GitClient.HEAD, DEFAULT_TARGET_REF)
+            val finalStack = localGit.getCommitStack(remoteName, GitClient.HEAD, DEFAULT_TARGET_REF)
             assertEquals(listOf("A", "B"), finalStack.map(Commit::shortMessage))
         }
     }
@@ -825,7 +818,7 @@ interface GitJasprTest {
             )
             localGit.fetch(remoteName)
             val originalStack =
-                localGit.getLocalCommitStack(remoteName, GitClient.HEAD, DEFAULT_TARGET_REF)
+                localGit.getCommitStack(remoteName, GitClient.HEAD, DEFAULT_TARGET_REF)
             val originalTipHash = originalStack.last().hash
 
             // Nav down 2: HEAD at A
@@ -1107,8 +1100,7 @@ interface GitJasprTest {
             assertNull(gitJaspr.readSplitState())
 
             // Final stack should be A -> B-part1 -> B-part2 -> C
-            val finalStack =
-                localGit.getLocalCommitStack(remoteName, GitClient.HEAD, DEFAULT_TARGET_REF)
+            val finalStack = localGit.getCommitStack(remoteName, GitClient.HEAD, DEFAULT_TARGET_REF)
             assertEquals(
                 listOf("A", "B-part1", "B-part2", "C"),
                 finalStack.map(Commit::shortMessage),
@@ -1588,7 +1580,7 @@ interface GitJasprTest {
             )
             // Both branches should now be rebased on top of advance_main
             for (branchName in listOf("branch_a", "branch_b")) {
-                val stack = localGit.getLocalCommitStack(remoteName, branchName, DEFAULT_TARGET_REF)
+                val stack = localGit.getCommitStack(remoteName, branchName, DEFAULT_TARGET_REF)
                 assertTrue(stack.isNotEmpty(), "$branchName should have commits above main")
             }
         }
@@ -1638,12 +1630,12 @@ interface GitJasprTest {
             )
 
             // branch_a should have: advance_main -> A'
-            val stackA = localGit.getLocalCommitStack(remoteName, "branch_a", DEFAULT_TARGET_REF)
+            val stackA = localGit.getCommitStack(remoteName, "branch_a", DEFAULT_TARGET_REF)
             assertEquals(1, stackA.size)
             assertEquals("A", stackA[0].shortMessage)
 
             // branch_c should have: advance_main -> A' -> B' -> C'
-            val stackC = localGit.getLocalCommitStack(remoteName, "branch_c", DEFAULT_TARGET_REF)
+            val stackC = localGit.getCommitStack(remoteName, "branch_c", DEFAULT_TARGET_REF)
             assertEquals(3, stackC.size)
             assertEquals(listOf("A", "B", "C"), stackC.map(Commit::shortMessage))
 
@@ -1935,7 +1927,7 @@ interface GitJasprTest {
             push()
             localGit.fetch(remoteName)
             val stack =
-                localGit.getLocalCommitStack(remoteName, DEFAULT_LOCAL_OBJECT, DEFAULT_TARGET_REF)
+                localGit.getCommitStack(remoteName, DEFAULT_LOCAL_OBJECT, DEFAULT_TARGET_REF)
             val remoteCommitStatuses = getRemoteCommitStatuses(stack)
             assertEquals(
                 localGit.log("HEAD", maxCount = 1).single(),
@@ -3720,7 +3712,7 @@ interface GitJasprTest {
 
             push()
 
-            val stack = localGit.getLocalCommitStack(remoteName, "HEAD", DEFAULT_TARGET_REF)
+            val stack = localGit.getCommitStack(remoteName, "HEAD", DEFAULT_TARGET_REF)
             assertTrue(stack.all { it.id != null })
         }
     }
@@ -4637,7 +4629,7 @@ interface GitJasprTest {
 
             val remoteBranches = localGit.getRemoteBranches(remoteName)
             val prefixedStackName = RemoteNamedStackRef("my-stack").name()
-            val stack = localGit.getLocalCommitStack(remoteName, GitClient.HEAD, DEFAULT_TARGET_REF)
+            val stack = localGit.getCommitStack(remoteName, GitClient.HEAD, DEFAULT_TARGET_REF)
 
             val abandonedPrs =
                 gitJaspr.findPrsAbandonedByPush(
@@ -4671,7 +4663,7 @@ interface GitJasprTest {
 
             val remoteBranches = localGit.getRemoteBranches(remoteName)
             val prefixedStackName = RemoteNamedStackRef("my-stack").name()
-            val stack = localGit.getLocalCommitStack(remoteName, GitClient.HEAD, DEFAULT_TARGET_REF)
+            val stack = localGit.getCommitStack(remoteName, GitClient.HEAD, DEFAULT_TARGET_REF)
 
             val abandonedPrs =
                 gitJaspr.findPrsAbandonedByPush(
@@ -4721,7 +4713,7 @@ interface GitJasprTest {
 
             val remoteBranches = localGit.getRemoteBranches(remoteName)
             val prefixedStackName = RemoteNamedStackRef("my-stack").name()
-            val stack = localGit.getLocalCommitStack(remoteName, GitClient.HEAD, DEFAULT_TARGET_REF)
+            val stack = localGit.getCommitStack(remoteName, GitClient.HEAD, DEFAULT_TARGET_REF)
 
             val abandonedPrs =
                 gitJaspr.findPrsAbandonedByPush(
@@ -4788,7 +4780,7 @@ interface GitJasprTest {
 
             val remoteBranches = localGit.getRemoteBranches(remoteName)
             val prefixedStackName = RemoteNamedStackRef("stack-B").name()
-            val stack = localGit.getLocalCommitStack(remoteName, GitClient.HEAD, DEFAULT_TARGET_REF)
+            val stack = localGit.getCommitStack(remoteName, GitClient.HEAD, DEFAULT_TARGET_REF)
 
             val abandonedPrs =
                 gitJaspr.findPrsAbandonedByPush(
@@ -5405,7 +5397,7 @@ interface GitJasprTest {
 
             assertEquals(
                 emptyList(),
-                localGit.getLocalCommitStack(remoteName, "development", DEFAULT_TARGET_REF),
+                localGit.getCommitStack(remoteName, "development", DEFAULT_TARGET_REF),
             )
         }
     }
@@ -5475,7 +5467,7 @@ interface GitJasprTest {
 
             assertEquals(
                 emptyList(),
-                localGit.getLocalCommitStack(remoteName, "main", DEFAULT_TARGET_REF),
+                localGit.getCommitStack(remoteName, "main", DEFAULT_TARGET_REF),
             )
         }
     }
@@ -5508,7 +5500,7 @@ interface GitJasprTest {
 
             assertEquals(
                 emptyList(),
-                localGit.getLocalCommitStack(remoteName, "development", DEFAULT_TARGET_REF),
+                localGit.getCommitStack(remoteName, "development", DEFAULT_TARGET_REF),
             )
         }
     }
@@ -5562,7 +5554,7 @@ interface GitJasprTest {
 
             assertEquals(
                 emptyList(),
-                localGit.getLocalCommitStack(remoteName, "development", DEFAULT_TARGET_REF),
+                localGit.getCommitStack(remoteName, "development", DEFAULT_TARGET_REF),
             )
         }
     }
@@ -5639,7 +5631,7 @@ interface GitJasprTest {
             assertEquals(
                 listOf("five"),
                 localGit
-                    .getLocalCommitStack(remoteName, "development", DEFAULT_TARGET_REF)
+                    .getCommitStack(remoteName, "development", DEFAULT_TARGET_REF)
                     .map(Commit::shortMessage),
             )
         }
@@ -5704,7 +5696,7 @@ interface GitJasprTest {
             assertEquals(
                 listOf("one", "two", "three"), // Nothing was merged
                 localGit
-                    .getLocalCommitStack(remoteName, "development", DEFAULT_TARGET_REF)
+                    .getCommitStack(remoteName, "development", DEFAULT_TARGET_REF)
                     .map(Commit::shortMessage),
             )
         }
@@ -7832,7 +7824,7 @@ interface GitJasprTest {
             merge(RefSpec("development", "main"))
 
             // Only commits one and two should be merged
-            val stack = localGit.getLocalCommitStack(remoteName, "development", DEFAULT_TARGET_REF)
+            val stack = localGit.getCommitStack(remoteName, "development", DEFAULT_TARGET_REF)
             assertEquals(2, stack.size)
             assertTrue(stack.any { it.shortMessage.startsWith("dont push three") })
             assertTrue(stack.any { it.shortMessage.startsWith("four") })
@@ -7870,7 +7862,7 @@ interface GitJasprTest {
             merge(RefSpec("development", "main"))
 
             // Commit one should be merged, but "Dont-push two" should remain
-            val stack = localGit.getLocalCommitStack(remoteName, "development", DEFAULT_TARGET_REF)
+            val stack = localGit.getCommitStack(remoteName, "development", DEFAULT_TARGET_REF)
             assertEquals(1, stack.size)
             assertTrue(stack.any { it.shortMessage.startsWith("Dont-push two") })
         }
@@ -7918,7 +7910,7 @@ interface GitJasprTest {
             autoMerge(RefSpec("development", "main"))
 
             // Commits one and two should be merged, but "DONT PUSH: three" should remain
-            val stack = localGit.getLocalCommitStack(remoteName, "development", DEFAULT_TARGET_REF)
+            val stack = localGit.getCommitStack(remoteName, "development", DEFAULT_TARGET_REF)
             assertEquals(1, stack.size)
             assertTrue(stack.any { it.shortMessage.startsWith("DONT PUSH: three") })
         }
@@ -8018,7 +8010,7 @@ interface GitJasprTest {
             autoMerge(RefSpec("development", "main"))
 
             // Commits one and two should be merged, but draft:three and four should remain
-            val stack = localGit.getLocalCommitStack(remoteName, "development", DEFAULT_TARGET_REF)
+            val stack = localGit.getCommitStack(remoteName, "development", DEFAULT_TARGET_REF)
             assertEquals(2, stack.size)
             assertTrue(stack.any { it.shortMessage.startsWith("draft: three") })
             assertTrue(stack.any { it.shortMessage.startsWith("four") })
@@ -8074,7 +8066,7 @@ interface GitJasprTest {
             autoMerge(RefSpec("development", "main"))
 
             // Commits one and two should be merged, but WIP:three should remain
-            val stack = localGit.getLocalCommitStack(remoteName, "development", DEFAULT_TARGET_REF)
+            val stack = localGit.getCommitStack(remoteName, "development", DEFAULT_TARGET_REF)
             assertEquals(1, stack.size)
             assertTrue(stack.any { it.shortMessage.startsWith("WIP: three") })
         }
@@ -8364,7 +8356,7 @@ interface GitJasprTest {
             merge(RefSpec("development", "main"))
 
             // Verify the commits were merged
-            val stack = localGit.getLocalCommitStack(remoteName, "development", DEFAULT_TARGET_REF)
+            val stack = localGit.getCommitStack(remoteName, "development", DEFAULT_TARGET_REF)
             assertEquals(0, stack.size)
         }
     }
