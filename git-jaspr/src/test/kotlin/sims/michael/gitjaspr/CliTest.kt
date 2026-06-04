@@ -443,6 +443,50 @@ class CliTest {
                 }
             }
     }
+
+    @Test
+    fun `sortStacksByTipDate orders newest first with name tiebreak and nulls last`() {
+        val remoteName = "origin"
+        fun stack(name: String) = RemoteRefEncoding.RemoteNamedStackRef(stackName = name)
+        fun commit(hash: String, date: java.time.ZonedDateTime) =
+            Commit(
+                hash = hash,
+                shortMessage = "msg-$hash",
+                fullMessage = "msg-$hash",
+                id = null,
+                author = Ident("u", "u@example.com"),
+                committer = Ident("u", "u@example.com"),
+                commitDate = date,
+                authorDate = date,
+            )
+
+        val base = java.time.ZonedDateTime.parse("2026-01-01T00:00:00Z")
+        val oldest = stack("a-oldest")
+        val newest = stack("b-newest")
+        val midA = stack("c-mid")
+        val midB = stack("d-mid-tie")
+        val unknown = stack("e-unknown")
+        val refOf: (RemoteRefEncoding.RemoteNamedStackRef) -> String = {
+            "$remoteName/${it.name()}"
+        }
+
+        // Two stacks share the same commit date to exercise the name-asc tiebreak.
+        val midDate = base.plusDays(5)
+        val commits =
+            mapOf(
+                refOf(oldest) to commit("h1", base),
+                refOf(newest) to commit("h2", base.plusDays(10)),
+                refOf(midA) to commit("h3", midDate),
+                refOf(midB) to commit("h4", midDate),
+                refOf(unknown) to null,
+            )
+
+        // Pass stacks in scrambled order to prove the sort isn't relying on insertion order.
+        val sorted =
+            sortStacksByTipDate(listOf(midB, unknown, newest, midA, oldest), commits, remoteName)
+
+        assertEquals(listOf(newest, midA, midB, oldest, unknown), sorted)
+    }
 }
 
 private fun getEffectiveConfigFromCli(

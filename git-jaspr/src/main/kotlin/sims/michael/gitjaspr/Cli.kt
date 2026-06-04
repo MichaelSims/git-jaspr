@@ -986,11 +986,12 @@ class Checkout : GitJasprSubcommand(helpText = "Check out an existing named stac
                 found
             } else {
                 val remoteName = config.remoteName
-                val stacks = selectableEntries.map { it.ref }
+                val unsortedStacks = selectableEntries.map { it.ref }
                 val abandonedNames =
                     selectableEntries.filter { it.isAbandoned }.map { it.ref.stackName }.toSet()
-                val refs = stacks.map { "${remoteName}/${it.name()}" }
+                val refs = unsortedStacks.map { "${remoteName}/${it.name()}" }
                 val commits = appWiring.gitClient.getCommits(refs)
+                val stacks = sortStacksByTipDate(unsortedStacks, commits, remoteName)
                 when (
                     val result = selectViaFzf(stacks, commits, remoteName, target, abandonedNames)
                 ) {
@@ -1377,6 +1378,24 @@ class Top :
         }
     }
 }
+
+/**
+ * Order named-stack picker entries by tip commit date (newest first) so recently-touched stacks
+ * rise to the top of long lists. Stacks whose commit data is missing fall to the bottom; stack name
+ * breaks ties for stable display.
+ */
+internal fun sortStacksByTipDate(
+    stacks: List<RemoteNamedStackRef>,
+    commits: Map<String, Commit?>,
+    remoteName: String,
+): List<RemoteNamedStackRef> =
+    stacks.sortedWith(
+        compareBy<RemoteNamedStackRef, ZonedDateTime?>(nullsLast(reverseOrder<ZonedDateTime>())) {
+                stack ->
+                commits["${remoteName}/${stack.name()}"]?.commitDate
+            }
+            .thenBy(RemoteNamedStackRef::stackName)
+    )
 
 private fun describeReachedTop(count: Int, restoredName: String): String {
     val noun = if (count == 1) "commit" else "commits"
