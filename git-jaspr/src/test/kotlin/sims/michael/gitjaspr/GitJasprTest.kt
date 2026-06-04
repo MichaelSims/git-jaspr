@@ -5404,6 +5404,91 @@ interface GitJasprTest {
 
     @Merge
     @Test
+    fun `merge succeeds when entire stack of 5 PRs merges in one go`() {
+        // Regression: before commit e6017b9, the post-merge step that retargets remaining PRs'
+        // bases to the target branch would try to retarget PRs whose head was itself in the
+        // merged set. GitHub rejects that base update ("no new commits between base and head")
+        // because the head is fully present in the new base. The fix added a filter clause that
+        // excludes such PRs from the retarget pass. GitHubStubClient now validates the same
+        // condition (validateHeadHasNewCommits), so this test exercises the regression directly.
+        withTestSetup(useFakeRemote) {
+            createCommitsFrom(
+                testCase {
+                    repository {
+                        commit {
+                            title = "one"
+                            willPassVerification = true
+                            remoteRefs += buildRemoteRef("one")
+                        }
+                        commit {
+                            title = "two"
+                            willPassVerification = true
+                            remoteRefs += buildRemoteRef("two")
+                        }
+                        commit {
+                            title = "three"
+                            willPassVerification = true
+                            remoteRefs += buildRemoteRef("three")
+                        }
+                        commit {
+                            title = "four"
+                            willPassVerification = true
+                            remoteRefs += buildRemoteRef("four")
+                        }
+                        commit {
+                            title = "five"
+                            willPassVerification = true
+                            remoteRefs += buildRemoteRef("five")
+                            localRefs += "development"
+                        }
+                    }
+                    pullRequest {
+                        headRef = buildRemoteRef("one")
+                        baseRef = "main"
+                        title = "one"
+                        willBeApprovedByUserKey = "michael"
+                    }
+                    pullRequest {
+                        headRef = buildRemoteRef("two")
+                        baseRef = buildRemoteRef("one")
+                        title = "two"
+                        willBeApprovedByUserKey = "michael"
+                    }
+                    pullRequest {
+                        headRef = buildRemoteRef("three")
+                        baseRef = buildRemoteRef("two")
+                        title = "three"
+                        willBeApprovedByUserKey = "michael"
+                    }
+                    pullRequest {
+                        headRef = buildRemoteRef("four")
+                        baseRef = buildRemoteRef("three")
+                        title = "four"
+                        willBeApprovedByUserKey = "michael"
+                    }
+                    pullRequest {
+                        headRef = buildRemoteRef("five")
+                        baseRef = buildRemoteRef("four")
+                        title = "five"
+                        willBeApprovedByUserKey = "michael"
+                    }
+                }
+            )
+
+            waitForChecksToConclude("one", "two", "three", "four", "five")
+            merge(RefSpec("development", "main"))
+
+            // Whole stack should be merged into main: no commits left on development relative
+            // to the target.
+            assertEquals(
+                emptyList(),
+                localGit.getCommitStack(remoteName, "development", DEFAULT_TARGET_REF),
+            )
+        }
+    }
+
+    @Merge
+    @Test
     fun `merge - push and merge`() {
         withTestSetup(useFakeRemote) {
             createCommitsFrom(
