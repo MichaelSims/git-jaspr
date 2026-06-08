@@ -689,9 +689,10 @@ class Push : GitJasprSubcommand(helpText = "Push commits and create/update PRs")
             )
         }
         val jaspr = appWiring.gitJaspr
+        val plan = jaspr.getPushPlan(targetRef.refSpec, count)
 
         fun promptForNameIfNecessary(): String? {
-            val suggestions = jaspr.suggestStackNames(targetRef.refSpec)
+            val suggestions = plan.stackNameSuggestions
             if (suggestions.candidates.isEmpty()) return null
             if (suggestions.ambiguousStackNames.isNotEmpty()) {
                 renderer.warn {
@@ -712,9 +713,8 @@ class Push : GitJasprSubcommand(helpText = "Push commits and create/update PRs")
 
         val effectiveName = name ?: promptForNameIfNecessary()
         jaspr.push(
-            targetRef.refSpec,
+            plan = plan,
             stackName = effectiveName,
-            count = count,
             theme = theme,
             onAbandonedPrs =
                 if (force) {

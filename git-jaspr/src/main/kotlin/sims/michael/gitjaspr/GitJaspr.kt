@@ -414,14 +414,28 @@ class GitJaspr(
         val ambiguousStackNames: List<String> = emptyList(),
     )
 
-    private sealed class NamedStackSearchResult
+    /**
+     * Snapshot of state required to execute [push]. Produced by [getPushPlan] so that the CLI flow,
+     * which calls [getPushPlan] once to drive the stack-name prompt and again would otherwise
+     * re-derive the same state inside [push], can pay the cost once and reuse the result.
+     */
+    data class PushPlan(
+        val refSpec: RefSpec,
+        val count: Int?,
+        val stack: List<Commit>,
+        val excludedCommits: List<Commit>,
+        val remoteBranches: List<RemoteBranch>,
+        val stackSearchResult: NamedStackSearchResult,
+        val stackNameSuggestions: StackNameSuggestions,
+    )
 
-    private data class Found(val name: String) : NamedStackSearchResult()
+    sealed class NamedStackSearchResult
 
-    private data class MultipleStacksContainCommit(val stackNames: List<String>) :
-        NamedStackSearchResult()
+    data class Found(val name: String) : NamedStackSearchResult()
 
-    private data object NotFound : NamedStackSearchResult()
+    data class MultipleStacksContainCommit(val stackNames: List<String>) : NamedStackSearchResult()
+
+    data object NotFound : NamedStackSearchResult()
 
     /**
      * Returns the full name (including the named stack prefix) of an existing named stack that
@@ -906,24 +920,17 @@ class GitJaspr(
                     "Pull can't handle this. Use git directly to investigate."
         }
 
-    suspend fun push(
+    /**
+     * Build a [PushPlan] capturing the stack, remote branches, named-stack search result, and
+     * stack-name suggestions for a future [push] call. The CLI flow drives the stack-name prompt
+     * from the plan's suggestions and then passes the same plan back to [push], avoiding a second
+     * round of fetch + stack walks.
+     */
+    fun getPushPlan(
         refSpec: RefSpec = RefSpec(DEFAULT_LOCAL_OBJECT, DEFAULT_TARGET_REF),
-        stackName: String? = null,
         count: Int? = null,
-        theme: Theme = MonoTheme,
-        onAbandonedPrs: (List<PullRequest>) -> Boolean = { true },
-    ) {
-        logger.trace("push {}", refSpec)
-
-        if (gitClient.hasUncommittedChangesToTrackedFiles()) {
-            throw GitJasprException(
-                "Your working directory has uncommitted changes to tracked files. " +
-                    "Please commit or stash them and re-run the command."
-            )
-        }
-
-        installCommitIdHook()
-
+    ): PushPlan {
+        logger.trace("getPushPlan {}", refSpec)
         val remoteName = config.remoteName
         gitClient.fetch(remoteName)
 
@@ -937,8 +944,82 @@ class GitJaspr(
                 originalStack
             }
 
-        // Filter stack based on the dont-push pattern
         val (stack, excludedCommits) = filterStackByDontPushPattern(stackWithIds)
+        val remoteBranches = gitClient.getRemoteBranches(remoteName)
+        val stackSearchResult =
+            if (stack.isEmpty()) NotFound else getExistingStackName(stack, remoteBranches)
+        val stackNameSuggestions = computeStackNameSuggestions(stack, stackSearchResult)
+        return PushPlan(
+            refSpec = refSpec,
+            count = count,
+            stack = stack,
+            excludedCommits = excludedCommits,
+            remoteBranches = remoteBranches,
+            stackSearchResult = stackSearchResult,
+            stackNameSuggestions = stackNameSuggestions,
+        )
+    }
+
+    private fun computeStackNameSuggestions(
+        stack: List<Commit>,
+        stackSearchResult: NamedStackSearchResult,
+    ): StackNameSuggestions {
+        if (stack.isEmpty() || stackSearchResult is Found) return StackNameSuggestions(emptyList())
+        val commitBasedCandidates =
+            stack
+                .flatMap { commit ->
+                    StackNameGenerator.generateNameCandidates(commit.shortMessage)
+                }
+                .distinct()
+        return when (stackSearchResult) {
+            is MultipleStacksContainCommit ->
+                StackNameSuggestions(
+                    candidates = stackSearchResult.stackNames + commitBasedCandidates,
+                    ambiguousStackNames = stackSearchResult.stackNames,
+                )
+            else -> StackNameSuggestions(commitBasedCandidates)
+        }
+    }
+
+    suspend fun push(
+        refSpec: RefSpec = RefSpec(DEFAULT_LOCAL_OBJECT, DEFAULT_TARGET_REF),
+        stackName: String? = null,
+        count: Int? = null,
+        theme: Theme = MonoTheme,
+        onAbandonedPrs: (List<PullRequest>) -> Boolean = { true },
+    ) {
+        logger.trace("push (plan first) {}", refSpec)
+        if (gitClient.hasUncommittedChangesToTrackedFiles()) {
+            throw GitJasprException(
+                "Your working directory has uncommitted changes to tracked files. " +
+                    "Please commit or stash them and re-run the command."
+            )
+        }
+        push(
+            plan = getPushPlan(refSpec, count),
+            stackName = stackName,
+            theme = theme,
+            onAbandonedPrs = onAbandonedPrs,
+        )
+    }
+
+    suspend fun push(
+        plan: PushPlan,
+        stackName: String? = null,
+        theme: Theme = MonoTheme,
+        onAbandonedPrs: (List<PullRequest>) -> Boolean = { true },
+    ) {
+        logger.trace("push (plan) {}", plan.refSpec)
+        installCommitIdHook()
+
+        val refSpec = plan.refSpec
+        val remoteName = config.remoteName
+        val targetRef = refSpec.remoteRef
+        val stack = plan.stack
+        val excludedCommits = plan.excludedCommits
+        val remoteBranches = plan.remoteBranches
+        val stackSearchResult = plan.stackSearchResult
+
         showExcludedCommitsMessage(excludedCommits)
         if (stack.isEmpty()) {
             if (excludedCommits.isNotEmpty()) {
@@ -976,7 +1057,6 @@ class GitJaspr(
         val pullRequestsRebased =
             pullRequests.updateBaseRefForReorderedPrsIfAny(stack, filteredRefSpec.remoteRef)
 
-        val remoteBranches = gitClient.getRemoteBranches(config.remoteName)
         val remoteRefSpecs = remoteBranches.map { b -> b.toRefSpec() }
         val outOfDateBranches = stack.map { c -> c.toRefSpec() } - remoteRefSpecs.toSet()
         val revisionHistoryRefs =
@@ -990,7 +1070,6 @@ class GitJaspr(
         val localRef = gitClient.log(filteredRefSpec.localRef, 1).single().hash
 
         // Determine the effective stack name
-        val stackSearchResult = getExistingStackName(stack)
         val existingStackName =
             (stackSearchResult as? Found)?.name?.let { existingBranchName ->
                 checkNotNull(
@@ -2300,45 +2379,7 @@ class GitJaspr(
      */
     fun suggestStackNames(
         refSpec: RefSpec = RefSpec(DEFAULT_LOCAL_OBJECT, DEFAULT_TARGET_REF)
-    ): StackNameSuggestions {
-        val remoteName = config.remoteName
-        gitClient.fetch(remoteName)
-
-        val targetRef = refSpec.remoteRef
-        val stack =
-            gitClient.getCommitStack(remoteName, refSpec.localRef, targetRef).let { original ->
-                filterStackByDontPushPattern(
-                        if (addCommitIdsToLocalStack(original)) {
-                            gitClient.getCommitStack(remoteName, refSpec.localRef, targetRef)
-                        } else {
-                            original
-                        }
-                    )
-                    .included
-            }
-
-        if (stack.isEmpty()) return StackNameSuggestions(emptyList())
-
-        val searchResult = getExistingStackName(stack)
-
-        if (searchResult is Found) return StackNameSuggestions(emptyList())
-
-        val commitBasedCandidates =
-            stack
-                .flatMap { commit ->
-                    StackNameGenerator.generateNameCandidates(commit.shortMessage)
-                }
-                .distinct()
-
-        return when (searchResult) {
-            is MultipleStacksContainCommit ->
-                StackNameSuggestions(
-                    candidates = searchResult.stackNames + commitBasedCandidates,
-                    ambiguousStackNames = searchResult.stackNames,
-                )
-            else -> StackNameSuggestions(commitBasedCandidates)
-        }
-    }
+    ): StackNameSuggestions = getPushPlan(refSpec).stackNameSuggestions
 
     private fun refOrRefs(count: Int) = if (count == 1) "ref" else "refs"
 
