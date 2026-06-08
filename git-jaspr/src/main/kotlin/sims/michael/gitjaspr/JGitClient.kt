@@ -125,6 +125,25 @@ class JGitClient(
         commits.map { revCommit -> revCommit.toCommit(git) }.reversed()
     }
 
+    override fun getCommitIdsInRange(
+        target: String,
+        refs: List<String>,
+    ): Map<String, List<String>> = useGit { git ->
+        logger.trace("getCommitIdsInRange {} {}", target, refs)
+        val r = git.repository
+        val targetId =
+            checkNotNull(r.resolve(target)) {
+                "getCommitIdsInRange: target $target doesn't exist"
+            }
+        refs.associateWith { ref ->
+            val refId =
+                checkNotNull(r.resolve(ref)) { "getCommitIdsInRange: ref $ref doesn't exist" }
+            git.log().addRange(targetId, refId).call().mapNotNull { revCommit ->
+                CommitParsers.getFooters(revCommit.fullMessage)[COMMIT_ID_LABEL]
+            }
+        }
+    }
+
     override fun hasUncommittedChangesToTrackedFiles(): Boolean {
         logger.trace("hasUncommittedChangesToTrackedFiles")
         return useGit { git ->

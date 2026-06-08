@@ -29,6 +29,20 @@ interface GitClient {
 
     fun logRange(since: String, until: String): List<Commit>
 
+    /**
+     * For each ref in [refs], returns the jaspr commit-ids of commits reachable from that ref but
+     * not from [target]. The order of commit-ids within each list is unspecified.
+     *
+     * Behaviorally equivalent to `refs.associateWith { logRange(target, it).mapNotNull(Commit::id)
+     * }`, but allows implementations to share repo state across the N walks and skip per-commit
+     * work beyond trailer extraction. The default implementation delegates to [logRange];
+     * [JGitClient] overrides for performance.
+     */
+    fun getCommitIdsInRange(target: String, refs: List<String>): Map<String, List<String>> =
+        refs.associateWith { ref ->
+            logRange(target, ref).mapNotNull(Commit::id)
+        }
+
     fun hasUncommittedChangesToTrackedFiles(): Boolean
 
     fun getCommitStack(

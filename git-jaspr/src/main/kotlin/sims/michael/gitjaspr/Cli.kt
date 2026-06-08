@@ -1815,6 +1815,11 @@ class PreviewTheme :
 
                 override fun logRange(since: String, until: String) = emptyList<Commit>()
 
+                override fun getCommitIdsInRange(target: String, refs: List<String>) =
+                    refs.associateWith {
+                        emptyList<String>()
+                    }
+
                 override suspend fun getPullRequests(commits: List<Commit>) = commits.mapNotNull {
                     prsByCommitId[it.id]
                 }

@@ -67,6 +67,8 @@ class GitJaspr(
 
         fun logRange(since: String, until: String): List<Commit>
 
+        fun getCommitIdsInRange(target: String, refs: List<String>): Map<String, List<String>>
+
         suspend fun getPullRequests(commits: List<Commit>): List<PullRequest>
     }
 
@@ -78,6 +80,9 @@ class GitJaspr(
                 gitClient.getCommitStack(config.remoteName, localRef, remoteRef)
 
             override fun logRange(since: String, until: String) = gitClient.logRange(since, until)
+
+            override fun getCommitIdsInRange(target: String, refs: List<String>) =
+                gitClient.getCommitIdsInRange(target, refs)
 
             override suspend fun getPullRequests(commits: List<Commit>) =
                 ghClient.getPullRequests(commits)
@@ -443,28 +448,28 @@ class GitJaspr(
         require(stack.isNotEmpty())
 
         val remoteName = config.remoteName
-        val existingNamedStacks = remoteBranches.filter { branch ->
-            RemoteNamedStackRef.parse(branch.name, config.remoteNamedStackBranchPrefix) != null
+        val existingNamedStacks = remoteBranches.mapNotNull { branch ->
+            RemoteNamedStackRef.parse(branch.name, config.remoteNamedStackBranchPrefix)?.let { ref
+                ->
+                branch to ref
+            }
         }
 
         // Build a map of commit-id to a list of named-stack branches that contain the commit with
-        // that ID.
+        // that ID. Named stacks are grouped by their target ref so each group can be walked in a
+        // single git invocation (one shared JGit repo open, no per-commit Commit-object
+        // allocation).
         val branchesByCommitId: Map<String, List<RemoteBranch>> =
             existingNamedStacks
-                .flatMap { branch ->
-                    val namedStackRefParts =
-                        checkNotNull(
-                            RemoteNamedStackRef.parse(
-                                branch.name,
-                                config.remoteNamedStackBranchPrefix,
-                            )
-                        )
-                    val targetInRemote = "$remoteName/${namedStackRefParts.targetRef}"
-                    val namedStackInRemote = "$remoteName/${branch.name}"
+                .groupBy({ (_, ref) -> ref.targetRef }, { (branch, _) -> branch })
+                .flatMap { (targetRef, branches) ->
+                    val branchByRefKey = branches.associateBy { "$remoteName/${it.name}" }
                     strategy
-                        .logRange(targetInRemote, namedStackInRemote)
-                        .mapNotNull(Commit::id)
-                        .map { commitId -> commitId to branch }
+                        .getCommitIdsInRange("$remoteName/$targetRef", branchByRefKey.keys.toList())
+                        .flatMap { (refKey, commitIds) ->
+                            val branch = checkNotNull(branchByRefKey[refKey])
+                            commitIds.map { commitId -> commitId to branch }
+                        }
                 }
                 .groupBy({ (commitId, _) -> commitId }, { (_, branch) -> branch })
 
