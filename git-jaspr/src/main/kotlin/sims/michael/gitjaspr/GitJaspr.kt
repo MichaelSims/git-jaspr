@@ -442,36 +442,40 @@ class GitJaspr(
         logger.trace("getExistingStackName")
         require(stack.isNotEmpty())
 
+        val remoteName = config.remoteName
         val existingNamedStacks = remoteBranches.filter { branch ->
             RemoteNamedStackRef.parse(branch.name, config.remoteNamedStackBranchPrefix) != null
         }
 
-        // Search the remote branches for named stack refs that point to stacks with unmerged
-        // commits. Find the first commit in our local stack that is contained in exactly one named
+        // Build a map of commit-id to a list of named-stack branches that contain the commit with
+        // that ID.
+        val branchesByCommitId: Map<String, List<RemoteBranch>> =
+            existingNamedStacks
+                .flatMap { branch ->
+                    val namedStackRefParts =
+                        checkNotNull(
+                            RemoteNamedStackRef.parse(
+                                branch.name,
+                                config.remoteNamedStackBranchPrefix,
+                            )
+                        )
+                    val targetInRemote = "$remoteName/${namedStackRefParts.targetRef}"
+                    val namedStackInRemote = "$remoteName/${branch.name}"
+                    strategy
+                        .logRange(targetInRemote, namedStackInRemote)
+                        .mapNotNull(Commit::id)
+                        .map { commitId -> commitId to branch }
+                }
+                .groupBy({ (commitId, _) -> commitId }, { (_, branch) -> branch })
+
+        // Find the first commit (walking from stack tip) that is contained in exactly one named
         // stack and return its name.
         val result =
             stack
                 .reversed()
                 .filter { commit -> commit.id != null }
                 .firstNotNullOfOrNull { commit ->
-                    val stacksWithCommit = existingNamedStacks.mapNotNull { branch ->
-                        val namedStackRefParts =
-                            checkNotNull(
-                                RemoteNamedStackRef.parse(
-                                    branch.name,
-                                    config.remoteNamedStackBranchPrefix,
-                                )
-                            )
-                        branch.takeIf {
-                            val remoteName = config.remoteName
-                            val targetInRemote = "$remoteName/${namedStackRefParts.targetRef}"
-                            val namedStackInRemote = "$remoteName/${branch.name}"
-                            strategy
-                                .logRange(targetInRemote, namedStackInRemote)
-                                .mapNotNull(Commit::id)
-                                .contains(checkNotNull(commit.id))
-                        }
-                    }
+                    val stacksWithCommit = branchesByCommitId[checkNotNull(commit.id)].orEmpty()
                     if (stacksWithCommit.size == 1) {
                         Found(stacksWithCommit.single().name)
                     } else if (stacksWithCommit.size > 1) {
