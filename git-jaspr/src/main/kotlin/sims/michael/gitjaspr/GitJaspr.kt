@@ -60,7 +60,7 @@ class GitJaspr(
      *
      * This is basically an intersection of parts of [GitHubClient] and [GitClient].
      */
-    interface GetStatusStringStrategy {
+    interface StatusQueries {
         fun getRemoteBranches(): List<RemoteBranch>
 
         fun getCommitStack(localRef: String, remoteRef: String): List<Commit>
@@ -72,8 +72,8 @@ class GitJaspr(
         suspend fun getPullRequests(commits: List<Commit>): List<PullRequest>
     }
 
-    private fun defaultStrategy() =
-        object : GetStatusStringStrategy {
+    private fun defaultStatusQueries() =
+        object : StatusQueries {
             override fun getRemoteBranches() = gitClient.getRemoteBranches(config.remoteName)
 
             override fun getCommitStack(localRef: String, remoteRef: String) =
@@ -93,7 +93,7 @@ class GitJaspr(
         theme: Theme = MonoTheme,
     ): String {
         gitClient.fetch(config.remoteName)
-        return getStatusString(refSpec, theme, defaultStrategy())
+        return getStatusString(refSpec, theme, defaultStatusQueries())
     }
 
     suspend fun getStatusString(
@@ -101,11 +101,11 @@ class GitJaspr(
         remoteBranches: List<RemoteBranch>,
         theme: Theme = MonoTheme,
     ): String {
-        val strategy = defaultStrategy()
+        val queries = defaultStatusQueries()
         return getStatusString(
             refSpec,
             theme,
-            object : GetStatusStringStrategy by strategy {
+            object : StatusQueries by queries {
                 override fun getRemoteBranches() = remoteBranches
             },
         )
@@ -114,7 +114,7 @@ class GitJaspr(
     suspend fun getStatusString(
         refSpec: RefSpec = RefSpec(DEFAULT_LOCAL_OBJECT, DEFAULT_TARGET_REF),
         theme: Theme = MonoTheme,
-        strategy: GetStatusStringStrategy,
+        queries: StatusQueries,
     ): String {
         logger.trace("getStatusString {}", refSpec)
         val remoteName = config.remoteName
@@ -126,11 +126,11 @@ class GitJaspr(
         val effectiveRefSpec =
             if (navState != null) refSpec.copy(localRef = navState.headBeforeDetach) else refSpec
 
-        val remoteBranches = strategy.getRemoteBranches()
-        val stack = strategy.getCommitStack(effectiveRefSpec.localRef, effectiveRefSpec.remoteRef)
+        val remoteBranches = queries.getRemoteBranches()
+        val stack = queries.getCommitStack(effectiveRefSpec.localRef, effectiveRefSpec.remoteRef)
         if (stack.isEmpty()) return theme.muted("Stack is empty.") + "\n"
 
-        val statuses = getRemoteCommitStatuses(stack, remoteBranches, strategy)
+        val statuses = getRemoteCommitStatuses(stack, remoteBranches, queries)
         val commitsWithDuplicateIds =
             statuses
                 .filter { status -> status.localCommit.id != null }
@@ -141,7 +141,7 @@ class GitJaspr(
                 .filter { (_, statuses) -> statuses.size > 1 }
 
         val numCommitsBehindBase =
-            strategy.logRange(stack.last().hash, "$remoteName/${effectiveRefSpec.remoteRef}").size
+            queries.logRange(stack.last().hash, "$remoteName/${effectiveRefSpec.remoteRef}").size
         return buildStatusString(
             statuses,
             commitsWithDuplicateIds,
@@ -150,7 +150,7 @@ class GitJaspr(
             effectiveRefSpec,
             stack,
             remoteBranches,
-            strategy,
+            queries,
             theme,
             navState,
         )
@@ -164,7 +164,7 @@ class GitJaspr(
         refSpec: RefSpec,
         stack: List<Commit>,
         remoteBranches: List<RemoteBranch>,
-        strategy: GetStatusStringStrategy,
+        queries: StatusQueries,
         theme: Theme,
         navState: NavState?,
     ): String = buildString {
@@ -216,7 +216,7 @@ class GitJaspr(
             appendLine(if (isCursor) theme.emphasis(lineContent) else lineContent)
         }
 
-        appendNamedStackInfo(stack, remoteBranches, theme, strategy)
+        appendNamedStackInfo(stack, remoteBranches, theme, queries)
 
         if (numCommitsBehindBase > 0) {
             appendLine()
@@ -252,7 +252,7 @@ class GitJaspr(
         stack: List<Commit>,
         remoteBranches: List<RemoteBranch>,
         theme: Theme,
-        strategy: GetStatusStringStrategy,
+        queries: StatusQueries,
     ) {
         val remoteName = config.remoteName
         data class NamedStackInfo(
@@ -260,7 +260,7 @@ class GitJaspr(
             val numCommitsAhead: Int,
             val numCommitsBehind: Int,
         )
-        val stackSearchResult = getExistingStackName(stack, remoteBranches, strategy)
+        val stackSearchResult = getExistingStackName(stack, remoteBranches, queries)
         if (stackSearchResult is MultipleStacksContainCommit) {
             appendLine()
             appendLine(
@@ -281,8 +281,8 @@ class GitJaspr(
             val namedStackInfo =
                 NamedStackInfo(
                     namedStackRef.stackName,
-                    numCommitsAhead = strategy.logRange(trackingBranch, headStackCommit).size,
-                    numCommitsBehind = strategy.logRange(headStackCommit, trackingBranch).size,
+                    numCommitsAhead = queries.logRange(trackingBranch, headStackCommit).size,
+                    numCommitsBehind = queries.logRange(headStackCommit, trackingBranch).size,
                 )
             with(namedStackInfo) {
                 appendLine()
@@ -314,7 +314,7 @@ class GitJaspr(
                     }
                 )
             }
-            appendUniqueCommitsSummary(stack, stackName, theme, strategy)
+            appendUniqueCommitsSummary(stack, stackName, theme, queries)
         }
     }
 
@@ -328,7 +328,7 @@ class GitJaspr(
         localStack: List<Commit>,
         stackName: String,
         theme: Theme,
-        strategy: GetStatusStringStrategy,
+        queries: StatusQueries,
     ) {
         val remoteName = config.remoteName
         val targetRef =
@@ -336,7 +336,7 @@ class GitJaspr(
                 ?: return
         val remoteStack =
             try {
-                strategy.getCommitStack("$remoteName/$stackName", targetRef)
+                queries.getCommitStack("$remoteName/$stackName", targetRef)
             } catch (e: Exception) {
                 logger.debug("Failed to walk remote stack '{}': {}", stackName, e.message)
                 return
@@ -437,12 +437,12 @@ class GitJaspr(
     private fun getExistingStackName(
         stack: List<Commit>,
         remoteBranches: List<RemoteBranch>,
-    ): NamedStackSearchResult = getExistingStackName(stack, remoteBranches, defaultStrategy())
+    ): NamedStackSearchResult = getExistingStackName(stack, remoteBranches, defaultStatusQueries())
 
     private fun getExistingStackName(
         stack: List<Commit>,
         remoteBranches: List<RemoteBranch>,
-        strategy: GetStatusStringStrategy,
+        queries: StatusQueries,
     ): NamedStackSearchResult {
         logger.trace("getExistingStackName")
         require(stack.isNotEmpty())
@@ -464,7 +464,7 @@ class GitJaspr(
                 .groupBy({ (_, ref) -> ref.targetRef }, { (branch, _) -> branch })
                 .flatMap { (targetRef, branches) ->
                     val branchByRefKey = branches.associateBy { "$remoteName/${it.name}" }
-                    strategy
+                    queries
                         .getCommitIdsInRange("$remoteName/$targetRef", branchByRefKey.keys.toList())
                         .flatMap { (refKey, commitIds) ->
                             val branch = checkNotNull(branchByRefKey[refKey])
@@ -1937,12 +1937,13 @@ class GitJaspr(
     private suspend fun getRemoteCommitStatuses(
         stack: List<Commit>,
         remoteBranches: List<RemoteBranch>,
-    ): List<RemoteCommitStatus> = getRemoteCommitStatuses(stack, remoteBranches, defaultStrategy())
+    ): List<RemoteCommitStatus> =
+        getRemoteCommitStatuses(stack, remoteBranches, defaultStatusQueries())
 
     private suspend fun getRemoteCommitStatuses(
         stack: List<Commit>,
         remoteBranches: List<RemoteBranch>,
-        strategy: GetStatusStringStrategy,
+        queries: StatusQueries,
     ): List<RemoteCommitStatus> {
         logger.trace("getRemoteCommitStatuses")
         val remoteBranchesById =
@@ -1955,7 +1956,7 @@ class GitJaspr(
                 .toMap()
         val prsById =
             if (stack.isNotEmpty()) {
-                strategy
+                queries
                     .getPullRequests(stack.filter { commit -> commit.id != null })
                     .filterByMatchingTargetRef()
                     .associateBy(PullRequest::commitId)

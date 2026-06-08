@@ -1807,8 +1807,8 @@ class PreviewTheme :
             RemoteBranch("$DEFAULT_REMOTE_BRANCH_PREFIX/main/${c.id}", c)
         }
 
-        val strategy =
-            object : GitJaspr.GetStatusStringStrategy {
+        val queries =
+            object : GitJaspr.StatusQueries {
                 override fun getRemoteBranches() = remoteBranches
 
                 override fun getCommitStack(localRef: String, remoteRef: String) = commits
@@ -1834,7 +1834,7 @@ class PreviewTheme :
         val dummyGitJaspr =
             GitJaspr(ghClient = unusedProxy(), gitClient = unusedProxy(), config = dummyConfig)
 
-        print(dummyGitJaspr.getStatusString(theme = theme, strategy = strategy))
+        print(dummyGitJaspr.getStatusString(theme = theme, queries = queries))
     }
 }
 
