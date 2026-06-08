@@ -222,7 +222,7 @@ class GitJaspr(
                 )
             )
             append("You'll need to rebase it (")
-            append(theme.command("`git rebase $remoteName/${refSpec.remoteRef}`"))
+            append(theme.command("`jaspr rebase`"))
             append(") ")
             appendLine("before your stack will be mergeable.")
         }

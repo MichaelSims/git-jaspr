@@ -2223,12 +2223,12 @@ interface GitJasprTest {
             val actual = getAndPrintStatusString()
             assertEquals(
                 """
-                    |[✅✅✅✅✅ㄧ] %s : %s : three
-                    |[✅✅✅✅✅ㄧ] %s : %s : two
-                    |[✅✅✅✅✅ㄧ] %s : %s : one
-                    |
-                    |Your stack is out-of-date with the base branch (1 commit behind main).
-                    |You'll need to rebase it (`git rebase $remoteName/main`) before your stack will be mergeable.
+                |[✅✅✅✅✅ㄧ] %s : %s : three
+                |[✅✅✅✅✅ㄧ] %s : %s : two
+                |[✅✅✅✅✅ㄧ] %s : %s : one
+                |
+                |Your stack is out-of-date with the base branch (1 commit behind main).
+                |You'll need to rebase it (`jaspr rebase`) before your stack will be mergeable.
                 """
                     .trimMargin()
                     .toStatusString(actual),
@@ -2297,12 +2297,12 @@ interface GitJasprTest {
             val actual = getAndPrintStatusString()
             assertEquals(
                 """
-                    |[✅✅✅✅✅ㄧ] %s : %s : three
-                    |[✅✅✅✅✅ㄧ] %s : %s : two
-                    |[✅✅✅✅✅ㄧ] %s : %s : one
-                    |
-                    |Your stack is out-of-date with the base branch (2 commits behind main).
-                    |You'll need to rebase it (`git rebase $remoteName/main`) before your stack will be mergeable.
+                |[✅✅✅✅✅ㄧ] %s : %s : three
+                |[✅✅✅✅✅ㄧ] %s : %s : two
+                |[✅✅✅✅✅ㄧ] %s : %s : one
+                |
+                |Your stack is out-of-date with the base branch (2 commits behind main).
+                |You'll need to rebase it (`jaspr rebase`) before your stack will be mergeable.
                 """
                     .trimMargin()
                     .toStatusString(actual),
