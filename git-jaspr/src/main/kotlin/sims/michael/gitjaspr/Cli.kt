@@ -702,8 +702,22 @@ class Push : GitJasprSubcommand(helpText = "Push commits and create/update PRs")
                 }
             }
             if (useFzf && suggestions.candidates.size > 1) {
+                renderer.info {
+                    "Pick a name for your stack from the list below, or type your own " +
+                        "and press Enter " +
+                        "(in the future you can use the ${command("--name")} option if you prefer)."
+                }
                 when (val result = selectNameViaFzf(suggestions.candidates)) {
                     is FzfResult.Selected -> return result.value
+                    is FzfResult.Typed -> {
+                        val normalized = StackNameGenerator.generateName(result.query)
+                        if (normalized.isEmpty()) {
+                            throw GitJasprException(
+                                "Stack name must contain at least one alphanumeric character."
+                            )
+                        }
+                        return normalized
+                    }
                     is FzfResult.Cancelled -> throw ProgramResult(130)
                     is FzfResult.NotAvailable -> {} // fall through to prompt
                 }
@@ -744,7 +758,8 @@ class Push : GitJasprSubcommand(helpText = "Push commits and create/update PRs")
             items = candidates,
             displayLine = { it },
             key = { it },
-            header = "Select a stack name:",
+            header = "Stack name (or type your own):",
+            acceptTyped = true,
         )
 
     private fun promptForStackName(suggested: String): String {
@@ -996,7 +1011,8 @@ class Checkout : GitJasprSubcommand(helpText = "Check out an existing named stac
                     val result = selectViaFzf(stacks, commits, remoteName, target, abandonedNames)
                 ) {
                     is FzfResult.Selected -> result.value
-                    is FzfResult.Cancelled -> throw ProgramResult(130)
+                    is FzfResult.Cancelled,
+                    is FzfResult.Typed -> throw ProgramResult(130)
                     is FzfResult.NotAvailable ->
                         selectViaPrompt(stacks, commits, remoteName, target, abandonedNames)
                 }
@@ -1571,7 +1587,8 @@ class Fixup : GitJasprSubcommand(helpText = "Create a fixup commit targeting a s
         val selected =
             when (fzfResult) {
                 is FzfResult.Selected -> fzfResult.value
-                is FzfResult.Cancelled -> throw ProgramResult(130)
+                is FzfResult.Cancelled,
+                is FzfResult.Typed -> throw ProgramResult(130)
                 is FzfResult.NotAvailable -> selectFixupViaPrompt(stack)
             }
 
@@ -2042,6 +2059,12 @@ private sealed interface FzfResult<out T> {
     /** The user made a selection. */
     data class Selected<T>(val value: T) : FzfResult<T>
 
+    /**
+     * The user typed a query that matched none of the candidates and hit Enter. Only produced when
+     * [fzfSelect] is called with `acceptTyped = true`.
+     */
+    data class Typed(val query: String) : FzfResult<Nothing>
+
     /** The user canceled (Esc / Ctrl-C). */
     data object Cancelled : FzfResult<Nothing>
 }
@@ -2064,6 +2087,7 @@ private fun <T> fzfSelect(
     key: (T) -> String,
     header: String? = null,
     previewCommand: String? = null,
+    acceptTyped: Boolean = false,
 ): FzfResult<T> {
     val logger = Cli.logger
     if (items.isEmpty()) {
@@ -2090,6 +2114,7 @@ private fun <T> fzfSelect(
         add("--reverse")
         add("--delimiter=\t")
         add("--with-nth=2..")
+        if (acceptTyped) add("--print-query")
         if (header != null) {
             add("--header=$header")
         }
@@ -2105,15 +2130,29 @@ private fun <T> fzfSelect(
                 writer.newLine()
             }
         }
-        val selected = process.inputStream.bufferedReader().readLine()
-        if (process.waitFor() != 0) return FzfResult.Cancelled
-        val selectedKey = selected?.substringBefore('\t')
-        val index = keys.indexOf(selectedKey)
-        if (index >= 0) {
-            FzfResult.Selected(items[index])
-        } else {
-            logger.debug("fzfSelect: selected key {} did not match any item", selectedKey)
-            FzfResult.Cancelled
+        val output = process.inputStream.bufferedReader().readText()
+        val exitCode = process.waitFor()
+        // With --print-query, fzf writes two lines: the query on line 1 and the selected line on
+        // line 2 (the latter empty if no match was selected). Without it, only the selected line.
+        val lines = output.split('\n')
+        val (query, selected) =
+            if (acceptTyped) Pair(lines.getOrNull(0).orEmpty(), lines.getOrNull(1))
+            else Pair("", lines.getOrNull(0))
+        when (exitCode) {
+            0 -> {
+                val selectedKey = selected?.takeIf(String::isNotEmpty)?.substringBefore('\t')
+                val index = selectedKey?.let(keys::indexOf) ?: -1
+                if (index >= 0) {
+                    FzfResult.Selected(items[index])
+                } else {
+                    logger.debug("fzfSelect: selected key {} did not match any item", selectedKey)
+                    FzfResult.Cancelled
+                }
+            }
+            1 ->
+                if (acceptTyped && query.isNotEmpty()) FzfResult.Typed(query)
+                else FzfResult.Cancelled
+            else -> FzfResult.Cancelled
         }
     } catch (_: Exception) {
         FzfResult.NotAvailable

@@ -967,9 +967,8 @@ class GitJaspr(
         if (stack.isEmpty() || stackSearchResult is Found) return StackNameSuggestions(emptyList())
         val commitBasedCandidates =
             stack
-                .flatMap { commit ->
-                    StackNameGenerator.generateNameCandidates(commit.shortMessage)
-                }
+                .map { commit -> StackNameGenerator.generateName(commit.shortMessage) }
+                .filter(String::isNotEmpty)
                 .distinct()
         return when (stackSearchResult) {
             is MultipleStacksContainCommit ->
