@@ -3226,7 +3226,9 @@ class GitJaspr(
                     StackEntry(
                         sha = survivor.hash,
                         commitId =
-                            checkNotNull(survivor.id) { "Surviving commit has no jaspr commit ID." },
+                            checkNotNull(survivor.id) {
+                                "Surviving commit has no jaspr commit ID."
+                            },
                     ),
                 )
             }
