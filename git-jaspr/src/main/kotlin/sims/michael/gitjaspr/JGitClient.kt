@@ -709,6 +709,17 @@ class JGitClient(
         )
     }
 
+    override fun getTree(ref: String): String {
+        logger.trace("getTree {}", ref)
+        return useGit { git ->
+            val objectId =
+                checkNotNull(git.repository.resolve("$ref^{tree}")) {
+                    "Cannot resolve tree of $ref"
+                }
+            objectId.name()
+        }
+    }
+
     override fun updateRef(refName: String, sha: String) {
         logger.trace("updateRef {} {}", refName, sha)
         useGit { git ->

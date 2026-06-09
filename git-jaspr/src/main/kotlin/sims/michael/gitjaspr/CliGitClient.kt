@@ -690,6 +690,11 @@ class CliGitClient(
         executeCommand(listOf("git", "cherry-pick", "--abort"))
     }
 
+    override fun getTree(ref: String): String {
+        logger.trace("getTree {}", ref)
+        return executeCommand(listOf("git", "rev-parse", "$ref^{tree}")).output.string.trim()
+    }
+
     override fun patchId(sha: String): String? {
         logger.trace("patchId {}", sha)
         return try {

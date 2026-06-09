@@ -138,16 +138,22 @@ class DivergenceClassifier(
     private fun simulateCherryPick(aSha: String, bSha: String): Result {
         acquireLock()
         ensureWorktree()
-        if (runGit(worktreeDir, "reset", "--hard", "$aSha^") != 0) {
+        val worktreeClient = OptimizedCliGitClient(worktreeDir)
+        try {
+            worktreeClient.reset("$aSha^")
+        } catch (e: Exception) {
+            logger.debug("reset --hard failed in probe worktree", e)
             return Result.DIVERGENT
         }
-        val cpRc = runGit(worktreeDir, "cherry-pick", "--allow-empty", bSha)
-        if (cpRc != 0) {
-            runGit(worktreeDir, "cherry-pick", "--abort")
+        try {
+            worktreeClient.cherryPick(worktreeClient.log(bSha, 1).single())
+        } catch (e: Exception) {
+            logger.debug("cherry-pick failed in probe worktree", e)
+            worktreeClient.cherryPickAbort()
             return Result.DIVERGENT
         }
-        val resultTree = gitOutput(worktreeDir, "rev-parse", "HEAD^{tree}")
-        val expectedTree = gitOutput(workingDirectory, "rev-parse", "$aSha^{tree}")
+        val resultTree = worktreeClient.getTree(GitClient.HEAD)
+        val expectedTree = gitClient.getTree(aSha)
         return if (resultTree == expectedTree) Result.IDENTICAL else Result.DIVERGENT
     }
 

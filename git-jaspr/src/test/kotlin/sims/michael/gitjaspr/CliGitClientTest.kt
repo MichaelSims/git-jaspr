@@ -1163,6 +1163,42 @@ class CliGitClientTest : GitClientTest {
     }
 
     @Test
+    fun `compare getTree`() {
+        withTestSetup {
+            createCommitsFrom(
+                testCase {
+                    repository {
+                        commit { title = "one" }
+                        commit {
+                            title = "two"
+                            localRefs += "development"
+                        }
+                    }
+                }
+            )
+            val cliGit = CliGitClient(localGit.workingDirectory)
+            val jGit = JGitClient(localGit.workingDirectory)
+            assertEquals(cliGit.getTree("development"), jGit.getTree("development"))
+            assertTrue(
+                cliGit.getTree("development").matches("^[0-9a-f]{40}$".toRegex()),
+                "expected 40-char hex tree SHA",
+            )
+            // `getTree(HEAD)` should agree as well.
+            assertEquals(cliGit.getTree("HEAD"), jGit.getTree("HEAD"))
+        }
+    }
+
+    @Test
+    fun `getTree throws for an unresolvable ref via JGit and CLI`() {
+        withTestSetup {
+            val cliGit = CliGitClient(localGit.workingDirectory)
+            val jGit = JGitClient(localGit.workingDirectory)
+            assertThrows<Exception> { cliGit.getTree("no-such-ref") }
+            assertThrows<Exception> { jGit.getTree("no-such-ref") }
+        }
+    }
+
+    @Test
     fun `patchId returns a stable hash for a CLI-computed patch`() {
         withTestSetup {
             createCommitsFrom(

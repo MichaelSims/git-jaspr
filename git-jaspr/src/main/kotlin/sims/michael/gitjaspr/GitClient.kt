@@ -223,6 +223,13 @@ interface GitClient {
      */
     fun patchId(sha: String): String?
 
+    /**
+     * Returns the tree SHA for [ref] (equivalent to `git rev-parse <ref>^{tree}`). Throws if [ref]
+     * doesn't resolve to a commit. Useful for comparing tree contents across refs without walking
+     * files individually.
+     */
+    fun getTree(ref: String): String
+
     /** Returns short messages for multiple refs in a single operation. */
     fun getShortMessages(refs: List<String>): Map<String, String?>
 
