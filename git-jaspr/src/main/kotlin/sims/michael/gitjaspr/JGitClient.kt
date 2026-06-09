@@ -19,6 +19,7 @@ import org.eclipse.jgit.lib.ConfigConstants.CONFIG_KEY_MERGE
 import org.eclipse.jgit.lib.ConfigConstants.CONFIG_KEY_REMOTE
 import org.eclipse.jgit.lib.Constants
 import org.eclipse.jgit.lib.PersonIdent
+import org.eclipse.jgit.lib.RefUpdate
 import org.eclipse.jgit.lib.RefUpdate.Result.NO_CHANGE
 import org.eclipse.jgit.revwalk.RevCommit
 import org.eclipse.jgit.revwalk.RevWalk
@@ -666,6 +667,22 @@ class JGitClient(
         }
     }
 
+    override fun updateRef(refName: String, sha: String) {
+        logger.trace("updateRef {} {}", refName, sha)
+        useGit { git ->
+            val repo = git.repository
+            val objectId =
+                checkNotNull(repo.resolve(sha)) { "Cannot resolve $sha when updating $refName" }
+            val refUpdate = repo.updateRef(refName)
+            refUpdate.setNewObjectId(objectId)
+            refUpdate.isForceUpdate = true
+            val result = refUpdate.update()
+            check(result in REF_UPDATE_SUCCESS_RESULTS) {
+                "Failed to update $refName to $sha: $result"
+            }
+        }
+    }
+
     override fun mergeTreeWriteTree(base: String, ours: String, theirs: String): String? {
         // JGit has merge primitives (ResolveMerger, RecursiveMerger) but the API surface needed to
         // reproduce `git merge-tree --write-tree` semantics (purely in-memory, no working tree
@@ -686,6 +703,14 @@ class JGitClient(
                 RemoteRefUpdate.Status.OK,
                 RemoteRefUpdate.Status.UP_TO_DATE,
                 RemoteRefUpdate.Status.NON_EXISTING,
+            )
+
+        private val REF_UPDATE_SUCCESS_RESULTS =
+            setOf(
+                RefUpdate.Result.NEW,
+                RefUpdate.Result.FAST_FORWARD,
+                RefUpdate.Result.FORCED,
+                NO_CHANGE,
             )
 
         init {

@@ -165,6 +165,12 @@ interface GitClient {
      */
     fun mergeTreeWriteTree(base: String, ours: String, theirs: String): String?
 
+    /**
+     * Sets [refName] to point at [sha]. Equivalent to `git update-ref <refName> <sha>`. Used for
+     * recording backup refs outside the normal branch namespace (e.g., `refs/jaspr-backup/...`).
+     */
+    fun updateRef(refName: String, sha: String)
+
     /** Returns short messages for multiple refs in a single operation. */
     fun getShortMessages(refs: List<String>): Map<String, String?>
 

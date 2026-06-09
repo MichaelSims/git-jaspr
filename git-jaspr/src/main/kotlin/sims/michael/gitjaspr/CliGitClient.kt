@@ -642,6 +642,11 @@ class CliGitClient(
         }
     }
 
+    override fun updateRef(refName: String, sha: String) {
+        logger.trace("updateRef {} {}", refName, sha)
+        executeCommand(listOf("git", "update-ref", refName, sha))
+    }
+
     override fun mergeTreeWriteTree(base: String, ours: String, theirs: String): String? {
         logger.trace("mergeTreeWriteTree base={} ours={} theirs={}", base, ours, theirs)
         val result =

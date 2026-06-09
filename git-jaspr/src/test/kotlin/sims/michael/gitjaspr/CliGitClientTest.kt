@@ -1119,6 +1119,55 @@ class CliGitClientTest : GitClientTest {
         }
     }
 
+    @Test
+    fun `compare updateRef`() {
+        withTestSetup {
+            createCommitsFrom(
+                testCase {
+                    repository {
+                        commit { title = "one" }
+                        commit {
+                            title = "two"
+                            localRefs += "development"
+                        }
+                    }
+                }
+            )
+            val cliGit = CliGitClient(localGit.workingDirectory)
+            val jGit = JGitClient(localGit.workingDirectory)
+            val targetSha = cliGit.log("development", 1).single().hash
+            val olderSha = cliGit.log("development~1", 1).single().hash
+
+            // Create a new ref with each client; verify the other client sees the same SHA.
+            cliGit.updateRef("refs/jaspr-test/cli-created", targetSha)
+            jGit.updateRef("refs/jaspr-test/jgit-created", targetSha)
+            assertEquals(
+                targetSha,
+                jGit.log("refs/jaspr-test/cli-created", 1).single().hash,
+                "JGit should observe the ref CLI created",
+            )
+            assertEquals(
+                targetSha,
+                cliGit.log("refs/jaspr-test/jgit-created", 1).single().hash,
+                "CLI should observe the ref JGit created",
+            )
+
+            // Force-update an existing ref to a different SHA with each client; verify visibility.
+            cliGit.updateRef("refs/jaspr-test/cli-created", olderSha)
+            jGit.updateRef("refs/jaspr-test/jgit-created", olderSha)
+            assertEquals(
+                olderSha,
+                jGit.log("refs/jaspr-test/cli-created", 1).single().hash,
+                "JGit should observe the CLI force-update",
+            )
+            assertEquals(
+                olderSha,
+                cliGit.log("refs/jaspr-test/jgit-created", 1).single().hash,
+                "CLI should observe the JGit force-update",
+            )
+        }
+    }
+
     /**
      * Sets up a small repo with three commits: a base, a divergent "ours" commit touching one file,
      * and a divergent "theirs" commit touching a different file. The merge of ours/theirs against

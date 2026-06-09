@@ -704,7 +704,7 @@ class GitJaspr(
 
         val currentHead = gitClient.log(GitClient.HEAD, 1).single().hash
         val backupRef = "refs/jaspr-backup/pre-pull-${System.currentTimeMillis() / 1000}"
-        saveBackupRef(backupRef, currentHead)
+        gitClient.updateRef(backupRef, currentHead)
 
         try {
             gitClient.reset(localBase)
@@ -748,16 +748,6 @@ class GitJaspr(
                 )
             )
         }
-    }
-
-    private fun saveBackupRef(refName: String, sha: String) {
-        val proc =
-            ProcessBuilder("git", "update-ref", refName, sha)
-                .directory(config.workingDirectory)
-                .redirectErrorStream(true)
-                .start()
-        val output = proc.inputStream.bufferedReader().readText().trim()
-        check(proc.waitFor() == 0) { "Failed to save backup ref $refName: $output" }
     }
 
     private fun computeBaseRelation(localBase: String?, remoteBase: String?): BaseRelation {
