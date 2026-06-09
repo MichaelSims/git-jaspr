@@ -673,6 +673,22 @@ class JGitClient(
         git.repository.commonDirectory.canonicalFile
     }
 
+    override fun addWorktree(path: File, ref: String?, detached: Boolean) {
+        // JGit's worktree support is limited; production wiring routes this through CliGitClient
+        // via OptimizedCliGitClient. JGitClient is not used directly in production.
+        throw UnsupportedOperationException(
+            "addWorktree is not implemented in JGitClient; use CliGitClient or " +
+                "OptimizedCliGitClient instead"
+        )
+    }
+
+    override fun removeWorktree(path: File, force: Boolean) {
+        throw UnsupportedOperationException(
+            "removeWorktree is not implemented in JGitClient; use CliGitClient or " +
+                "OptimizedCliGitClient instead"
+        )
+    }
+
     override fun updateRef(refName: String, sha: String) {
         logger.trace("updateRef {} {}", refName, sha)
         useGit { git ->

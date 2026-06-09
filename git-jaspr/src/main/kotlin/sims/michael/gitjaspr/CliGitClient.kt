@@ -660,6 +660,31 @@ class CliGitClient(
         return workingDirectory.resolve(output).canonicalFile
     }
 
+    override fun addWorktree(path: File, ref: String?, detached: Boolean) {
+        logger.trace("addWorktree path={} ref={} detached={}", path, ref, detached)
+        val command = buildList {
+            add("git")
+            add("worktree")
+            add("add")
+            if (detached) add("--detach")
+            add(path.absolutePath)
+            if (ref != null) add(ref)
+        }
+        executeCommand(command)
+    }
+
+    override fun removeWorktree(path: File, force: Boolean) {
+        logger.trace("removeWorktree path={} force={}", path, force)
+        val command = buildList {
+            add("git")
+            add("worktree")
+            add("remove")
+            if (force) add("--force")
+            add(path.absolutePath)
+        }
+        executeCommand(command)
+    }
+
     override fun mergeTreeWriteTree(base: String, ours: String, theirs: String): String? {
         logger.trace("mergeTreeWriteTree base={} ours={} theirs={}", base, ours, theirs)
         val result =

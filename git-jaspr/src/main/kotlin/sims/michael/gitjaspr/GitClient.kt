@@ -186,6 +186,23 @@ interface GitClient {
      */
     fun gitCommonDir(): File
 
+    /**
+     * Adds a linked worktree at [path]. Equivalent to `git worktree add [--detach] <path> [<ref>]`.
+     * When [ref] is null, the worktree points at the current HEAD. When [detached] is true
+     * (default), the worktree is in detached-HEAD state; otherwise a new branch is created.
+     *
+     * Not implemented for [JGitClient]; production wiring routes this through [CliGitClient].
+     */
+    fun addWorktree(path: File, ref: String? = null, detached: Boolean = true)
+
+    /**
+     * Removes the linked worktree at [path]. Equivalent to `git worktree remove [--force] <path>`.
+     * Throws on failure (e.g., the worktree has uncommitted changes and [force] is false).
+     *
+     * Not implemented for [JGitClient]; production wiring routes this through [CliGitClient].
+     */
+    fun removeWorktree(path: File, force: Boolean = false)
+
     /** Returns short messages for multiple refs in a single operation. */
     fun getShortMessages(refs: List<String>): Map<String, String?>
 

@@ -45,6 +45,12 @@ private constructor(private val cliGitClient: CliGitClient, private val jGitClie
     override fun mergeTreeWriteTree(base: String, ours: String, theirs: String): String? =
         cliGitClient.mergeTreeWriteTree(base, ours, theirs)
 
+    override fun addWorktree(path: File, ref: String?, detached: Boolean) =
+        cliGitClient.addWorktree(path, ref, detached)
+
+    override fun removeWorktree(path: File, force: Boolean) =
+        cliGitClient.removeWorktree(path, force)
+
     companion object {
         operator fun invoke(
             workingDirectory: File,

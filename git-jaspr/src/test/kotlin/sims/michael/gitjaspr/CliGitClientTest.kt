@@ -1130,6 +1130,48 @@ class CliGitClientTest : GitClientTest {
     }
 
     @Test
+    fun `addWorktree and removeWorktree round-trip via CLI`() {
+        withTestSetup {
+            createCommitsFrom(
+                testCase {
+                    repository {
+                        commit {
+                            title = "one"
+                            localRefs += "development"
+                        }
+                    }
+                }
+            )
+            val cliGit = CliGitClient(localGit.workingDirectory)
+            val worktreeDir = scratchDir.resolve("worktree-cli")
+            cliGit.addWorktree(worktreeDir, ref = "development")
+            assertTrue(worktreeDir.resolve(".git").exists(), "worktree should have a .git pointer")
+            cliGit.removeWorktree(worktreeDir, force = true)
+            assertFalse(worktreeDir.exists(), "worktree dir should be gone after remove")
+        }
+    }
+
+    @Test
+    fun `JGitClient addWorktree throws UnsupportedOperationException`() {
+        withTestSetup {
+            val jGit = JGitClient(localGit.workingDirectory)
+            assertThrows<UnsupportedOperationException> {
+                jGit.addWorktree(scratchDir.resolve("never-created"))
+            }
+        }
+    }
+
+    @Test
+    fun `JGitClient removeWorktree throws UnsupportedOperationException`() {
+        withTestSetup {
+            val jGit = JGitClient(localGit.workingDirectory)
+            assertThrows<UnsupportedOperationException> {
+                jGit.removeWorktree(scratchDir.resolve("never-created"))
+            }
+        }
+    }
+
+    @Test
     fun `compare gitCommonDir`() {
         withTestSetup {
             val cliGit = CliGitClient(localGit.workingDirectory)

@@ -2619,34 +2619,28 @@ class GitJaspr(
     private fun createAutoMergeWorktree(worktreeDir: File, ref: String) {
         if (worktreeDir.exists()) {
             // Best-effort cleanup of a stale worktree from a prior run
-            runWorktreeRemove(worktreeDir)
+            removeWorktreeQuietly(worktreeDir)
         }
         val setupTime = measureTime {
-            val proc =
-                ProcessBuilder("git", "worktree", "add", "--detach", worktreeDir.absolutePath, ref)
-                    .directory(config.workingDirectory)
-                    .redirectErrorStream(true)
-                    .start()
-            val output = proc.inputStream.bufferedReader().readText()
-            check(proc.waitFor() == 0) { "Failed to create auto-merge worktree: $output" }
+            gitClient.addWorktree(worktreeDir, ref = ref, detached = true)
         }
         logger.debug("Created auto-merge worktree in {}", setupTime)
     }
 
     private fun removeAutoMergeWorktree(worktreeDir: File) {
-        runWorktreeRemove(worktreeDir)
+        removeWorktreeQuietly(worktreeDir)
     }
 
-    private fun runWorktreeRemove(worktreeDir: File) {
-        val proc =
-            ProcessBuilder("git", "worktree", "remove", "--force", worktreeDir.absolutePath)
-                .directory(config.workingDirectory)
-                .redirectErrorStream(true)
-                .start()
-        val output = proc.inputStream.bufferedReader().readText()
-        val rc = proc.waitFor()
-        if (rc != 0) {
-            logger.debug("git worktree remove returned {}: {}", rc, output)
+    /**
+     * Force-removes the worktree at [path], swallowing failures (logged at debug). Used in cleanup
+     * paths where the worktree may not exist or may be in an unexpected state — we don't want a
+     * cleanup failure to mask the real error or fail the surrounding operation.
+     */
+    private fun removeWorktreeQuietly(path: File) {
+        try {
+            gitClient.removeWorktree(path, force = true)
+        } catch (e: Exception) {
+            logger.debug("Failed to remove worktree at {}: {}", path, e.message)
         }
     }
 
@@ -3370,16 +3364,7 @@ class GitJaspr(
             try {
                 // Create detached worktree
                 worktreeDir.deleteRecursively()
-                val addResult =
-                    ProcessBuilder("git", "worktree", "add", "--detach", worktreeDir.absolutePath)
-                        .directory(config.workingDirectory)
-                        .redirectErrorStream(true)
-                        .start()
-                        .let { proc ->
-                            proc.inputStream.bufferedReader().readText()
-                            proc.waitFor()
-                        }
-                check(addResult == 0) { "Failed to create worktree" }
+                gitClient.addWorktree(worktreeDir, detached = true)
 
                 for ((branch, commits) in otherBranches) {
                     // Check if any of this branch's commits are in a skipped set
@@ -3407,15 +3392,7 @@ class GitJaspr(
                     }
                 }
             } finally {
-                // Clean up the worktree
-                ProcessBuilder("git", "worktree", "remove", "--force", worktreeDir.absolutePath)
-                    .directory(config.workingDirectory)
-                    .redirectErrorStream(true)
-                    .start()
-                    .let { proc ->
-                        proc.inputStream.bufferedReader().readText()
-                        proc.waitFor()
-                    }
+                removeWorktreeQuietly(worktreeDir)
             }
         }
 
