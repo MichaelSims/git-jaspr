@@ -12,6 +12,7 @@ import sims.michael.gitjaspr.RemoteRefEncoding.DEFAULT_REMOTE_BRANCH_PREFIX
 import sims.michael.gitjaspr.RemoteRefEncoding.DEFAULT_REMOTE_NAMED_STACK_BRANCH_PREFIX
 import sims.michael.gitjaspr.generated.fragment.RateLimitFields
 import sims.michael.gitjaspr.serde.FileSerializer
+import sims.michael.gitjaspr.serde.InstantSerializer
 import sims.michael.gitjaspr.serde.LevelSerializer
 
 @Serializable
@@ -147,6 +148,26 @@ data class NavState(
 data class SplitState(
     /** SHA to soft-reset to when unsplitting (the original commit before the mixed reset). */
     val unsplitSha: String
+)
+
+/**
+ * Persistent state for the periodic "is a newer jaspr available?" check, stored in
+ * `~/.git-jaspr/update-check.json`. The check runs at most once per configured interval; this state
+ * captures the most recent fetch results so the next invocation can skip the network call.
+ */
+@Serializable
+data class UpdateCheckState(
+    /** When the last fetch attempt was made (success or failure). */
+    @Serializable(with = InstantSerializer::class) val lastCheckedAt: Instant,
+    /** Tag of the latest stable release seen, or null if none/unknown. */
+    val latestStable: String? = null,
+    /** Tag of the latest prerelease seen, or null if none/unknown. */
+    val latestPrerelease: String? = null,
+    /**
+     * Tag we last surfaced a notice for. Used to suppress nagging about the same version on
+     * repeated invocations; the next notice fires only when a newer tag appears.
+     */
+    val lastNotifiedVersion: String? = null,
 )
 
 class GitJasprException(override val message: String) : RuntimeException(message) {
