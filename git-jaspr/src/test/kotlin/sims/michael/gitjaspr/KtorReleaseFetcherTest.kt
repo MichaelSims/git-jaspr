@@ -79,6 +79,48 @@ class KtorReleaseFetcherTest {
         }
     }
 
+    @Test
+    @EnabledIfEnvironmentVariable(named = "RUN_NETWORK_TESTS", matches = "1")
+    fun `integration - end-to-end notice rendering for an outdated current version`() {
+        // Exercises the full stack (fetch → policy → formatted notice) against real GitHub. Pins
+        // the "current version" to v0.0.1 so any real release qualifies as newer.
+        val tempState =
+            java.nio.file.Files.createTempDirectory("update-check-integration")
+                .resolve("state.json")
+                .toFile()
+        try {
+            KtorReleaseFetcher().use { fetcher ->
+                val check =
+                    UpdateCheck(
+                        stateFile = tempState,
+                        fetcher = fetcher,
+                        now = java.time.Instant::now,
+                        currentVersion = "v0.0.1",
+                        interval = java.time.Duration.ofHours(24),
+                        json = kotlinx.serialization.json.Json,
+                        skip = { false },
+                    )
+                val notice = assertNotNull(check.maybeNotice())
+                assertEquals("v0.0.1", notice.currentVersion)
+                assertTrue(
+                    notice.latestVersion.startsWith("v"),
+                    "Expected a v-prefixed tag, got: ${notice.latestVersion}",
+                )
+                assertTrue(
+                    notice.url.startsWith(
+                        "https://github.com/$UPDATE_CHECK_REPO_OWNER/$UPDATE_CHECK_REPO_NAME/releases/tag/"
+                    ),
+                    "Expected a real release URL, got: ${notice.url}",
+                )
+                val message = notice.formatMessage()
+                assertTrue(message.startsWith("Update available:"))
+                assertTrue(message.contains(notice.latestVersion))
+            }
+        } finally {
+            tempState.parentFile?.deleteRecursively()
+        }
+    }
+
     companion object {
         private lateinit var server: EmbeddedServer<*, *>
 

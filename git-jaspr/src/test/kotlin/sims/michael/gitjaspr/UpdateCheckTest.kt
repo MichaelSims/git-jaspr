@@ -32,6 +32,26 @@ class UpdateCheckTest {
         tempDir.deleteRecursively()
     }
 
+    // ---------- notice formatting ----------
+
+    @Test
+    fun `formatMessage renders versions and url, no package-manager hint`() {
+        val notice =
+            UpdateNotice(
+                currentVersion = "v2.1.0-beta.2",
+                latestVersion = "v2.1.0-beta.3",
+                url = "https://github.com/MichaelSims/git-jaspr/releases/tag/v2.1.0-beta.3",
+            )
+        val msg = notice.formatMessage()
+        assertEquals(
+            "Update available: v2.1.0-beta.3 (you have v2.1.0-beta.2). " +
+                "https://github.com/MichaelSims/git-jaspr/releases/tag/v2.1.0-beta.3",
+            msg,
+        )
+        // Sanity: no package manager named, so we don't mislead non-Homebrew users.
+        assertTrue(!msg.contains("brew") && !msg.contains("apt") && !msg.contains("dnf"))
+    }
+
     // ---------- SemVer ----------
 
     @Test

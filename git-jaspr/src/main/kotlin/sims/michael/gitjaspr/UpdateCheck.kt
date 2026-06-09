@@ -41,9 +41,17 @@ fun interface ReleaseFetcher {
 
 /**
  * A surfaceable update notice. The render layer formats this into a single muted line at the end of
- * the command output.
+ * the command output via [formatMessage].
  */
-data class UpdateNotice(val currentVersion: String, val latestVersion: String, val url: String)
+data class UpdateNotice(val currentVersion: String, val latestVersion: String, val url: String) {
+    /**
+     * Single-line message intended for `theme.muted` rendering. Deliberately does not name a
+     * specific package manager — jaspr ships via Homebrew, native-image, and source builds, so we
+     * point at the GitHub release page and let it describe install methods.
+     */
+    fun formatMessage(): String =
+        "Update available: $latestVersion (you have $currentVersion). $url"
+}
 
 /**
  * Coordinates "is a newer jaspr available?" checks. Reads/writes state at [stateFile], asks

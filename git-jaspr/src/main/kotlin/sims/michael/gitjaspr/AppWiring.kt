@@ -7,6 +7,8 @@ import io.ktor.client.engine.cio.*
 import io.ktor.client.plugins.auth.*
 import io.ktor.client.plugins.auth.providers.*
 import java.io.Closeable
+import java.io.File
+import java.time.Instant
 import kotlinx.serialization.json.Json
 import sims.michael.gitjaspr.graphql.ErrorMappingInterceptor
 import sims.michael.gitjaspr.graphql.RateLimitRetryInterceptor
@@ -16,6 +18,7 @@ interface AppWiring : Closeable {
     val config: Config
     val json: Json
     val gitClient: GitClient
+    val updateCheck: UpdateCheck
 }
 
 class DefaultAppWiring(
@@ -23,6 +26,9 @@ class DefaultAppWiring(
     override val config: Config,
     override val gitClient: GitClient,
     private val renderer: Renderer,
+    private val updateCheckSkip: () -> Boolean = { true },
+    private val updateCheckStateFile: File =
+        File(System.getenv("HOME")).resolve(".git-jaspr/update-check.json"),
 ) : AppWiring {
 
     private val gitHubClientWiring =
@@ -42,7 +48,30 @@ class DefaultAppWiring(
         GitJaspr(gitHubClient, gitClient, config, renderer = renderer)
     }
 
-    override fun close() = gitHubClientWiring.close()
+    private val releaseFetcherLazy: Lazy<KtorReleaseFetcher> = lazy { KtorReleaseFetcher() }
+    private val releaseFetcher: KtorReleaseFetcher
+        get() = releaseFetcherLazy.value
+
+    override val updateCheck: UpdateCheck by lazy {
+        UpdateCheck(
+            stateFile = updateCheckStateFile,
+            fetcher = releaseFetcher,
+            now = Instant::now,
+            currentVersion = VERSION,
+            json = json,
+            skip = updateCheckSkip,
+        )
+    }
+
+    override fun close() {
+        try {
+            gitHubClientWiring.close()
+        } finally {
+            // Close the lazy release fetcher only if it was initialized — most commands never
+            // exercise the update-check path (skip predicate short-circuits before construction).
+            if (releaseFetcherLazy.isInitialized()) releaseFetcher.close()
+        }
+    }
 }
 
 class GitHubClientWiring(

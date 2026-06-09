@@ -239,6 +239,14 @@ applicable.
             "Print the effective configuration to standard output (for debugging)"
         }
 
+    private val updateCheckEnabled by
+        option().flag("--no-update-check", default = true).help {
+            "Periodically check whether a newer jaspr is available and surface a one-line notice. " +
+                "Disable persistently by setting `update-check.enabled=false` in " +
+                "~/$CONFIG_FILE_NAME, or for a single shell with " +
+                "$JASPR_NO_UPDATE_CHECK_ENV_VAR=1."
+        }
+
     private val theme by
         option(
                 "--theme",
@@ -268,8 +276,29 @@ applicable.
                 dontPushRegex,
                 showTips,
             )
-        return DefaultAppWiring(token, config, gitClient, renderer)
+        return DefaultAppWiring(
+            githubToken = token,
+            config = config,
+            gitClient = gitClient,
+            renderer = renderer,
+            updateCheckSkip = ::isUpdateCheckSkipped,
+        )
     }
+
+    /**
+     * Predicate composing all reasons to skip the update check:
+     * - `--no-update-check` (or `update-check.enabled=false` in `~/$CONFIG_FILE_NAME` via the same
+     *   Clikt value source as other flags).
+     * - `$JASPR_NO_UPDATE_CHECK_ENV_VAR` env var set to any non-empty value.
+     * - Running under CI (any of the well-known CI env vars set).
+     * - Stdout not connected to a TTY — the notice would just become noise in piped output or
+     *   redirected logs.
+     */
+    private fun isUpdateCheckSkipped(): Boolean =
+        !updateCheckEnabled ||
+            !System.getenv(JASPR_NO_UPDATE_CHECK_ENV_VAR).isNullOrEmpty() ||
+            CI_ENV_VARS.any { !System.getenv(it).isNullOrEmpty() } ||
+            System.console() == null
 
     private fun determineGithubInfo(gitClient: GitClient): GitHubInfo {
         val host = gitHubOptions.githubHost
@@ -477,12 +506,25 @@ abstract class GitJasprSubcommand(
 
     abstract suspend fun doRun()
 
+    /**
+     * Subcommands set this to true to suppress the trailing "update available" notice (e.g., when
+     * the command's output is consumed by a script and a free-form line would break parsing).
+     * Default false — the global `--no-update-check` flag plus the env/CI/TTY skip predicate cover
+     * the common opt-outs already.
+     */
+    open val skipUpdateCheck: Boolean = false
+
     override suspend fun run() {
         val logger = Cli.logger
         try {
             doRun()
             cliContext.tipProvider?.getNextTip()?.let { tip ->
                 renderer.info { muted("Tip: $tip") }
+            }
+            if (!skipUpdateCheck) {
+                appWiring.updateCheck.maybeNotice()?.let { notice ->
+                    renderer.info { muted(notice.formatMessage()) }
+                }
             }
         } catch (e: GitJasprException) {
             logger.debug("An error occurred", e)
@@ -2071,6 +2113,14 @@ const val DEFAULT_TARGET_REF = "main"
 const val DEFAULT_REMOTE_NAME = "origin"
 const val COMMIT_ID_LABEL = "commit-id"
 private const val GITHUB_TOKEN_ENV_VAR = "GIT_JASPR_TOKEN"
+const val JASPR_NO_UPDATE_CHECK_ENV_VAR = "JASPR_NO_UPDATE_CHECK"
+
+/**
+ * Environment variables we treat as "running under CI." Any of these set to a non-empty value
+ * suppresses the update-check notice — those logs are not interactive.
+ */
+private val CI_ENV_VARS =
+    listOf("CI", "GITHUB_ACTIONS", "GITLAB_CI", "BUILDKITE", "CIRCLECI", "TRAVIS", "JENKINS_URL")
 
 /** Completes with unique remote branch names (remote prefix stripped). */
 private val remoteBranchCandidates =
