@@ -15,7 +15,6 @@ import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
 import org.slf4j.LoggerFactory
 import sims.michael.gitjaspr.CommitParsers.getSubjectAndBodyFromFullMessage
-import sims.michael.gitjaspr.CommitParsers.trimFooters
 import sims.michael.gitjaspr.GitJaspr.StatusBits.Status.EMPTY
 import sims.michael.gitjaspr.GitJaspr.StatusBits.Status.FAIL
 import sims.michael.gitjaspr.GitJaspr.StatusBits.Status.PENDING
@@ -1858,7 +1857,7 @@ class GitJaspr(
                 append(existingPr.body.substringBefore(jasprStartComment))
             }
             appendLine(jasprStartComment)
-            val fullMessageWithoutFooters = trimFooters(fullMessage)
+            val fullMessageWithoutFooters = CommitParsers.trimFooters(fullMessage)
             val (subject, body) = getSubjectAndBodyFromFullMessage(fullMessageWithoutFooters)
             // Render subject with an H3 header
             append("### ")

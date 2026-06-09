@@ -1036,7 +1036,7 @@ class Checkout : GitJasprSubcommand(helpText = "Check out an existing named stac
                     " $remoteName/$prefix/$target/{1} ^$remoteName/$target" +
                     " ; git log --color=always --graph -8" +
                     " --pretty=format:'%C(dim)%h %s (%ar) <%an>%Creset'" +
-                    " \$(git merge-base $remoteName/$prefix/$target/{1} $remoteName/$target)",
+                    $$" $(git merge-base $$remoteName/$$prefix/$$target/{1} $$remoteName/$$target)",
         )
     }
 
@@ -1390,8 +1390,7 @@ internal fun sortStacksByTipDate(
     remoteName: String,
 ): List<RemoteNamedStackRef> =
     stacks.sortedWith(
-        compareBy<RemoteNamedStackRef, ZonedDateTime?>(nullsLast(reverseOrder<ZonedDateTime>())) {
-                stack ->
+        compareBy<RemoteNamedStackRef, ZonedDateTime?>(nullsLast(reverseOrder())) { stack ->
                 commits["${remoteName}/${stack.name()}"]?.commitDate
             }
             .thenBy(RemoteNamedStackRef::stackName)
