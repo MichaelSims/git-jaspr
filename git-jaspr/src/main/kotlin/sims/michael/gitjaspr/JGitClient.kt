@@ -699,6 +699,16 @@ class JGitClient(
         }
     }
 
+    override fun patchId(sha: String): String? {
+        // JGit has no built-in patch-id computation; reproducing `git patch-id --stable` would
+        // mean implementing the patch-id algorithm in Kotlin. Production wiring routes this
+        // through CliGitClient via OptimizedCliGitClient.
+        throw UnsupportedOperationException(
+            "patchId is not implemented in JGitClient; use CliGitClient or " +
+                "OptimizedCliGitClient instead"
+        )
+    }
+
     override fun updateRef(refName: String, sha: String) {
         logger.trace("updateRef {} {}", refName, sha)
         useGit { git ->

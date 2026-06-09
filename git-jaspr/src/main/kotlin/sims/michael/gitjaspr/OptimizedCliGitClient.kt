@@ -51,6 +51,8 @@ private constructor(private val cliGitClient: CliGitClient, private val jGitClie
     override fun removeWorktree(path: File, force: Boolean) =
         cliGitClient.removeWorktree(path, force)
 
+    override fun patchId(sha: String): String? = cliGitClient.patchId(sha)
+
     companion object {
         operator fun invoke(
             workingDirectory: File,

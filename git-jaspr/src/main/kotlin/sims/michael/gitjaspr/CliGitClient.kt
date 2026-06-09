@@ -690,6 +690,31 @@ class CliGitClient(
         executeCommand(listOf("git", "cherry-pick", "--abort"))
     }
 
+    override fun patchId(sha: String): String? {
+        logger.trace("patchId {}", sha)
+        return try {
+            val pipeline =
+                ProcessBuilder.startPipeline(
+                    listOf(
+                        ProcessBuilder("git", "show", sha).directory(workingDirectory),
+                        ProcessBuilder("git", "patch-id", "--stable").directory(workingDirectory),
+                    )
+                )
+            val tail = pipeline.last()
+            val output = tail.inputStream.bufferedReader().readText().trim()
+            val showRc = pipeline.first().waitFor()
+            val patchIdRc = tail.waitFor()
+            if (showRc != 0 || patchIdRc != 0 || output.isEmpty()) {
+                null
+            } else {
+                output.substringBefore(' ').takeIf(String::isNotEmpty)
+            }
+        } catch (e: Exception) {
+            logger.debug("Failed to compute patch-id for {}", sha, e)
+            null
+        }
+    }
+
     override fun mergeTreeWriteTree(base: String, ours: String, theirs: String): String? {
         logger.trace("mergeTreeWriteTree base={} ours={} theirs={}", base, ours, theirs)
         val result =

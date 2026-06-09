@@ -213,6 +213,16 @@ interface GitClient {
      */
     fun cherryPickAbort()
 
+    /**
+     * Returns a stable patch-id for [sha] (equivalent to `git show <sha> | git patch-id --stable`),
+     * or null if a patch-id can't be computed (e.g., the commit doesn't exist, the diff is empty,
+     * or the underlying tool fails). Two commits with the same patch-id have equivalent diffs
+     * ignoring line numbers and whitespace; useful for detecting cherry-picks and rebases.
+     *
+     * Not implemented for [JGitClient]; production wiring routes this through [CliGitClient].
+     */
+    fun patchId(sha: String): String?
+
     /** Returns short messages for multiple refs in a single operation. */
     fun getShortMessages(refs: List<String>): Map<String, String?>
 

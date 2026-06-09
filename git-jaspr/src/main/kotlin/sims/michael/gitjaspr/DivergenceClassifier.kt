@@ -129,22 +129,7 @@ class DivergenceClassifier(
 
     private fun computePatchId(sha: String): String? =
         try {
-            val pipeline =
-                ProcessBuilder.startPipeline(
-                    listOf(
-                        ProcessBuilder("git", "show", sha).directory(workingDirectory),
-                        ProcessBuilder("git", "patch-id", "--stable").directory(workingDirectory),
-                    )
-                )
-            val tail = pipeline.last()
-            val output = tail.inputStream.bufferedReader().readText().trim()
-            val showRc = pipeline.first().waitFor()
-            val patchIdRc = tail.waitFor()
-            if (showRc != 0 || patchIdRc != 0 || output.isEmpty()) {
-                null
-            } else {
-                output.substringBefore(' ').takeIf(String::isNotEmpty)
-            }
+            gitClient.patchId(sha)
         } catch (e: Exception) {
             logger.debug("Failed to compute patch-id for {}", sha, e)
             null

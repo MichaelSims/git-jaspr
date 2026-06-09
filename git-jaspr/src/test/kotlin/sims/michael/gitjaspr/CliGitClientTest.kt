@@ -2,6 +2,7 @@ package sims.michael.gitjaspr
 
 import java.io.File
 import java.nio.file.Files
+import kotlin.test.assertNotNull
 import org.eclipse.jgit.lib.Constants
 import org.junit.jupiter.api.Assertions.*
 import org.junit.jupiter.api.Test
@@ -1105,7 +1106,7 @@ class CliGitClientTest : GitClientTest {
             // The result should be a valid tree SHA. Round-tripping it through `git rev-parse`
             // would confirm, but checking the format (40 hex chars) is sufficient for a unit test.
             assertTrue(
-                result!!.matches("^[0-9a-f]{40}$".toRegex()),
+                result.matches("^[0-9a-f]{40}$".toRegex()),
                 "expected tree SHA, got: $result",
             )
         }
@@ -1162,11 +1163,57 @@ class CliGitClientTest : GitClientTest {
     }
 
     @Test
+    fun `patchId returns a stable hash for a CLI-computed patch`() {
+        withTestSetup {
+            createCommitsFrom(
+                testCase {
+                    repository {
+                        commit { title = "base" }
+                        commit {
+                            title = "edit"
+                            localRefs += "development"
+                        }
+                    }
+                }
+            )
+            val cliGit = CliGitClient(localGit.workingDirectory)
+            val head = cliGit.log("development", 1).single().hash
+            val patchId =
+                assertNotNull(
+                    cliGit.patchId(head),
+                    "patchId should be non-null for a commit with a diff",
+                )
+            assertTrue(
+                patchId.matches("^[0-9a-f]{40}$".toRegex()),
+                "expected 40-char hex patch-id, got: $patchId",
+            )
+            // Calling again is stable.
+            assertEquals(patchId, cliGit.patchId(head))
+        }
+    }
+
+    @Test
+    fun `patchId returns null for an unresolvable sha via CLI`() {
+        withTestSetup {
+            val cliGit = CliGitClient(localGit.workingDirectory)
+            assertNull(cliGit.patchId("deadbeefdeadbeefdeadbeefdeadbeefdeadbeef"))
+        }
+    }
+
+    @Test
+    fun `JGitClient patchId throws UnsupportedOperationException`() {
+        withTestSetup {
+            val jGit = JGitClient(localGit.workingDirectory)
+            assertThrows<UnsupportedOperationException> { jGit.patchId("HEAD") }
+        }
+    }
+
+    @Test
     fun `compare cherryPickAbort recovers from a conflicting pick`() {
         // Tests both clients against the same kind of conflict: each gets a fresh repo, attempts
         // a cherry-pick that conflicts, then aborts. Both should leave the working tree clean and
         // clear any CHERRY_PICK_HEAD sentinel.
-        fun runOne(makeClient: (java.io.File) -> GitClient) {
+        fun runOne(makeClient: (File) -> GitClient) {
             withTestSetup {
                 createCommitsFrom(
                     testCase {
