@@ -16,6 +16,7 @@ import sims.michael.gitjaspr.PullRequest
 import sims.michael.gitjaspr.RemoteRefEncoding.DEFAULT_REMOTE_BRANCH_PREFIX
 import sims.michael.gitjaspr.RemoteRefEncoding.DEFAULT_REMOTE_NAMED_STACK_BRANCH_PREFIX
 import sims.michael.gitjaspr.RemoteRefEncoding.RemoteRef
+import sims.michael.gitjaspr.testing.COLLABORATOR_IDENT
 import sims.michael.gitjaspr.testing.DEFAULT_COMMITTER
 
 class GitHubTestHarness
@@ -36,6 +37,51 @@ private constructor(
 
     val localGit: GitClient = createLocalGitClient(localRepo)
     val remoteGit: GitClient = createRemoteGitClient(remoteRepo)
+
+    /**
+     * A non-bare clone of the remote, intended to model a separate machine pushing to the same
+     * shared remote. Initialized lazily on first access so tests that never use it pay no setup
+     * cost; once initialized, it persists for the rest of the test. The clone reflects the remote's
+     * state at the moment of first access, so a test that pushes locally before touching
+     * [collaborator] gets the post-push state, matching the "collaborator showed up after I pushed"
+     * scenario.
+     */
+    val collaborator: GitClient
+        get() = collaboratorLazy.value
+
+    private val collaboratorLazy: Lazy<GitClient> = lazy {
+        val dir = scratchDir.resolve("collaborator").also { it.mkdirs() }
+        val client = createLocalGitClient(dir)
+        client.clone(remoteRepo.toURI().toString(), remoteName)
+        client.setConfigValue("user.name", COLLABORATOR_IDENT.name)
+        client.setConfigValue("user.email", COLLABORATOR_IDENT.email)
+        client
+    }
+
+    /**
+     * Simulates a collaborator rebasing a named stack in place: cherry-picks each commit on
+     * [namedStackRef] onto its original base with a distinct committer identity, then force-pushes.
+     * The resulting commits have new SHAs but identical patch+message (so the divergence classifier
+     * treats them as non-divergent), reproducing the "remote rebased your shared portion" state.
+     * Returns the new tip SHA.
+     */
+    fun collaboratorRebaseStackInPlace(namedStackRef: String): String {
+        collaborator.fetch(remoteName)
+        val remoteStackRef = "$remoteName/$namedStackRef"
+        val mainRef = "$remoteName/main"
+        val mergeBase =
+            checkNotNull(collaborator.mergeBase(remoteStackRef, mainRef)) {
+                "Could not find merge-base between $remoteStackRef and $mainRef"
+            }
+        val stack = collaborator.getCommitStack(remoteName, remoteStackRef, "main")
+        collaborator.checkout(mergeBase)
+        for (commit in stack) {
+            collaborator.cherryPick(commit, committer = COLLABORATOR_IDENT)
+        }
+        val newTip = collaborator.log(GitClient.HEAD, 1).single().hash
+        collaborator.push(listOf(RefSpec("+HEAD", namedStackRef)), remoteName)
+        return newTip
+    }
 
     private val ghClientsByUserKey: Map<String, GitHubClient> by lazy {
         if (!useFakeRemote) {

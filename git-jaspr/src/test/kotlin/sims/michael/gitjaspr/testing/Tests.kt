@@ -11,3 +11,5 @@ fun File.toStringWithClickableURI(): String =
     "$this (${toURI().toString().replaceFirst("/", "///")})"
 
 val DEFAULT_COMMITTER: Ident = Ident("Frank Grimes", "grimey@example.com")
+
+val COLLABORATOR_IDENT: Ident = Ident("Lenny Leonard", "lenny@example.com")

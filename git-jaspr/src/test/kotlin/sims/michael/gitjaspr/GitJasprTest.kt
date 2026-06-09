@@ -3854,6 +3854,198 @@ interface GitJasprTest {
         }
     }
 
+    @Pull
+    @Test
+    fun `pull cherry-picks LO onto remote tip when remote rebased shared commits in place`() {
+        withTestSetup(useFakeRemote) {
+            createCommitsFrom(
+                testCase {
+                    repository {
+                        commit {
+                            title = "a"
+                            willPassVerification = true
+                        }
+                        commit {
+                            title = "b"
+                            willPassVerification = true
+                            localRefs += "development"
+                        }
+                    }
+                    checkout = "development"
+                }
+            )
+            gitJaspr.push(stackName = "test-stack")
+
+            // Collaborator rewrites the remote stack in place: same patches, new SHAs.
+            val rewrittenTip = collaboratorRebaseStackInPlace("jaspr-named/main/test-stack")
+            val originalLocalTip = localGit.log("development", 1).single().hash
+            assertNotEquals(originalLocalTip, rewrittenTip)
+
+            // Add a local-only `c` on top of the original stack.
+            createCommitsFrom(
+                testCase {
+                    repository {
+                        commit {
+                            title = "a"
+                            willPassVerification = true
+                        }
+                        commit {
+                            title = "b"
+                            willPassVerification = true
+                        }
+                        commit {
+                            title = "c"
+                            willPassVerification = true
+                            localRefs += "development"
+                        }
+                    }
+                    checkout = "development"
+                }
+            )
+
+            val output = pull()
+
+            assertTrue(
+                output.contains("Adopted remote's version of the shared portion"),
+                "Expected LO cherry-pick message, got: $output",
+            )
+            assertTrue(
+                output.contains("replayed 1 local commit"),
+                "Expected replay count message, got: $output",
+            )
+            val newStack = localGit.getCommitStack(remoteName, "development", "main")
+            assertEquals(3, newStack.size)
+            assertEquals("c", newStack.last().shortMessage)
+            // The two commits below `c` should be the collaborator's rewritten SHAs.
+            assertEquals(rewrittenTip, newStack[1].hash)
+        }
+    }
+
+    @Pull
+    @Test
+    fun `pull cherry-picks RO onto local head when local base is ahead`() {
+        withTestSetup(useFakeRemote) {
+            createCommitsFrom(
+                testCase {
+                    repository {
+                        commit {
+                            title = "a"
+                            willPassVerification = true
+                        }
+                        commit {
+                            title = "b"
+                            willPassVerification = true
+                        }
+                        commit {
+                            title = "c"
+                            willPassVerification = true
+                            localRefs += "development"
+                        }
+                    }
+                    checkout = "development"
+                }
+            )
+            gitJaspr.push(stackName = "test-stack")
+
+            // Locally advance main with M1 and rebase the stack onto it; remote stack stays put.
+            createCommitsFrom(
+                testCase {
+                    repository {
+                        commit {
+                            title = "M1"
+                            remoteRefs += "main"
+                        }
+                        commit {
+                            title = "a"
+                            willPassVerification = true
+                        }
+                        commit {
+                            title = "b"
+                            willPassVerification = true
+                            localRefs += "development"
+                        }
+                    }
+                    checkout = "development"
+                }
+            )
+
+            val output = pull()
+
+            assertTrue(
+                output.contains("Pulled 1 commit onto your local stack"),
+                "Expected RO cherry-pick message, got: $output",
+            )
+            val newStack = localGit.getCommitStack(remoteName, "development", "main")
+            assertEquals(3, newStack.size)
+            assertEquals(listOf("a", "b", "c"), newStack.map(Commit::shortMessage))
+        }
+    }
+
+    @Pull
+    @Test
+    fun `pull refuses with a conflict when the cherry-pick queue would conflict`() {
+        withTestSetup(useFakeRemote) {
+            val initialMain = localGit.log("main", 1).single().hash
+
+            createCommitsFrom(
+                testCase {
+                    repository {
+                        commit {
+                            title = "a"
+                            willPassVerification = true
+                        }
+                        commit {
+                            title = "b"
+                            willPassVerification = true
+                            localRefs += "development"
+                        }
+                    }
+                    checkout = "development"
+                }
+            )
+            gitJaspr.push(stackName = "test-stack")
+
+            val originalStack = localGit.getCommitStack(remoteName, "development", "main")
+            val aOriginal = originalStack[0]
+            val bOriginal = originalStack[1]
+
+            // Collaborator pushes `c` that creates conflict.txt.
+            collaborator.fetch(remoteName)
+            collaborator.checkout("$remoteName/jaspr-named/main/test-stack")
+            collaborator.workingDirectory
+                .resolve("conflict.txt")
+                .writeText("collaborator's content\n")
+            collaborator.add("conflict.txt")
+            collaborator.commit("c", footerLines = mapOf(COMMIT_ID_LABEL to "c"))
+            collaborator.push(
+                listOf(RefSpec("+HEAD", "jaspr-named/main/test-stack")),
+                remoteName,
+            )
+
+            // Locally: build M1 that also creates conflict.txt (different content), advance remote
+            // main to M1, then rebase the local stack onto M1.
+            localGit.checkout(initialMain)
+            localGit.workingDirectory.resolve("conflict.txt").writeText("M1's content\n")
+            localGit.add("conflict.txt")
+            localGit.commit("M1")
+            localGit.push(listOf(RefSpec("+HEAD", "main")), remoteName)
+            localGit.branch("main", force = true)
+            localGit.cherryPick(aOriginal)
+            localGit.cherryPick(bOriginal)
+            localGit.branch("development", force = true)
+
+            val thrown = assertFailsWith<GitJasprException> { pull() }
+            assertTrue(
+                thrown.message.contains("would conflict applying commit"),
+                "Expected conflict message, got: ${thrown.message}",
+            )
+            assertTrue(
+                thrown.message.contains("(c)"),
+                "Expected message to name commit c, got: ${thrown.message}",
+            )
+        }
+    }
+
     // endregion
 
     // region push tests
