@@ -203,6 +203,16 @@ interface GitClient {
      */
     fun removeWorktree(path: File, force: Boolean = false)
 
+    /**
+     * Aborts an in-progress cherry-pick, restoring HEAD, the index, and the working tree to the
+     * state before the cherry-pick started. Equivalent to `git cherry-pick --abort` plus a
+     * tolerance for being called when no cherry-pick is in progress (which CLI `git` rejects with
+     * an error but is a common defensive pattern after a failed [cherryPick]). Implementations
+     * should hard-reset the working tree and index to HEAD and clear any `CHERRY_PICK_HEAD` /
+     * `MERGE_MSG` sentinels.
+     */
+    fun cherryPickAbort()
+
     /** Returns short messages for multiple refs in a single operation. */
     fun getShortMessages(refs: List<String>): Map<String, String?>
 

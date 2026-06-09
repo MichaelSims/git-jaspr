@@ -1162,6 +1162,53 @@ class CliGitClientTest : GitClientTest {
     }
 
     @Test
+    fun `compare cherryPickAbort recovers from a conflicting pick`() {
+        // Tests both clients against the same kind of conflict: each gets a fresh repo, attempts
+        // a cherry-pick that conflicts, then aborts. Both should leave the working tree clean and
+        // clear any CHERRY_PICK_HEAD sentinel.
+        fun runOne(makeClient: (java.io.File) -> GitClient) {
+            withTestSetup {
+                createCommitsFrom(
+                    testCase {
+                        repository {
+                            commit {
+                                title = "base"
+                                localRefs += "main"
+                            }
+                        }
+                    }
+                )
+                val git = makeClient(localGit.workingDirectory)
+                val shared = localRepo.resolve("shared.txt")
+
+                shared.writeText("A\n")
+                git.add("shared.txt")
+                val commitA = git.commit("a", footerLines = mapOf(COMMIT_ID_LABEL to "a"))
+
+                git.reset("main")
+                shared.writeText("B\n")
+                git.add("shared.txt")
+                git.commit("b", footerLines = mapOf(COMMIT_ID_LABEL to "b"))
+
+                assertThrows<Exception> { git.cherryPick(commitA) }
+
+                git.cherryPickAbort()
+
+                assertFalse(
+                    git.gitDir().resolve("CHERRY_PICK_HEAD").exists(),
+                    "CHERRY_PICK_HEAD should be gone after cherryPickAbort",
+                )
+                assertFalse(
+                    git.hasUncommittedChangesToTrackedFiles(),
+                    "working tree should be clean after cherryPickAbort",
+                )
+            }
+        }
+        runOne(::CliGitClient)
+        runOne(::JGitClient)
+    }
+
+    @Test
     fun `JGitClient removeWorktree throws UnsupportedOperationException`() {
         withTestSetup {
             val jGit = JGitClient(localGit.workingDirectory)

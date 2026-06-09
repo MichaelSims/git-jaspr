@@ -685,6 +685,11 @@ class CliGitClient(
         executeCommand(command)
     }
 
+    override fun cherryPickAbort() {
+        logger.trace("cherryPickAbort")
+        executeCommand(listOf("git", "cherry-pick", "--abort"))
+    }
+
     override fun mergeTreeWriteTree(base: String, ours: String, theirs: String): String? {
         logger.trace("mergeTreeWriteTree base={} ours={} theirs={}", base, ours, theirs)
         val result =

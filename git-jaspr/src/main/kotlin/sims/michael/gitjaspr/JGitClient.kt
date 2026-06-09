@@ -689,6 +689,16 @@ class JGitClient(
         )
     }
 
+    override fun cherryPickAbort() {
+        logger.trace("cherryPickAbort")
+        useGit { git ->
+            val r = git.repository
+            git.reset().setMode(ResetCommand.ResetType.HARD).call()
+            r.writeCherryPickHead(null)
+            r.writeMergeCommitMsg(null)
+        }
+    }
+
     override fun updateRef(refName: String, sha: String) {
         logger.trace("updateRef {} {}", refName, sha)
         useGit { git ->

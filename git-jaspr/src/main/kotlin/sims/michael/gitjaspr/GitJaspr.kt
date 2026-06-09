@@ -3365,6 +3365,7 @@ class GitJaspr(
                 // Create detached worktree
                 worktreeDir.deleteRecursively()
                 gitClient.addWorktree(worktreeDir, detached = true)
+                val worktreeClient = OptimizedCliGitClient(worktreeDir, config.remoteBranchPrefix)
 
                 for ((branch, commits) in otherBranches) {
                     // Check if any of this branch's commits are in a skipped set
@@ -3385,7 +3386,13 @@ class GitJaspr(
                     }
 
                     val result =
-                        rebaseBranchInWorktree(worktreeDir, branch, commits, targetBase, commitMap)
+                        rebaseBranchInWorktree(
+                            worktreeClient,
+                            branch,
+                            commits,
+                            targetBase,
+                            commitMap,
+                        )
                     results.add(result)
                     if (!result.success) {
                         commits.forEach { skippedCommits.add(it.hash) }
@@ -3447,7 +3454,7 @@ class GitJaspr(
      * duplicating commits that were already rebased as part of a shallower branch.
      */
     private fun rebaseBranchInWorktree(
-        worktreeDir: File,
+        worktreeClient: GitClient,
         branch: String,
         commits: List<Commit>,
         targetBase: String,
@@ -3471,7 +3478,7 @@ class GitJaspr(
             // All commits were already rebased by a shallower branch, just update the ref
             val tip = commitMap[commits.last().hash]
             if (tip != null) {
-                gitBranchForce(config.workingDirectory, branch, tip)
+                gitClient.branch(branch, startPoint = tip, force = true)
                 renderer.info {
                     "Updated ${entity(branch)} (all commits shared with earlier branch)"
                 }
@@ -3479,31 +3486,35 @@ class GitJaspr(
             return SyncBranchResult(branch, true, "Rebased (shared commits)")
         }
 
-        // Checkout the new base in the worktree
-        val checkoutResult = gitCommand(worktreeDir, "checkout", "--detach", newBase)
-        if (checkoutResult != 0) {
+        // Checkout the new base in the worktree (checkout of a SHA detaches HEAD)
+        try {
+            worktreeClient.checkout(newBase)
+        } catch (e: Exception) {
+            logger.debug("Failed to checkout base $newBase in worktree", e)
             return SyncBranchResult(branch, false, "Failed to checkout base")
         }
 
         // Cherry-pick each commit
         for (commit in commitsToReplay) {
-            val cpResult = gitCommand(worktreeDir, "cherry-pick", "--allow-empty", commit.hash)
-            if (cpResult != 0) {
+            try {
+                worktreeClient.cherryPick(commit)
+            } catch (e: Exception) {
+                logger.debug("cherryPick failed during rebase of $branch", e)
                 // Abort the cherry-pick and bail
-                gitCommand(worktreeDir, "cherry-pick", "--abort")
+                worktreeClient.cherryPickAbort()
                 renderer.warn {
                     "Conflict rebasing ${entity(branch)} at commit ${entity(commit.hash.take(7))} (${commit.shortMessage})"
                 }
                 return SyncBranchResult(branch, false, "Conflict at ${commit.hash.take(7)}")
             }
             // Record the mapping: old hash -> new hash in worktree
-            val newHash = gitOutput(worktreeDir, "rev-parse", "HEAD")
+            val newHash = worktreeClient.log(GitClient.HEAD, 1).single().hash
             commitMap[commit.hash] = newHash
         }
 
         // Update the branch ref in the main repo to point at the new tip
-        val newTip = gitOutput(worktreeDir, "rev-parse", "HEAD")
-        gitBranchForce(config.workingDirectory, branch, newTip)
+        val newTip = worktreeClient.log(GitClient.HEAD, 1).single().hash
+        gitClient.branch(branch, startPoint = newTip, force = true)
         renderer.info { "Rebased ${entity(branch)}" }
         return SyncBranchResult(branch, true, "Rebased")
     }
@@ -3535,8 +3546,6 @@ class GitJaspr(
         targetBase: String,
         commitMap: Map<String, String>,
     ): SyncBranchResult {
-        val workingDirectory = config.workingDirectory
-
         // Find the deepest mapped commit and determine what to replay
         var newBase = targetBase
         var commitsToReplay = commits
@@ -3549,16 +3558,18 @@ class GitJaspr(
             }
         }
 
-        // Detach HEAD at the new base
-        gitCommand(workingDirectory, "checkout", "--detach", newBase)
+        // Detach HEAD at the new base (checkout of a SHA detaches HEAD)
+        gitClient.checkout(newBase)
 
         // Cherry-pick remaining commits
         for (commit in commitsToReplay) {
-            val result = gitCommand(workingDirectory, "cherry-pick", "--allow-empty", commit.hash)
-            if (result != 0) {
-                gitCommand(workingDirectory, "cherry-pick", "--abort")
+            try {
+                gitClient.cherryPick(commit)
+            } catch (e: Exception) {
+                logger.debug("cherryPick failed during rebase of $branch", e)
+                gitClient.cherryPickAbort()
                 // Try to get back on the branch
-                gitCommand(workingDirectory, "checkout", branch)
+                gitClient.checkout(branch)
                 renderer.warn {
                     "Conflict rebasing ${entity(branch)} at commit " +
                         "${entity(commit.hash.take(7))} (${commit.shortMessage})"
@@ -3568,35 +3579,11 @@ class GitJaspr(
         }
 
         // Update branch and check it out
-        val newTip = gitOutput(workingDirectory, "rev-parse", "HEAD")
-        gitBranchForce(workingDirectory, branch, newTip)
-        gitCommand(workingDirectory, "checkout", branch)
+        val newTip = gitClient.log(GitClient.HEAD, 1).single().hash
+        gitClient.branch(branch, startPoint = newTip, force = true)
+        gitClient.checkout(branch)
         renderer.info { "Rebased ${entity(branch)}" }
         return SyncBranchResult(branch, true, "Rebased")
-    }
-
-    /** Run a git command in a directory and return the exit code. */
-    private fun gitCommand(dir: File, vararg args: String): Int =
-        ProcessBuilder(listOf("git") + args).directory(dir).redirectErrorStream(true).start().let {
-            proc ->
-            proc.inputStream.bufferedReader().readText()
-            proc.waitFor()
-        }
-
-    /** Run a git command and return trimmed stdout. */
-    @Suppress("SameParameterValue")
-    private fun gitOutput(dir: File, vararg args: String): String =
-        ProcessBuilder(listOf("git") + args).directory(dir).redirectErrorStream(true).start().let {
-            proc ->
-            val output = proc.inputStream.bufferedReader().readText().trim()
-            check(proc.waitFor() == 0) { "git ${args.toList()} failed: $output" }
-            output
-        }
-
-    /** Force-update a branch ref to point at a specific commit. */
-    private fun gitBranchForce(dir: File, branch: String, commit: String) {
-        val result = gitCommand(dir, "branch", "-f", branch, commit)
-        check(result == 0) { "Failed to update branch $branch to $commit" }
     }
 
     companion object {
