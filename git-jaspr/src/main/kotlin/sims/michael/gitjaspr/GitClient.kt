@@ -171,6 +171,14 @@ interface GitClient {
      */
     fun updateRef(refName: String, sha: String)
 
+    /**
+     * Returns the worktree-specific git directory as an absolute, canonical path. Equivalent to
+     * `git rev-parse --git-dir`. In a main checkout this is `<repo>/.git`; in a linked worktree
+     * this is `<repo>/.git/worktrees/<name>`. Per-checkout state like `CHERRY_PICK_HEAD`,
+     * `MERGE_HEAD`, and `rebase-merge/`/`rebase-apply/` live here.
+     */
+    fun gitDir(): File
+
     /** Returns short messages for multiple refs in a single operation. */
     fun getShortMessages(refs: List<String>): Map<String, String?>
 

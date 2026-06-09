@@ -1120,6 +1120,16 @@ class CliGitClientTest : GitClientTest {
     }
 
     @Test
+    fun `compare gitDir`() {
+        withTestSetup {
+            val cliGit = CliGitClient(localGit.workingDirectory)
+            val jGit = JGitClient(localGit.workingDirectory)
+            assertEquals(cliGit.gitDir(), jGit.gitDir())
+            assertTrue(cliGit.gitDir().isDirectory, "gitDir should point at an existing directory")
+        }
+    }
+
+    @Test
     fun `compare updateRef`() {
         withTestSetup {
             createCommitsFrom(

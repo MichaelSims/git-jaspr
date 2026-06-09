@@ -667,6 +667,8 @@ class JGitClient(
         }
     }
 
+    override fun gitDir(): File = useGit { git -> git.repository.directory.canonicalFile }
+
     override fun updateRef(refName: String, sha: String) {
         logger.trace("updateRef {} {}", refName, sha)
         useGit { git ->

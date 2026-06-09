@@ -848,7 +848,7 @@ class GitJaspr(
      * worktree-specific git dir.
      */
     private fun checkNoOperationInProgress() {
-        val gitDir = resolveGitDir()
+        val gitDir = gitClient.gitDir()
         val inProgress =
             when {
                 gitDir.resolve("CHERRY_PICK_HEAD").exists() -> "cherry-pick"
@@ -863,22 +863,6 @@ class GitJaspr(
                     "Complete or abort it before re-running `jaspr pull`."
             )
         }
-    }
-
-    /**
-     * Returns the worktree-specific git dir. Unlike [resolveGitCommonDir], this points at the
-     * per-worktree dir where per-checkout state like CHERRY_PICK_HEAD, MERGE_HEAD, and
-     * rebase-merge/rebase-apply live.
-     */
-    private fun resolveGitDir(): File {
-        val process =
-            ProcessBuilder("git", "rev-parse", "--git-dir")
-                .directory(config.workingDirectory)
-                .redirectErrorStream(true)
-                .start()
-        val output = process.inputStream.bufferedReader().readText().trim()
-        check(process.waitFor() == 0) { "Failed to resolve git dir: $output" }
-        return config.workingDirectory.resolve(output).canonicalFile
     }
 
     private fun noOpMessage(reason: NoOpReason): String =
