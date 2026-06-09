@@ -89,7 +89,7 @@ class DivergenceClassifierTest {
 
     private fun withClassifier(workDir: File, block: (DivergenceClassifier) -> Unit) {
         val jasprDir = workDir.resolve(".git/jaspr").also { it.mkdirs() }
-        DivergenceClassifier(workDir, jasprDir, OptimizedCliGitClient(workDir)).use(block)
+        DivergenceClassifier(jasprDir, OptimizedCliGitClient(workDir)).use(block)
     }
 
     private fun commit(

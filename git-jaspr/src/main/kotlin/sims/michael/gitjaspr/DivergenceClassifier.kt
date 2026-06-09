@@ -29,11 +29,7 @@ import org.slf4j.LoggerFactory
  * The probe worktree at `.git/jaspr/cherry-pick-probe-worktree` is created lazily on the first
  * simulation and removed on [close].
  */
-class DivergenceClassifier(
-    private val workingDirectory: File,
-    jasprDir: File,
-    private val gitClient: GitClient,
-) : AutoCloseable {
+class DivergenceClassifier(jasprDir: File, private val gitClient: GitClient) : AutoCloseable {
 
     enum class Result {
         IDENTICAL,
@@ -94,7 +90,7 @@ class DivergenceClassifier(
     override fun close() {
         try {
             if (worktreeReady) {
-                runGit(workingDirectory, "worktree", "remove", "--force", worktreeDir.absolutePath)
+                removeProbeWorktreeQuietly()
             }
         } finally {
             lock?.close()
@@ -168,25 +164,21 @@ class DivergenceClassifier(
         if (worktreeReady) return
         // Clean up any stale worktree left behind by a crashed run before we add a new one.
         if (worktreeDir.exists()) {
-            runGit(workingDirectory, "worktree", "remove", "--force", worktreeDir.absolutePath)
+            removeProbeWorktreeQuietly()
         }
-        val rc = runGit(workingDirectory, "worktree", "add", "--detach", worktreeDir.absolutePath)
-        check(rc == 0) { "Failed to create cherry-pick probe worktree at $worktreeDir" }
+        gitClient.addWorktree(worktreeDir, detached = true)
         worktreeReady = true
     }
 
-    private fun runGit(dir: File, vararg args: String): Int =
-        ProcessBuilder(listOf("git") + args).directory(dir).redirectErrorStream(true).start().let {
-            proc ->
-            proc.inputStream.bufferedReader().readText()
-            proc.waitFor()
+    /**
+     * Force-removes the probe worktree, swallowing failures (logged at debug). Used in cleanup
+     * paths where the worktree may not exist or may be in an unexpected state.
+     */
+    private fun removeProbeWorktreeQuietly() {
+        try {
+            gitClient.removeWorktree(worktreeDir, force = true)
+        } catch (e: Exception) {
+            logger.debug("Failed to remove probe worktree at {}: {}", worktreeDir, e.message)
         }
-
-    private fun gitOutput(dir: File, vararg args: String): String {
-        val proc =
-            ProcessBuilder(listOf("git") + args).directory(dir).redirectErrorStream(true).start()
-        val output = proc.inputStream.bufferedReader().readText().trim()
-        check(proc.waitFor() == 0) { "git ${args.toList()} in $dir failed: $output" }
-        return output
     }
 }
