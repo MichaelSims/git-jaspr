@@ -29,7 +29,11 @@ import org.slf4j.LoggerFactory
  * The probe worktree at `.git/jaspr/cherry-pick-probe-worktree` is created lazily on the first
  * simulation and removed on [close].
  */
-class DivergenceClassifier(private val workingDirectory: File, jasprDir: File) : AutoCloseable {
+class DivergenceClassifier(
+    private val workingDirectory: File,
+    jasprDir: File,
+    private val gitClient: GitClient,
+) : AutoCloseable {
 
     enum class Result {
         IDENTICAL,
@@ -81,12 +85,7 @@ class DivergenceClassifier(private val workingDirectory: File, jasprDir: File) :
 
     private fun computeCommitMessage(sha: String): String? =
         try {
-            val proc =
-                ProcessBuilder("git", "log", "-1", "--format=%B", sha)
-                    .directory(workingDirectory)
-                    .start()
-            val output = proc.inputStream.bufferedReader().readText().trimEnd()
-            if (proc.waitFor() == 0) output else null
+            gitClient.log(sha, 1).singleOrNull()?.fullMessage?.trimEnd()
         } catch (e: Exception) {
             logger.debug("Failed to read commit message for {}", sha, e)
             null

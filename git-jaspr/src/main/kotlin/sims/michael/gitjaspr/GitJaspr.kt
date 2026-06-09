@@ -555,7 +555,8 @@ class GitJaspr(
         val remoteStack =
             gitClient.getCommitStack(remoteName, "$remoteName/$stackName", namedStackRef.targetRef)
 
-        return DivergenceClassifier(config.workingDirectory, getJasprDir()).use { classifier ->
+        return DivergenceClassifier(config.workingDirectory, getJasprDir(), gitClient).use {
+            classifier ->
             val rows = alignStacks(localStack, remoteStack, classifier)
             buildString {
                 if (navState != null) appendLine(navBanner(navState, theme))
@@ -646,7 +647,8 @@ class GitJaspr(
         val baseRelation = computeBaseRelation(localBase, remoteBase)
 
         val divergedCommitIds =
-            DivergenceClassifier(config.workingDirectory, getJasprDir()).use { classifier ->
+            DivergenceClassifier(config.workingDirectory, getJasprDir(), gitClient).use { classifier
+                ->
                 computeDivergedCommitIds(localStack, remoteStack, classifier)
             }
 
