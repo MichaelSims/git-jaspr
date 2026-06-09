@@ -2841,6 +2841,63 @@ class GitJaspr(
     }
 
     /**
+     * Navigate to an absolute position in the stack. Positive [position] is 1-indexed from the
+     * bottom (1 = bottom). Negative [position] counts from the top (-1 = top, -2 = second from
+     * top). Auto-starts a nav session if HEAD is on a branch. Replays commits when the target is
+     * above the current cursor; checks out directly when below. If the target is the top of the
+     * stack, ends the session and restores the source branch (mirroring [navigateToTop]).
+     */
+    fun navigateTo(targetRef: String, position: Int): NavMoveResult {
+        require(position != 0) {
+            "Position must not be zero. Use positive N (1 = bottom) or negative N (-1 = top)."
+        }
+
+        val existingState = readNavState()
+        val state =
+            if (existingState != null && gitClient.isHeadDetached()) {
+                reconcile(existingState, targetRef)
+            } else {
+                initNavState(targetRef)
+            }
+
+        val targetIndex = resolvePosition(position, state.stack.size)
+        val cursor = state.cursorIndex
+
+        require(targetIndex != cursor) { "Already at position $position of the stack." }
+
+        if (targetIndex < cursor) {
+            gitClient.checkout(state.stack[targetIndex].sha)
+            val newState = state.copy(cursorIndex = targetIndex)
+            writeNavState(newState)
+            installNavSessionHook()
+            return NavMoveResult.MovedWithin(newState)
+        }
+
+        val replayedCount = targetIndex - cursor
+        val updatedStack = replayEntries(state.stack, (cursor + 1)..targetIndex)
+        return if (targetIndex == updatedStack.lastIndex) {
+            endNavSession(state.copy(stack = updatedStack))
+            NavMoveResult.ReachedTop(
+                replayedCount = replayedCount,
+                restoredName = state.stackName ?: state.headBeforeDetach,
+            )
+        } else {
+            val newState = state.copy(stack = updatedStack, cursorIndex = targetIndex)
+            writeNavState(newState)
+            installNavSessionHook()
+            NavMoveResult.MovedWithin(newState)
+        }
+    }
+
+    private fun resolvePosition(position: Int, stackSize: Int): Int {
+        val index = if (position > 0) position - 1 else stackSize + position
+        require(index in 0 until stackSize) {
+            "Position $position is out of range for a stack of size $stackSize."
+        }
+        return index
+    }
+
+    /**
      * Move HEAD up through the entries of [stack] in [range], returning the (possibly updated)
      * stack. For each entry, if its git parent SHA matches the current HEAD, the entry is checked
      * out as-is (preserving its SHA). Otherwise it is cherry-picked onto HEAD and the rewritten SHA

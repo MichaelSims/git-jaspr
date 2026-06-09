@@ -5,6 +5,7 @@ import kotlin.test.assertContains
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
 import kotlin.test.assertFalse
+import kotlin.test.assertIs
 import kotlin.test.assertNotEquals
 import kotlin.test.assertNotNull
 import kotlin.test.assertNull
@@ -429,6 +430,199 @@ interface GitJasprTest {
             )
             assertEquals(NavMoveResult.NoSession, gitJaspr.navigateToTop())
             assertEquals("development", localGit.getCurrentBranchName())
+        }
+    }
+
+    @Nav
+    @Test
+    fun `goto positive N detaches at 1-indexed position from bottom`() {
+        withTestSetup(useFakeRemote) {
+            createCommitsFrom(
+                testCase {
+                    repository {
+                        commit { title = "one" }
+                        commit { title = "two" }
+                        commit {
+                            title = "three"
+                            localRefs += "development"
+                        }
+                    }
+                    checkout = "development"
+                }
+            )
+            localGit.fetch(remoteName)
+            val stack = localGit.getCommitStack(remoteName, GitClient.HEAD, DEFAULT_TARGET_REF)
+
+            val result = gitJaspr.navigateTo(DEFAULT_TARGET_REF, 1)
+
+            assertIs<NavMoveResult.MovedWithin>(result)
+            assertTrue(localGit.isHeadDetached())
+            assertEquals(stack[0].hash, localGit.log(GitClient.HEAD, 1).single().hash)
+            val state = gitJaspr.readNavState()
+            assertNotNull(state)
+            assertEquals(0, state.cursorIndex)
+        }
+    }
+
+    @Nav
+    @Test
+    fun `goto negative N counts from top`() {
+        withTestSetup(useFakeRemote) {
+            createCommitsFrom(
+                testCase {
+                    repository {
+                        commit { title = "one" }
+                        commit { title = "two" }
+                        commit {
+                            title = "three"
+                            localRefs += "development"
+                        }
+                    }
+                    checkout = "development"
+                }
+            )
+            localGit.fetch(remoteName)
+            val stack = localGit.getCommitStack(remoteName, GitClient.HEAD, DEFAULT_TARGET_REF)
+
+            val result = gitJaspr.navigateTo(DEFAULT_TARGET_REF, -2)
+
+            assertIs<NavMoveResult.MovedWithin>(result)
+            assertEquals(stack[1].hash, localGit.log(GitClient.HEAD, 1).single().hash)
+            val state = gitJaspr.readNavState()
+            assertNotNull(state)
+            assertEquals(1, state.cursorIndex)
+        }
+    }
+
+    @Nav
+    @Test
+    fun `goto N equal to stack size and goto -1 both reach the top`() {
+        withTestSetup(useFakeRemote) {
+            createCommitsFrom(
+                testCase {
+                    repository {
+                        commit { title = "one" }
+                        commit { title = "two" }
+                        commit {
+                            title = "three"
+                            localRefs += "development"
+                        }
+                    }
+                    checkout = "development"
+                }
+            )
+            gitJaspr.navigateToBottom(DEFAULT_TARGET_REF)
+
+            val result = gitJaspr.navigateTo(DEFAULT_TARGET_REF, -1)
+
+            assertIs<NavMoveResult.ReachedTop>(result)
+            assertEquals(2, result.replayedCount)
+            assertFalse(localGit.isHeadDetached())
+            assertEquals("development", localGit.getCurrentBranchName())
+            assertNull(gitJaspr.readNavState())
+
+            gitJaspr.navigateToBottom(DEFAULT_TARGET_REF)
+            assertIs<NavMoveResult.ReachedTop>(gitJaspr.navigateTo(DEFAULT_TARGET_REF, 3))
+            assertFalse(localGit.isHeadDetached())
+        }
+    }
+
+    @Nav
+    @Test
+    fun `goto zero is rejected`() {
+        withTestSetup(useFakeRemote) {
+            createCommitsFrom(
+                testCase {
+                    repository {
+                        commit {
+                            title = "one"
+                            localRefs += "development"
+                        }
+                    }
+                    checkout = "development"
+                }
+            )
+            val exception =
+                assertThrows<IllegalArgumentException> {
+                    gitJaspr.navigateTo(DEFAULT_TARGET_REF, 0)
+                }
+            assertContains(exception.message.orEmpty(), "Position must not be zero")
+        }
+    }
+
+    @Nav
+    @Test
+    fun `goto out-of-range position is rejected`() {
+        withTestSetup(useFakeRemote) {
+            createCommitsFrom(
+                testCase {
+                    repository {
+                        commit { title = "one" }
+                        commit {
+                            title = "two"
+                            localRefs += "development"
+                        }
+                    }
+                    checkout = "development"
+                }
+            )
+            assertThrows<IllegalArgumentException> { gitJaspr.navigateTo(DEFAULT_TARGET_REF, 3) }
+            assertThrows<IllegalArgumentException> { gitJaspr.navigateTo(DEFAULT_TARGET_REF, -3) }
+        }
+    }
+
+    @Nav
+    @Test
+    fun `goto current position is rejected`() {
+        withTestSetup(useFakeRemote) {
+            createCommitsFrom(
+                testCase {
+                    repository {
+                        commit { title = "one" }
+                        commit {
+                            title = "two"
+                            localRefs += "development"
+                        }
+                    }
+                    checkout = "development"
+                }
+            )
+            val exception =
+                assertThrows<IllegalArgumentException> {
+                    gitJaspr.navigateTo(DEFAULT_TARGET_REF, -1)
+                }
+            assertContains(exception.message.orEmpty(), "Already at position -1")
+        }
+    }
+
+    @Nav
+    @Test
+    fun `goto upward in an active session preserves SHAs when no amend has occurred`() {
+        withTestSetup(useFakeRemote) {
+            createCommitsFrom(
+                testCase {
+                    repository {
+                        commit { title = "one" }
+                        commit { title = "two" }
+                        commit {
+                            title = "three"
+                            localRefs += "development"
+                        }
+                    }
+                    checkout = "development"
+                }
+            )
+            localGit.fetch(remoteName)
+            val stack = localGit.getCommitStack(remoteName, GitClient.HEAD, DEFAULT_TARGET_REF)
+
+            gitJaspr.navigateToBottom(DEFAULT_TARGET_REF)
+            assertEquals(stack[0].hash, localGit.log(GitClient.HEAD, 1).single().hash)
+
+            val result = gitJaspr.navigateTo(DEFAULT_TARGET_REF, 2)
+
+            assertIs<NavMoveResult.MovedWithin>(result)
+            assertTrue(localGit.isHeadDetached())
+            assertEquals(stack[1].hash, localGit.log(GitClient.HEAD, 1).single().hash)
         }
     }
 

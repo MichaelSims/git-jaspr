@@ -1395,6 +1395,32 @@ class Top :
     }
 }
 
+class Goto :
+    GitJasprSubcommand(
+        helpText = "Move to position N in the stack (1 = bottom, -1 = top, -2 = second from top)"
+    ) {
+    private val targetOpts by TargetOptions()
+    private val position by argument("n").int()
+
+    override suspend fun doRun() {
+        val jaspr = appWiring.gitJaspr
+        requireNoActiveSplit(jaspr)
+        if (jaspr.isNavStateStale()) {
+            renderer.warn {
+                "Stale navigation state detected (you are on a branch). " +
+                    "Run ${command("jaspr nav cancel")} to clear it, or it will be replaced."
+            }
+            jaspr.clearNavState()
+        }
+        when (val result = jaspr.navigateTo(targetOpts.target, position)) {
+            NavMoveResult.NoSession -> renderer.info { "Already at the top of the stack." }
+            is NavMoveResult.MovedWithin -> print(jaspr.getNavPositionString(result.state, theme))
+            is NavMoveResult.ReachedTop ->
+                renderer.info { describeReachedTop(result.replayedCount, result.restoredName) }
+        }
+    }
+}
+
 /**
  * Order named-stack picker entries by tip commit date (newest first) so recently-touched stacks
  * rise to the top of long lists. Stacks whose commit data is missing fall to the bottom; stack name
@@ -2026,6 +2052,7 @@ fun buildCommand(): SuspendingCliktCommand =
             Up(),
             Bottom(),
             Top(),
+            Goto(),
             Drop(),
             Nav().subcommands(NavCancel(), NavFinish()),
             // Configuration
