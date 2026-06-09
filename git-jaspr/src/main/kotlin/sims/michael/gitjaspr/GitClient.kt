@@ -179,6 +179,13 @@ interface GitClient {
      */
     fun gitDir(): File
 
+    /**
+     * Returns the shared git directory as an absolute, canonical path. Equivalent to `git rev-parse
+     * --git-common-dir`. Same as [gitDir] in a main checkout; in a linked worktree this points back
+     * at the main `.git/` where shared state like `hooks/`, `config`, `objects/`, and `refs/` live.
+     */
+    fun gitCommonDir(): File
+
     /** Returns short messages for multiple refs in a single operation. */
     fun getShortMessages(refs: List<String>): Map<String, String?>
 

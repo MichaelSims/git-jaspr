@@ -653,6 +653,13 @@ class CliGitClient(
         return workingDirectory.resolve(output).canonicalFile
     }
 
+    override fun gitCommonDir(): File {
+        logger.trace("gitCommonDir")
+        val output =
+            executeCommand(listOf("git", "rev-parse", "--git-common-dir")).output.string.trim()
+        return workingDirectory.resolve(output).canonicalFile
+    }
+
     override fun mergeTreeWriteTree(base: String, ours: String, theirs: String): String? {
         logger.trace("mergeTreeWriteTree base={} ours={} theirs={}", base, ours, theirs)
         val result =

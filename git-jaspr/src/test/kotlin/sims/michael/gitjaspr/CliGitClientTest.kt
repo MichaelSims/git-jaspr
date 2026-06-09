@@ -1130,6 +1130,21 @@ class CliGitClientTest : GitClientTest {
     }
 
     @Test
+    fun `compare gitCommonDir`() {
+        withTestSetup {
+            val cliGit = CliGitClient(localGit.workingDirectory)
+            val jGit = JGitClient(localGit.workingDirectory)
+            assertEquals(cliGit.gitCommonDir(), jGit.gitCommonDir())
+            assertTrue(
+                cliGit.gitCommonDir().isDirectory,
+                "gitCommonDir should point at an existing directory",
+            )
+            // In a non-worktree checkout, gitDir and gitCommonDir resolve to the same place.
+            assertEquals(cliGit.gitDir(), cliGit.gitCommonDir())
+        }
+    }
+
+    @Test
     fun `compare updateRef`() {
         withTestSetup {
             createCommitsFrom(

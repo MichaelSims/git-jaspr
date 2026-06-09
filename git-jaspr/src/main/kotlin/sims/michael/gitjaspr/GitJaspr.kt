@@ -1765,7 +1765,7 @@ class GitJaspr(
 
     fun installCommitIdHook() {
         logger.trace("installCommitIdHook")
-        val hooksDir = resolveGitCommonDir().resolve("hooks")
+        val hooksDir = gitClient.gitCommonDir().resolve("hooks")
         require(hooksDir.isDirectory) { "Hooks directory not found at $hooksDir" }
         val hook = hooksDir.resolve(COMMIT_MSG_HOOK)
         val bundledContent =
@@ -1787,7 +1787,7 @@ class GitJaspr(
      * pre-existing post-checkout hook by appending a clearly delimited block.
      */
     private fun installNavSessionHook() {
-        val hooksDir = resolveGitCommonDir().resolve("hooks")
+        val hooksDir = gitClient.gitCommonDir().resolve("hooks")
         if (!hooksDir.isDirectory) return
         val hook = hooksDir.resolve(POST_CHECKOUT_HOOK)
         val ourSection =
@@ -1817,7 +1817,7 @@ class GitJaspr(
      * contained our section), delete it entirely. Otherwise leave the user's portion untouched.
      */
     private fun removeNavSessionHook() {
-        val hooksDir = resolveGitCommonDir().resolve("hooks")
+        val hooksDir = gitClient.gitCommonDir().resolve("hooks")
         if (!hooksDir.isDirectory) return
         val hook = hooksDir.resolve(POST_CHECKOUT_HOOK)
         if (!hook.exists()) return
@@ -2588,21 +2588,6 @@ class GitJaspr(
             commitIdentOverride,
             renderer,
         )
-
-    /**
-     * Resolves the shared git directory. In a worktree `.git` is a file pointing elsewhere, so we
-     * use `git rev-parse --git-common-dir` which works in both normal repos and worktrees.
-     */
-    private fun resolveGitCommonDir(): File {
-        val process =
-            ProcessBuilder("git", "rev-parse", "--git-common-dir")
-                .directory(config.workingDirectory)
-                .redirectErrorStream(true)
-                .start()
-        val output = process.inputStream.bufferedReader().readText().trim()
-        check(process.waitFor() == 0) { "Failed to resolve git common dir: $output" }
-        return config.workingDirectory.resolve(output).canonicalFile
-    }
 
     private fun getJasprDir(): File =
         config.workingDirectory.resolve(".git/jaspr").also { it.mkdirs() }
