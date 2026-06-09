@@ -1,8 +1,18 @@
 package sims.michael.gitjaspr
 
+import io.ktor.client.HttpClient
+import io.ktor.client.engine.cio.CIO
+import io.ktor.client.request.get
+import io.ktor.client.request.headers
+import io.ktor.client.statement.bodyAsText
+import io.ktor.http.HttpStatusCode
+import java.io.Closeable
 import java.io.File
 import java.time.Duration
 import java.time.Instant
+import kotlinx.coroutines.runBlocking
+import kotlinx.serialization.SerialName
+import kotlinx.serialization.Serializable
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
 import org.slf4j.LoggerFactory
@@ -152,6 +162,94 @@ class UpdateCheck(
         }
     }
 }
+
+/**
+ * Production [ReleaseFetcher] that hits the GitHub Releases API for the configured repo. Uses a
+ * dedicated ktor [HttpClient] with no auth (the releases endpoint is public) and a short
+ * engine-level request timeout, so an unreachable network short-circuits rather than blocking the
+ * user's command for the default ktor 15-second window.
+ *
+ * Walks the first [perPage] releases (GitHub returns newest first), skips drafts, and picks the
+ * first non-prerelease entry as the latest stable and the first prerelease entry as the latest
+ * prerelease. Returns null on any non-200 status, parse error, timeout, or other transient failure
+ * — the caller (see [UpdateCheck]) records the attempt timestamp regardless so we don't hammer the
+ * network on every command.
+ *
+ * Holds the ktor client open between fetches. Call [close] (via the owning [AppWiring]) at process
+ * shutdown.
+ */
+class KtorReleaseFetcher(
+    private val owner: String = UPDATE_CHECK_REPO_OWNER,
+    private val repo: String = UPDATE_CHECK_REPO_NAME,
+    private val baseUrl: String = "https://api.github.com",
+    private val timeoutMs: Long = 2_000,
+    private val perPage: Int = 30,
+) : ReleaseFetcher, Closeable {
+
+    private val logger = LoggerFactory.getLogger(KtorReleaseFetcher::class.java)
+    private val json = Json { ignoreUnknownKeys = true }
+
+    private val clientLazy: Lazy<HttpClient> = lazy {
+        HttpClient(CIO) {
+            engine { requestTimeout = timeoutMs }
+            expectSuccess = false
+        }
+    }
+    private val client: HttpClient
+        get() = clientLazy.value
+
+    override fun fetchLatestReleases(): LatestReleases? =
+        try {
+            runBlocking {
+                val url = "$baseUrl/repos/$owner/$repo/releases?per_page=$perPage"
+                val response =
+                    client.get(url) {
+                        headers {
+                            append("Accept", "application/vnd.github+json")
+                            append("X-GitHub-Api-Version", "2022-11-28")
+                            append("User-Agent", "git-jaspr-update-check")
+                        }
+                    }
+                if (response.status != HttpStatusCode.OK) {
+                    logger.debug(
+                        "Non-OK status from GitHub releases for {}/{}: {}",
+                        owner,
+                        repo,
+                        response.status,
+                    )
+                    null
+                } else {
+                    parseReleases(response.bodyAsText())
+                }
+            }
+        } catch (e: Exception) {
+            logger.debug("Failed to fetch releases from GitHub for {}/{}", owner, repo, e)
+            null
+        }
+
+    private fun parseReleases(body: String): LatestReleases {
+        val releases = json.decodeFromString<List<GitHubReleaseDto>>(body).filterNot { it.draft }
+        return LatestReleases(
+            stable = releases.firstOrNull { !it.prerelease }?.toRef(),
+            prerelease = releases.firstOrNull { it.prerelease }?.toRef(),
+        )
+    }
+
+    override fun close() {
+        if (clientLazy.isInitialized()) client.close()
+    }
+}
+
+/** Subset of the GitHub Releases API response we care about. */
+@Serializable
+private data class GitHubReleaseDto(
+    @SerialName("tag_name") val tagName: String,
+    val draft: Boolean = false,
+    val prerelease: Boolean = false,
+    @SerialName("html_url") val htmlUrl: String,
+)
+
+private fun GitHubReleaseDto.toRef(): ReleaseRef = ReleaseRef(tag = tagName, htmlUrl = htmlUrl)
 
 /**
  * Minimal SemVer 2.0 representation, parsing the subset jaspr produces via `git describe --tags`
