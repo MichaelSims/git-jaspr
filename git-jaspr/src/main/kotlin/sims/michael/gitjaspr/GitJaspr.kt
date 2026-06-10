@@ -3023,7 +3023,10 @@ class GitJaspr(
      * restored branch become orphaned.
      *
      * If a split is in progress, this acts as a hard escape: the working tree is reset to the
-     * original branch, untracked files are removed, and split state is cleared.
+     * original branch, untracked files are removed, and split state is cleared. If a cherry-pick is
+     * in progress (e.g., left by a manual `git cherry-pick` after a split, or by `jaspr unsplit`
+     * being interrupted mid-flight), it is aborted first so the subsequent reset operates on a sane
+     * state.
      *
      * @return the SHAs of commits that were below the cursor but are not part of the original
      *   branch (i.e., commits created or cherry-picked during the session)
@@ -3040,6 +3043,10 @@ class GitJaspr(
         // These will be orphaned when we restore it. Stop at the first original commit.
         val headLog = gitClient.log(GitClient.HEAD, state.stack.size + 1)
         val orphanedShas = headLog.takeWhile { it.hash !in originalShas }.map(Commit::hash)
+
+        if (gitClient.isCherryPickInProgress()) {
+            gitClient.cherryPickAbort()
+        }
 
         if (isSplitInProgress()) {
             // Hard escape: discard working tree changes and any commits made during the split

@@ -214,6 +214,13 @@ interface GitClient {
     fun cherryPickAbort()
 
     /**
+     * Returns true if a cherry-pick is currently in progress (i.e., `.git/CHERRY_PICK_HEAD` exists
+     * in this checkout's git dir). Useful for callers that need to differentiate "operate on a
+     * clean state" from "clean up a half-finished cherry-pick first".
+     */
+    fun isCherryPickInProgress(): Boolean = gitDir().resolve("CHERRY_PICK_HEAD").exists()
+
+    /**
      * Returns a stable patch-id for [sha] (equivalent to `git show <sha> | git patch-id --stable`),
      * or null if a patch-id can't be computed (e.g., the commit doesn't exist, the diff is empty,
      * or the underlying tool fails). Two commits with the same patch-id have equivalent diffs

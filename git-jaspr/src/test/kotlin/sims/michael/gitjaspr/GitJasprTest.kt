@@ -1178,6 +1178,55 @@ interface GitJasprTest {
         }
     }
 
+    @Nav
+    @Test
+    fun `cancel aborts in-progress cherry-pick before restoring`() {
+        withTestSetup(useFakeRemote) {
+            createCommitsFrom(
+                testCase {
+                    repository {
+                        commit { title = "A" }
+                        commit { title = "B" }
+                        commit {
+                            title = "C"
+                            localRefs += "development"
+                        }
+                    }
+                    checkout = "development"
+                }
+            )
+            val originalTipHash = localGit.log(GitClient.HEAD, 1).single().hash
+
+            // Nav down 1: HEAD detached at B
+            gitJaspr.navigateDown(DEFAULT_TARGET_REF, 1)
+            val originalB = localGit.log(GitClient.HEAD, 1).single()
+
+            // Split B: HEAD at A, B's b.txt in workdir, split state recorded
+            gitJaspr.split()
+
+            // Make an intermediate commit on top of A so cancel has commits to orphan.
+            localRepo.resolve("b.txt").writeText("intermediate content\n")
+            localGit.add(".")
+            localGit.commit(message = "intermediate")
+
+            // Simulate a stuck cherry-pick — the realistic case is the user running
+            // `git cherry-pick <originalB>` from their terminal and hitting a conflict,
+            // which leaves CHERRY_PICK_HEAD pointing at the source SHA.
+            localGit.gitDir().resolve("CHERRY_PICK_HEAD").writeText("${originalB.hash}\n")
+            assertTrue(localGit.isCherryPickInProgress())
+
+            gitJaspr.cancelNavSession()
+
+            assertFalse(localGit.isCherryPickInProgress())
+            assertFalse(localGit.isHeadDetached())
+            assertEquals("development", localGit.getCurrentBranchName())
+            assertNull(gitJaspr.readNavState())
+            assertNull(gitJaspr.readSplitState())
+            assertEquals(originalTipHash, localGit.log(GitClient.HEAD, 1).single().hash)
+            assertFalse(localGit.hasUncommittedChangesToTrackedFiles())
+        }
+    }
+
     // region split tests
 
     @Nav
