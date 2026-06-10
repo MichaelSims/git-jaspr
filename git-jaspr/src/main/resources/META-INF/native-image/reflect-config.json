@@ -839,6 +839,10 @@
   "methods":[{"name":"<init>","parameterTypes":[] }]
 },
 {
+  "name":"org.eclipse.jgit.lib.CommitConfig$CleanupMode",
+  "methods":[{"name":"values","parameterTypes":[] }]
+},
+{
   "name":"org.eclipse.jgit.lib.CoreConfig$AutoCRLF",
   "methods":[{"name":"values","parameterTypes":[] }]
 },
@@ -893,7 +897,7 @@
   "queryAllDeclaredMethods":true,
   "queryAllPublicMethods":true,
   "queryAllDeclaredConstructors":true,
-  "methods":[{"name":"<init>","parameterTypes":[] }, {"name":"exercise approvePullRequest","parameterTypes":[] }, {"name":"exercise cli command tree","parameterTypes":[] }, {"name":"exercise closePullRequest","parameterTypes":[] }, {"name":"exercise config serialization","parameterTypes":[] }, {"name":"exercise createPullRequest","parameterTypes":[] }, {"name":"exercise error mapping interceptor on 401","parameterTypes":[] }, {"name":"exercise getPullRequestsByHeadRef","parameterTypes":[] }, {"name":"exercise install commit id hook","parameterTypes":[] }, {"name":"exercise push status merge and clean","parameterTypes":[] }, {"name":"exercise rate limit retry interceptor","parameterTypes":[] }, {"name":"exercise stack checkout rename and delete","parameterTypes":[] }, {"name":"exercise suggest stack name","parameterTypes":[] }, {"name":"exercise updatePullRequest","parameterTypes":[] }, {"name":"startServer","parameterTypes":[] }, {"name":"stopServer","parameterTypes":[] }]
+  "methods":[{"name":"<init>","parameterTypes":[] }, {"name":"exercise approvePullRequest","parameterTypes":[] }, {"name":"exercise cherry-pick","parameterTypes":[] }, {"name":"exercise cli command tree","parameterTypes":[] }, {"name":"exercise closePullRequest","parameterTypes":[] }, {"name":"exercise config serialization","parameterTypes":[] }, {"name":"exercise createPullRequest","parameterTypes":[] }, {"name":"exercise error mapping interceptor on 401","parameterTypes":[] }, {"name":"exercise getPullRequestsByHeadRef","parameterTypes":[] }, {"name":"exercise install commit id hook","parameterTypes":[] }, {"name":"exercise push status merge and clean","parameterTypes":[] }, {"name":"exercise rate limit retry interceptor","parameterTypes":[] }, {"name":"exercise stack checkout rename and delete","parameterTypes":[] }, {"name":"exercise suggest stack name","parameterTypes":[] }, {"name":"exercise updatePullRequest","parameterTypes":[] }, {"name":"startServer","parameterTypes":[] }, {"name":"stopServer","parameterTypes":[] }]
 },
 {
   "name":"sims.michael.gitjaspr.NativeImageMetadataTest$exercise error mapping interceptor on 401$exception$1$1",

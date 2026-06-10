@@ -224,6 +224,33 @@ class NativeImageMetadataTest {
     }
 
     @Test
+    fun `exercise cherry-pick`() {
+        // Drives JGit's CherryPickCommand, whose first invocation reflects on
+        // CommitConfig$CleanupMode.values() to read core.commitCleanup. Without this exercise,
+        // the native image lacks reflect-config for that enum and cherry-pick paths
+        // (DivergenceClassifier worktree probe, jaspr pull, jaspr unsplit on a moved HEAD)
+        // crash at runtime with `Enumerated values of type CommitConfig$CleanupMode not
+        // available`.
+        withTestSetup(useFakeRemote = true) {
+            createCommitsFrom(
+                testCase {
+                    repository {
+                        commit { title = "A" }
+                        commit {
+                            title = "B"
+                            localRefs += "development"
+                        }
+                    }
+                    checkout = "development"
+                }
+            )
+            val b = localGit.log(GitClient.HEAD, 1).single()
+            localGit.reset("HEAD~1")
+            localGit.cherryPick(b)
+        }
+    }
+
+    @Test
     fun `exercise suggest stack name`() {
         withTestSetup(useFakeRemote = true) {
             createCommitsFrom(
