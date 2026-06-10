@@ -2,6 +2,7 @@ package sims.michael.gitjaspr
 
 import java.io.File
 import java.nio.file.Files
+import kotlin.test.assertIs
 import kotlin.test.assertNotNull
 import org.eclipse.jgit.lib.Constants
 import org.junit.jupiter.api.Assertions.*
@@ -1098,25 +1099,39 @@ class CliGitClientTest : GitClientTest {
     }
 
     @Test
-    fun `mergeTreeWriteTree returns result tree SHA on a clean merge`() {
+    fun `mergeTreeWriteTree returns Clean tree SHA on a clean merge`() {
         withMergeRepo { workDir, baseSha, oursSha, theirsSha ->
             val git = CliGitClient(workDir)
             val result = git.mergeTreeWriteTree(baseSha, oursSha, theirsSha)
-            assertNotNull(result)
+            assertIs<MergeTreeResult.Clean>(result)
             // The result should be a valid tree SHA. Round-tripping it through `git rev-parse`
             // would confirm, but checking the format (40 hex chars) is sufficient for a unit test.
             assertTrue(
-                result.matches("^[0-9a-f]{40}$".toRegex()),
-                "expected tree SHA, got: $result",
+                result.treeSha.matches("^[0-9a-f]{40}$".toRegex()),
+                "expected tree SHA, got: ${result.treeSha}",
             )
         }
     }
 
     @Test
-    fun `mergeTreeWriteTree returns null when the merge would conflict`() {
+    fun `mergeTreeWriteTree returns Conflict with paths when the merge would conflict`() {
         withConflictingMergeRepo { workDir, baseSha, oursSha, theirsSha ->
             val git = CliGitClient(workDir)
-            assertNull(git.mergeTreeWriteTree(baseSha, oursSha, theirsSha))
+            val result = git.mergeTreeWriteTree(baseSha, oursSha, theirsSha)
+            assertIs<MergeTreeResult.Conflict>(result)
+            assertTrue(
+                result.conflictingPaths.isNotEmpty(),
+                "expected at least one conflicting path, got: ${result.conflictingPaths}",
+            )
+        }
+    }
+
+    @Test
+    fun `mergeTreeWriteTree with useTheirs resolves content-only conflicts`() {
+        withConflictingMergeRepo { workDir, baseSha, oursSha, theirsSha ->
+            val git = CliGitClient(workDir)
+            val result = git.mergeTreeWriteTree(baseSha, oursSha, theirsSha, useTheirs = true)
+            assertIs<MergeTreeResult.Clean>(result)
         }
     }
 

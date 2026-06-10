@@ -84,7 +84,17 @@ interface GitClient {
         amend: Boolean = false,
     ): Commit
 
-    fun cherryPick(commit: Commit, committer: Ident? = null, author: Ident? = null): Commit
+    /**
+     * Cherry-picks [commit] onto HEAD. When [useTheirs] is true, content-level conflicts are
+     * auto-resolved using the `-X theirs` strategy option (the cherry-picked commit wins). Other
+     * conflict types (modify/delete, rename/rename, etc.) still surface as failures.
+     */
+    fun cherryPick(
+        commit: Commit,
+        committer: Ident? = null,
+        author: Ident? = null,
+        useTheirs: Boolean = false,
+    ): Commit
 
     fun push(refSpecs: List<RefSpec>, remoteName: String = DEFAULT_REMOTE_NAME)
 
@@ -153,9 +163,14 @@ interface GitClient {
     fun isAncestor(ancestor: String, descendant: String): Boolean
 
     /**
-     * Performs a three-way merge entirely in-memory, returning the result tree SHA on success or
-     * null on conflict. Does not touch the working tree, the index, or HEAD. Equivalent to `git
-     * merge-tree --write-tree --merge-base=<base> <ours> <theirs>`.
+     * Performs a three-way merge entirely in-memory, returning [MergeTreeResult.Clean] with the
+     * result tree SHA on a clean merge or [MergeTreeResult.Conflict] with the list of conflicting
+     * paths otherwise. Does not touch the working tree, the index, or HEAD. Equivalent to `git
+     * merge-tree --write-tree --name-only [--Xtheirs] --merge-base=<base> <ours> <theirs>`.
+     *
+     * When [useTheirs] is true, content-level conflicts are auto-resolved by taking [theirs]'s
+     * content (matching `git merge -X theirs` semantics). Non-content conflict types
+     * (modify/delete, rename/rename, etc.) still surface in the [Conflict] result.
      *
      * Use this to probe whether a merge / cherry-pick can be applied cleanly before attempting it
      * for real.
@@ -163,7 +178,12 @@ interface GitClient {
      * Requires git 2.38+. Not implemented for [JGitClient]; production wiring routes this through
      * [CliGitClient].
      */
-    fun mergeTreeWriteTree(base: String, ours: String, theirs: String): String?
+    fun mergeTreeWriteTree(
+        base: String,
+        ours: String,
+        theirs: String,
+        useTheirs: Boolean = false,
+    ): MergeTreeResult
 
     /**
      * Sets [refName] to point at [sha]. Equivalent to `git update-ref <refName> <sha>`. Used for
@@ -248,4 +268,17 @@ interface GitClient {
         const val R_HEADS = Constants.R_HEADS
         const val R_REMOTES = Constants.R_REMOTES
     }
+}
+
+/** Outcome of an in-memory merge probe via [GitClient.mergeTreeWriteTree]. */
+sealed class MergeTreeResult {
+    /** Clean merge. [treeSha] is the OID of the merged tree. */
+    data class Clean(val treeSha: String) : MergeTreeResult()
+
+    /**
+     * One or more conflicts could not be resolved (or were not asked to be auto-resolved).
+     * [conflictingPaths] lists each conflicting path once, regardless of how many stages
+     * contributed to the conflict.
+     */
+    data class Conflict(val conflictingPaths: List<String>) : MergeTreeResult()
 }

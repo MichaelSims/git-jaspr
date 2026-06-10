@@ -309,10 +309,25 @@ class CliGitClient(
         return log("HEAD", 1).single()
     }
 
-    override fun cherryPick(commit: Commit, committer: Ident?, author: Ident?): Commit {
-        logger.trace("cherryPick {} {} {}", commit, committer, author)
+    override fun cherryPick(
+        commit: Commit,
+        committer: Ident?,
+        author: Ident?,
+        useTheirs: Boolean,
+    ): Commit {
+        logger.trace("cherryPick {} {} {} useTheirs={}", commit, committer, author, useTheirs)
         val env = getIdentEnvironmentMap(committer, author)
-        executeCommand(listOf("git", "cherry-pick", "--allow-empty", commit.hash), env)
+        val command = buildList {
+            add("git")
+            add("cherry-pick")
+            add("--allow-empty")
+            if (useTheirs) {
+                add("-X")
+                add("theirs")
+            }
+            add(commit.hash)
+        }
+        executeCommand(command, env)
         if (author != null && log("HEAD", 1).single().author != author) {
             logger.debug("Resetting author to {} after cherry-pick via commit --amend", author)
             executeCommand(listOf("git", "commit", "--amend", "--no-edit", "--reset-author"), env)
@@ -720,25 +735,57 @@ class CliGitClient(
         }
     }
 
-    override fun mergeTreeWriteTree(base: String, ours: String, theirs: String): String? {
-        logger.trace("mergeTreeWriteTree base={} ours={} theirs={}", base, ours, theirs)
+    override fun mergeTreeWriteTree(
+        base: String,
+        ours: String,
+        theirs: String,
+        useTheirs: Boolean,
+    ): MergeTreeResult {
+        logger.trace(
+            "mergeTreeWriteTree base={} ours={} theirs={} useTheirs={}",
+            base,
+            ours,
+            theirs,
+            useTheirs,
+        )
+        val command = buildList {
+            add("git")
+            add("merge-tree")
+            add("--write-tree")
+            add("--name-only")
+            add("--no-messages")
+            if (useTheirs) {
+                add("-X")
+                add("theirs")
+            }
+            add("--merge-base=$base")
+            add(ours)
+            add(theirs)
+        }
         val result =
             ProcessExecutor()
                 .directory(workingDirectory)
-                .command(
-                    listOf("git", "merge-tree", "--write-tree", "--merge-base=$base", ours, theirs)
-                )
+                .command(command)
                 .destroyOnExit()
                 .readOutput(true)
                 .apply { if (showStderr) redirectError(System.err) }
                 .execute()
         // `git merge-tree --write-tree` exits 0 on a clean merge (prints just the tree SHA),
-        // exits 1 on a merge with conflicts (prints tree SHA + conflict info), and exits >1 on
-        // unrecoverable errors (invalid args, etc.). We treat exit 1 as "would conflict" and
-        // return null; the caller doesn't currently need the conflict details.
+        // exits 1 on a merge with conflicts (prints tree SHA, then one path per line for each
+        // conflicting path with --name-only; --no-messages suppresses the trailing
+        // human-readable "Auto-merging" / "CONFLICT (...)" lines that would otherwise mix in
+        // with the path list), and exits >1 on unrecoverable errors (invalid args, etc.).
         return when (result.exitValue) {
-            0 -> result.output.lines.firstOrNull()?.trim()?.takeIf(String::isNotEmpty)
-            1 -> null
+            0 -> {
+                val tree =
+                    result.output.lines.firstOrNull()?.trim()?.takeIf(String::isNotEmpty)
+                        ?: error("git merge-tree returned exit 0 but no tree SHA")
+                MergeTreeResult.Clean(tree)
+            }
+            1 -> {
+                val paths = result.output.lines.drop(1).map(String::trim).filter(String::isNotEmpty)
+                MergeTreeResult.Conflict(paths)
+            }
             else ->
                 error(
                     "git merge-tree --write-tree returned ${result.exitValue}: " +

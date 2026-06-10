@@ -1589,11 +1589,64 @@ class Split : GitJasprSubcommand(helpText = "Split the HEAD commit into working 
 
 class Unsplit :
     GitJasprSubcommand(
-        helpText = "Restore the original commit, absorbing all working tree changes"
+        helpText = "Restore the original commit (absorb edits or cherry-pick on top of new work)"
     ) {
     override suspend fun doRun() {
-        val subject = appWiring.gitJaspr.unsplit()
-        renderer.info { "Commit ${entity(subject)} restored with your changes." }
+        when (val outcome = appWiring.gitJaspr.unsplit()) {
+            is UnsplitOutcome.Restored ->
+                renderer.info {
+                    "Commit ${entity(outcome.restoredCommit.shortMessage)} restored."
+                }
+            is UnsplitOutcome.RestoredWithAutoResolvedConflicts -> {
+                renderer.info {
+                    "Commit ${entity(outcome.restoredCommit.shortMessage)} restored."
+                }
+                val count = outcome.conflictingPaths.size
+                val files = if (count == 1) "file" else "files"
+                renderer.info {
+                    buildString {
+                        appendLine()
+                        appendLine(
+                            emphasis(
+                                "$count $files had conflicts that were auto-resolved " +
+                                    "(the changes in the unsplit commit were accepted):"
+                            )
+                        )
+                        outcome.conflictingPaths.forEach { path -> appendLine(entity(path)) }
+                        appendLine()
+                        appendLine("It is recommended to review the result before pushing:")
+                        appendLine(command("git diff ${outcome.backupRef}"))
+                        appendLine()
+                        appendLine("To undo:")
+                        append(command("git reset --hard ${outcome.backupRef}"))
+                    }
+                }
+            }
+            is UnsplitOutcome.Unresolvable -> {
+                val commit = outcome.originalCommit
+                renderer.info {
+                    buildString {
+                        appendLine()
+                        appendLine(
+                            "Restoring ${commitSubject(commit.shortMessage)} " +
+                                "(${hash(commit.hash.take(7))}) results in conflicts that " +
+                                "cannot be auto-resolved in:"
+                        )
+                        outcome.conflictingPaths.forEach { path -> appendLine(entity(path)) }
+                        appendLine()
+                        appendLine(
+                            "Your working tree has not been changed. Resolve manually with git:"
+                        )
+                        appendLine(command("git cherry-pick ${commit.hash.take(7)}"))
+                        appendLine()
+                        append("or run ")
+                        append(command("jaspr nav cancel"))
+                        append(" to abort the navigation session entirely.")
+                    }
+                }
+                throw ProgramResult(255)
+            }
+        }
     }
 }
 

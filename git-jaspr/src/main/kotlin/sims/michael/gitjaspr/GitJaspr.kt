@@ -42,6 +42,41 @@ sealed interface NavMoveResult {
     data class ReachedTop(val replayedCount: Int, val restoredName: String) : NavMoveResult
 }
 
+/**
+ * Outcome of `jaspr unsplit`. See ADR-0005 for the design rationale.
+ *
+ * Three variants:
+ * - [Restored] : absorb path or clean cherry-pick. No follow-up messaging needed.
+ * - [RestoredWithAutoResolvedConflicts] : cherry-pick path took the `-X theirs` branch; the caller
+ *   should warn the operator and surface the backup ref.
+ * - [Unresolvable] : cherry-pick would conflict and `-X theirs` cannot resolve. The working tree,
+ *   HEAD, and split state are all left untouched so the operator can recover manually.
+ */
+sealed interface UnsplitOutcome {
+    /** Absorb path or clean cherry-pick: nothing extra to surface. */
+    data class Restored(val restoredCommit: Commit) : UnsplitOutcome
+
+    /**
+     * Cherry-pick path auto-resolved content conflicts using `-X theirs`. [conflictingPaths] lists
+     * each file whose content was resolved this way (one entry per path, regardless of how many
+     * stages contributed). [backupRef] points at HEAD's value before unsplit ran, suitable for `git
+     * reset --hard <ref>` recovery.
+     */
+    data class RestoredWithAutoResolvedConflicts(
+        val restoredCommit: Commit,
+        val conflictingPaths: List<String>,
+        val backupRef: String,
+    ) : UnsplitOutcome
+
+    /**
+     * Cherry-pick would conflict and `-X theirs` cannot resolve (modify/delete, rename/rename,
+     * etc.). The working tree, HEAD, and split state are unchanged. [originalCommit] is the commit
+     * that was being restored; the operator can use its SHA to retry manually.
+     */
+    data class Unresolvable(val originalCommit: Commit, val conflictingPaths: List<String>) :
+        UnsplitOutcome
+}
+
 class GitJaspr(
     private val ghClient: GitHubClient,
     private val gitClient: GitClient,
@@ -824,12 +859,15 @@ class GitJaspr(
         for (commit in commits) {
             val result =
                 gitClient.mergeTreeWriteTree("${commit.hash}^", currentTreeIsh, commit.hash)
-                    ?: throw GitJasprException(
+            when (result) {
+                is MergeTreeResult.Conflict ->
+                    throw GitJasprException(
                         "Pull would conflict applying commit ${commit.hash} " +
                             "(${commit.shortMessage}). Resolve manually with " +
                             "`git cherry-pick` or `git rebase`, then re-run `jaspr pull`."
                     )
-            currentTreeIsh = result
+                is MergeTreeResult.Clean -> currentTreeIsh = result.treeSha
+            }
         }
     }
 
@@ -3142,29 +3180,41 @@ class GitJaspr(
     }
 
     /**
-     * Unsplit: restore the original commit from before the split, absorbing all current working
-     * tree and index changes into it. If a nav session is active, re-inserts the restored commit
-     * into the nav stack.
+     * Unsplit: restore the original commit from before the split. Routes between two paths based on
+     * whether HEAD has moved since the split:
+     * - **HEAD at the split point** (no intermediate commits): runs the absorb path (`resetSoft` to
+     *   the original SHA, stage everything, amend if anything changed). The no-op amend guard
+     *   handles the identical-result case where the operator made no edits.
+     * - **HEAD moved**: cherry-picks the original commit on top of the current HEAD. Probes first
+     *   with `git merge-tree`; if content conflicts exist, retries with `-X theirs`. If `-X theirs`
+     *   still can't resolve (modify/delete, rename/rename, etc.), returns
+     *   [UnsplitOutcome.Unresolvable] without touching the working tree.
      *
-     * @return the short message of the restored commit (for display)
+     * If a nav session is active and the original commit was restored, re-inserts it into the nav
+     * stack. On [UnsplitOutcome.Unresolvable] the nav stack and split state are both left as-is.
+     *
+     * See ADR-0005 for the design rationale.
      */
-    fun unsplit(): String {
+    fun unsplit(): UnsplitOutcome {
         val splitState = requireNotNull(readSplitState()) { "No split in progress." }
+        val originalCommit = gitClient.log(splitState.unsplitSha, 1).single()
+        val originalParent = gitClient.log("${splitState.unsplitSha}^", 1).single().hash
+        val headSha = gitClient.log(GitClient.HEAD, 1).single().hash
 
-        gitClient.resetSoft(splitState.unsplitSha)
-        gitClient.add(".")
-        // Skip the amend when nothing actually changed since the split: HEAD is already
-        // pointing at the original commit (the resetSoft did that), and amending would
-        // produce a new commit object with a fresh committer date for no functional reason.
-        // After `add(".")`, hasUncommittedChangesToTrackedFiles compares the staged tree to
-        // HEAD's tree -- exactly the condition we want.
-        if (gitClient.hasUncommittedChangesToTrackedFiles()) {
-            gitClient.commit(amend = true)
-        }
+        val outcome =
+            if (headSha == originalParent) {
+                unsplitAbsorb(splitState.unsplitSha)
+            } else {
+                unsplitCherryPick(originalCommit)
+            }
 
-        val restoredCommit = gitClient.log(GitClient.HEAD, 1).single()
+        val restoredCommit =
+            when (outcome) {
+                is UnsplitOutcome.Restored -> outcome.restoredCommit
+                is UnsplitOutcome.RestoredWithAutoResolvedConflicts -> outcome.restoredCommit
+                is UnsplitOutcome.Unresolvable -> return outcome
+            }
 
-        // If in a nav session, re-insert the restored commit into the stack
         val navState = readNavState()
         if (navState != null && gitClient.isHeadDetached()) {
             val entry =
@@ -3181,7 +3231,58 @@ class GitJaspr(
         }
 
         clearSplitState()
-        return restoredCommit.shortMessage
+        return outcome
+    }
+
+    private fun unsplitAbsorb(unsplitSha: String): UnsplitOutcome {
+        gitClient.resetSoft(unsplitSha)
+        gitClient.add(".")
+        // Skip the amend when nothing actually changed since the split: HEAD is already
+        // pointing at the original commit (the resetSoft did that), and amending would
+        // produce a new commit object with a fresh committer date for no functional reason.
+        // After `add(".")`, hasUncommittedChangesToTrackedFiles compares the staged tree to
+        // HEAD's tree -- exactly the condition we want. This also implements the identical-
+        // result optimization (ADR-0005): a clean tree at the split point reduces to HEAD =
+        // unsplitSha rather than a new SHA.
+        if (gitClient.hasUncommittedChangesToTrackedFiles()) {
+            gitClient.commit(amend = true)
+        }
+        return UnsplitOutcome.Restored(gitClient.log(GitClient.HEAD, 1).single())
+    }
+
+    private fun unsplitCherryPick(originalCommit: Commit): UnsplitOutcome {
+        val headSha = gitClient.log(GitClient.HEAD, 1).single().hash
+        val backupRef = "refs/jaspr-backup/pre-unsplit-${System.currentTimeMillis() / 1000}"
+        gitClient.updateRef(backupRef, headSha)
+
+        val base = "${originalCommit.hash}^"
+        val plainProbe = gitClient.mergeTreeWriteTree(base, headSha, originalCommit.hash)
+        return when (plainProbe) {
+            is MergeTreeResult.Clean ->
+                UnsplitOutcome.Restored(gitClient.cherryPick(originalCommit))
+            is MergeTreeResult.Conflict -> {
+                val theirsProbe =
+                    gitClient.mergeTreeWriteTree(
+                        base,
+                        headSha,
+                        originalCommit.hash,
+                        useTheirs = true,
+                    )
+                when (theirsProbe) {
+                    is MergeTreeResult.Clean ->
+                        UnsplitOutcome.RestoredWithAutoResolvedConflicts(
+                            restoredCommit = gitClient.cherryPick(originalCommit, useTheirs = true),
+                            conflictingPaths = plainProbe.conflictingPaths,
+                            backupRef = backupRef,
+                        )
+                    is MergeTreeResult.Conflict ->
+                        UnsplitOutcome.Unresolvable(
+                            originalCommit = originalCommit,
+                            conflictingPaths = theirsProbe.conflictingPaths,
+                        )
+                }
+            }
+        }
     }
 
     /**

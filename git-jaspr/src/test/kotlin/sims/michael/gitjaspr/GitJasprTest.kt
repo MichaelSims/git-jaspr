@@ -1373,8 +1373,8 @@ interface GitJasprTest {
             gitJaspr.split()
             assertEquals("A", localGit.log(GitClient.HEAD, 1).single().shortMessage)
 
-            val subject = gitJaspr.unsplit()
-            assertEquals("B", subject)
+            val outcome = assertIs<UnsplitOutcome.Restored>(gitJaspr.unsplit())
+            assertEquals("B", outcome.restoredCommit.shortMessage)
             val restored = localGit.log(GitClient.HEAD, 1).single()
             assertEquals("B", restored.shortMessage)
             // No edits between split and unsplit -- the restored commit should be the
@@ -1462,6 +1462,220 @@ interface GitJasprTest {
                 navAfterUnsplit.stack.map(StackEntry::commitId),
             )
             assertEquals(1, navAfterUnsplit.cursorIndex)
+        }
+    }
+
+    @Nav
+    @Test
+    fun `unsplit cherry-picks original on top when HEAD has moved`() {
+        withTestSetup(useFakeRemote) {
+            createCommitsFrom(
+                testCase {
+                    repository {
+                        commit { title = "A" }
+                        commit { title = "B" }
+                        commit {
+                            title = "C"
+                            localRefs += "development"
+                        }
+                    }
+                    checkout = "development"
+                }
+            )
+
+            // Nav down 1: HEAD detached at B; B's commit (will be the unsplitSha).
+            gitJaspr.navigateDown(DEFAULT_TARGET_REF, 1)
+            val originalB = localGit.log(GitClient.HEAD, 1).single()
+
+            // Split B: HEAD at A, b.txt sitting in workdir.
+            gitJaspr.split()
+            val splitPointSha = localGit.log(GitClient.HEAD, 1).single().hash
+
+            // Make an intermediate commit on top of A that touches a different file.
+            // b.txt remains untracked; it will get incorporated by the cherry-pick.
+            localRepo.resolve("refactor.txt").writeText("refactor content\n")
+            localGit.add("refactor.txt")
+            val intermediate = localGit.commit(message = "intermediate")
+            assertNotEquals(splitPointSha, intermediate.hash)
+
+            val outcome = assertIs<UnsplitOutcome.Restored>(gitJaspr.unsplit())
+            assertEquals("B", outcome.restoredCommit.shortMessage)
+            assertEquals("B", outcome.restoredCommit.id) // commit-id preserved
+
+            // HEAD is a new commit on top of N1 (not absorbed-back-into-A).
+            val head = localGit.log(GitClient.HEAD, 1).single()
+            assertEquals(outcome.restoredCommit.hash, head.hash)
+            assertNotEquals(originalB.hash, head.hash)
+            assertEquals(intermediate.hash, localGit.log(GitClient.HEAD, 2)[1].hash)
+            assertNull(gitJaspr.readSplitState())
+        }
+    }
+
+    @Nav
+    @Test
+    fun `unsplit auto-resolves content conflicts with theirs and surfaces a backup ref`() {
+        withTestSetup(useFakeRemote) {
+            createCommitsFrom(
+                testCase {
+                    repository {
+                        commit { title = "A" }
+                        commit { title = "B" }
+                        commit {
+                            title = "C"
+                            localRefs += "development"
+                        }
+                    }
+                    checkout = "development"
+                }
+            )
+
+            // Nav down 1: HEAD at B (= unsplitSha).
+            gitJaspr.navigateDown(DEFAULT_TARGET_REF, 1)
+
+            // Split B: HEAD at A, b.txt with B's content in workdir.
+            gitJaspr.split()
+
+            // Replace b.txt with conflicting content, commit as N1. After commit, workdir is
+            // clean and HEAD is N1.
+            localRepo.resolve("b.txt").writeText("conflicting content\n")
+            localGit.add(".")
+            localGit.commit(message = "intermediate")
+
+            val headBeforeUnsplit = localGit.log(GitClient.HEAD, 1).single().hash
+
+            val outcome =
+                assertIs<UnsplitOutcome.RestoredWithAutoResolvedConflicts>(gitJaspr.unsplit())
+
+            assertEquals("B", outcome.restoredCommit.shortMessage)
+            assertEquals("B", outcome.restoredCommit.id)
+
+            assertEquals(listOf("b.txt"), outcome.conflictingPaths)
+            assertTrue(outcome.backupRef.startsWith("refs/jaspr-backup/pre-unsplit-"))
+
+            // Theirs won: b.txt now has B's content, not "conflicting content".
+            assertEquals("Title: B\n", localRepo.resolve("b.txt").readText())
+
+            // Backup ref points at the pre-unsplit HEAD so the operator can recover.
+            assertEquals(headBeforeUnsplit, localGit.log(outcome.backupRef, 1).single().hash)
+            assertNull(gitJaspr.readSplitState())
+        }
+    }
+
+    @Nav
+    @Test
+    fun `unsplit refuses on modify-delete conflict and leaves the working tree untouched`() {
+        withTestSetup(useFakeRemote) {
+            // Build a custom history: Initial -> A (a.txt added) -> B (a.txt modified). The DSL
+            // creates A by adding a.txt; we manually create B that *modifies* it so the
+            // unsplit's cherry-pick can hit a modify/delete conflict against an intermediate
+            // commit that deletes a.txt.
+            createCommitsFrom(
+                testCase {
+                    repository {
+                        commit {
+                            title = "A"
+                            localRefs += "development"
+                        }
+                    }
+                    checkout = "development"
+                }
+            )
+            localRepo.resolve("a.txt").writeText("a.txt modified by B\n")
+            localGit.add("a.txt")
+            localGit.commit(
+                message = "B",
+                footerLines = mapOf("commit-id" to "B"),
+                committer = DEFAULT_COMMITTER,
+            )
+            // Add a trailing C so the nav session has something to step down from.
+            localRepo.resolve("c.txt").writeText("Title: C\n")
+            localGit.add("c.txt")
+            localGit.commit(
+                message = "C",
+                footerLines = mapOf("commit-id" to "C"),
+                committer = DEFAULT_COMMITTER,
+            )
+            localGit.branch("development", force = true)
+
+            // Nav down 1: HEAD at B.
+            gitJaspr.navigateDown(DEFAULT_TARGET_REF, 1)
+
+            // Split B: HEAD at A, a.txt with B's modification sitting in workdir.
+            gitJaspr.split()
+
+            // Intermediate commit deletes a.txt — sets up the modify/delete conflict.
+            localRepo.resolve("a.txt").delete()
+            localGit.add(".")
+            localGit.commit(message = "delete a.txt")
+
+            val headBeforeUnsplit = localGit.log(GitClient.HEAD, 1).single().hash
+            val splitStateBefore = gitJaspr.readSplitState()
+            val n1TreeSha = localGit.getTree(GitClient.HEAD)
+
+            val outcome = assertIs<UnsplitOutcome.Unresolvable>(gitJaspr.unsplit())
+            assertEquals("B", outcome.originalCommit.shortMessage)
+            assertTrue(
+                outcome.conflictingPaths.contains("a.txt"),
+                "expected a.txt in ${outcome.conflictingPaths}",
+            )
+
+            // Working tree, HEAD, and split state must all be unchanged.
+            assertEquals(headBeforeUnsplit, localGit.log(GitClient.HEAD, 1).single().hash)
+            assertEquals(n1TreeSha, localGit.getTree(GitClient.HEAD))
+            assertEquals(splitStateBefore, gitJaspr.readSplitState())
+        }
+    }
+
+    @Nav
+    @Test
+    fun `unsplit cherry-picks with dirty workdir leaving the remainder for the on-top commit`() {
+        // The "extract a precursor commit" workflow: after split, the operator stages a
+        // *subset* of the original commit's changes and commits them, leaving the rest
+        // unstaged. Then they run unsplit and expect the cherry-picked original to land on
+        // top, picking up the rest of the content from the working tree.
+        withTestSetup(useFakeRemote) {
+            createCommitsFrom(
+                testCase {
+                    repository {
+                        commit { title = "A" }
+                        commit { title = "B" }
+                        commit {
+                            title = "C"
+                            localRefs += "development"
+                        }
+                    }
+                    checkout = "development"
+                }
+            )
+
+            // Nav down 1: HEAD at B.
+            gitJaspr.navigateDown(DEFAULT_TARGET_REF, 1)
+
+            // Split B: HEAD at A, b.txt sitting in workdir.
+            gitJaspr.split()
+
+            // Make a precursor commit that touches a *different* file ("refactor"), leaving
+            // b.txt unstaged. After commit, HEAD has moved (to N1) and the working tree is
+            // still dirty (b.txt is untracked from the cherry-pick's perspective).
+            localRepo.resolve("refactor.txt").writeText("refactor\n")
+            localGit.add("refactor.txt")
+            val intermediate = localGit.commit(message = "intermediate")
+
+            assertTrue(
+                localGit.hasUncommittedChangesToTrackedFiles() ||
+                    localRepo.resolve("b.txt").exists(),
+                "expected workdir to be dirty (b.txt left over from the split)",
+            )
+
+            val outcome = assertIs<UnsplitOutcome.Restored>(gitJaspr.unsplit())
+            assertEquals("B", outcome.restoredCommit.shortMessage)
+            assertEquals("B", outcome.restoredCommit.id)
+
+            val head = localGit.log(GitClient.HEAD, 1).single()
+            assertEquals(intermediate.hash, localGit.log(GitClient.HEAD, 2)[1].hash)
+            assertTrue(localRepo.resolve("refactor.txt").exists())
+            assertTrue(localRepo.resolve("b.txt").exists())
+            assertEquals(head.hash, outcome.restoredCommit.hash)
         }
     }
 

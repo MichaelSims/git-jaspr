@@ -373,7 +373,16 @@ class JGitClient(
         }
     }
 
-    override fun cherryPick(commit: Commit, committer: Ident?, author: Ident?): Commit {
+    override fun cherryPick(
+        commit: Commit,
+        committer: Ident?,
+        author: Ident?,
+        useTheirs: Boolean,
+    ): Commit {
+        require(!useTheirs) {
+            "cherryPick with useTheirs=true is not implemented in JGitClient; route through " +
+                "CliGitClient (e.g., via OptimizedCliGitClient)."
+        }
         logger.trace("cherryPick {} {} {}", commit, committer, author)
         return useGit { git ->
             val r = git.repository
@@ -736,12 +745,17 @@ class JGitClient(
         }
     }
 
-    override fun mergeTreeWriteTree(base: String, ours: String, theirs: String): String? {
+    override fun mergeTreeWriteTree(
+        base: String,
+        ours: String,
+        theirs: String,
+        useTheirs: Boolean,
+    ): MergeTreeResult {
         // JGit has merge primitives (ResolveMerger, RecursiveMerger) but the API surface needed to
         // reproduce `git merge-tree --write-tree` semantics (purely in-memory, no working tree
-        // touched, returns result tree SHA on clean merge or null on conflict) is non-trivial.
-        // Production wiring routes this method through CliGitClient via OptimizedCliGitClient;
-        // JGitClient is not used directly in production.
+        // touched, returns result tree SHA on clean merge or list of conflicting paths otherwise)
+        // is non-trivial. Production wiring routes this method through CliGitClient via
+        // OptimizedCliGitClient; JGitClient is not used directly in production.
         throw UnsupportedOperationException(
             "mergeTreeWriteTree is not implemented in JGitClient; use CliGitClient or " +
                 "OptimizedCliGitClient instead"

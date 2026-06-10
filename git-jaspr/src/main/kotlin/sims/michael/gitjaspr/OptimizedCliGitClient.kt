@@ -42,8 +42,27 @@ private constructor(private val cliGitClient: CliGitClient, private val jGitClie
         cliGitClient.pushWithLease(refSpecs, remoteName, forceWithLeaseRefs)
     }
 
-    override fun mergeTreeWriteTree(base: String, ours: String, theirs: String): String? =
-        cliGitClient.mergeTreeWriteTree(base, ours, theirs)
+    override fun mergeTreeWriteTree(
+        base: String,
+        ours: String,
+        theirs: String,
+        useTheirs: Boolean,
+    ): MergeTreeResult = cliGitClient.mergeTreeWriteTree(base, ours, theirs, useTheirs)
+
+    override fun cherryPick(
+        commit: Commit,
+        committer: Ident?,
+        author: Ident?,
+        useTheirs: Boolean,
+    ): Commit =
+        // `-X theirs` strategy lives on the CLI side; JGit's cherry-pick path doesn't support
+        // strategy options the same way. Routes only the strategy-using calls through the CLI;
+        // plain cherry-picks continue to use the JGit-backed fast path.
+        if (useTheirs) {
+            cliGitClient.cherryPick(commit, committer, author, useTheirs = true)
+        } else {
+            jGitClient.cherryPick(commit, committer, author)
+        }
 
     override fun addWorktree(path: File, ref: String?, detached: Boolean) =
         cliGitClient.addWorktree(path, ref, detached)
