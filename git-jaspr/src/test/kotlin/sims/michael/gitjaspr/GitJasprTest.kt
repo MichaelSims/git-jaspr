@@ -1227,6 +1227,52 @@ interface GitJasprTest {
         }
     }
 
+    @Nav
+    @Test
+    fun `cancel discards dirty working tree even without split or cherry-pick`() {
+        // Reproduces the operator-corrupted state where someone manually removed
+        // CHERRY_PICK_HEAD / split-state.json but left dirty workdir behind. Cancel must
+        // still complete cleanly per its destructive contract.
+        withTestSetup(useFakeRemote) {
+            createCommitsFrom(
+                testCase {
+                    repository {
+                        commit { title = "A" }
+                        commit { title = "B" }
+                        commit {
+                            title = "C"
+                            localRefs += "development"
+                        }
+                    }
+                    checkout = "development"
+                }
+            )
+            val originalTipHash = localGit.log(GitClient.HEAD, 1).single().hash
+
+            // Nav down 1: HEAD detached at B
+            gitJaspr.navigateDown(DEFAULT_TARGET_REF, 1)
+
+            // Dirty the workdir without a split or cherry-pick in progress: modify a
+            // tracked file and drop in an untracked file. Without the destructive
+            // contract, the subsequent checkout would refuse with a conflict.
+            localRepo.resolve("b.txt").writeText("manually edited content\n")
+            localRepo.resolve("scratch.txt").writeText("untracked\n")
+            assertTrue(localGit.hasUncommittedChangesToTrackedFiles())
+
+            gitJaspr.cancelNavSession()
+
+            assertFalse(localGit.isHeadDetached())
+            assertEquals("development", localGit.getCurrentBranchName())
+            assertNull(gitJaspr.readNavState())
+            assertEquals(originalTipHash, localGit.log(GitClient.HEAD, 1).single().hash)
+            assertFalse(localGit.hasUncommittedChangesToTrackedFiles())
+            assertFalse(
+                localRepo.resolve("scratch.txt").exists(),
+                "untracked files must be removed by cancel",
+            )
+        }
+    }
+
     // region split tests
 
     @Nav

@@ -204,6 +204,15 @@ other workflow), it runs `git cherry-pick --abort` before performing
 its normal restore. This is a small addition to `cancel`'s existing
 behavior and complements `unsplit`'s replay-mode path-conflict outcome.
 
+`cancel` is destructive by contract: in addition to aborting any
+in-progress cherry-pick, it always hard-resets the working tree to
+the original branch tip and removes untracked files. Uncommitted
+changes (staged or unstaged) and untracked files are discarded.
+Operators who want to preserve such state must stash with
+`git stash --include-untracked` before running cancel. This matches
+the verb's intent and avoids the operator-corrupted-state cases where
+cancel would otherwise refuse with a checkout conflict.
+
 ## Alternatives Considered
 
 ### Explicit flags (`--fold` / `--replay`)

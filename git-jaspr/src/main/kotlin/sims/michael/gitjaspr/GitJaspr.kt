@@ -3069,11 +3069,11 @@ class GitJaspr(
      * session started. Any commits created during the session that are not reachable from the
      * restored branch become orphaned.
      *
-     * If a split is in progress, this acts as a hard escape: the working tree is reset to the
-     * original branch, untracked files are removed, and split state is cleared. If a cherry-pick is
-     * in progress (e.g., left by a manual `git cherry-pick` after a split, or by `jaspr unsplit`
-     * being interrupted mid-flight), it is aborted first so the subsequent reset operates on a sane
-     * state.
+     * This is a hard escape: it always hard-resets to the original branch and removes untracked
+     * files. Any uncommitted changes to tracked files, any staged changes, and any untracked files
+     * are discarded. Stash with `git stash --include-untracked` before running cancel if you want
+     * to preserve them. An in-progress cherry-pick is aborted first so the reset operates on a sane
+     * state; an in-progress split has its state file cleared.
      *
      * @return the SHAs of commits that were below the cursor but are not part of the original
      *   branch (i.e., commits created or cherry-picked during the session)
@@ -3095,10 +3095,12 @@ class GitJaspr(
             gitClient.cherryPickAbort()
         }
 
+        // Always hard-escape: discard working tree changes (including untracked) and any
+        // commits made during the session. This is destructive by contract; the operator
+        // stashes beforehand if they want to preserve work.
+        gitClient.reset(state.headBeforeDetach)
+        gitClient.cleanUntracked()
         if (isSplitInProgress()) {
-            // Hard escape: discard working tree changes and any commits made during the split
-            gitClient.reset(state.headBeforeDetach)
-            gitClient.cleanUntracked()
             clearSplitState()
         }
 

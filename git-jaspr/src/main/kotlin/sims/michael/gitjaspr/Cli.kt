@@ -1498,7 +1498,9 @@ class Nav : SuspendingCliktCommand(name = "nav") {
 class NavCancel :
     GitJasprSubcommand(
         name = "cancel",
-        helpText = "Cancel navigation session and restore the original branch",
+        helpText =
+            "Cancel navigation session and restore the original branch " +
+                "(discards uncommitted changes; stash first to preserve them)",
     ) {
     override suspend fun doRun() {
         val jaspr = appWiring.gitJaspr
