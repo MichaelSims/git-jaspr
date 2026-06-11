@@ -96,6 +96,35 @@ interface GitClient {
         useTheirs: Boolean = false,
     ): Commit
 
+    /**
+     * Like [cherryPick], but returns [CherryPickResult.LeftInProgress] instead of throwing when the
+     * cherry-pick stops on a conflict the strategy cannot auto-resolve (modify/delete,
+     * rename/rename, type-change). Used by `jaspr unsplit`'s replay path where path-level conflicts
+     * are an expected outcome the operator handles via `jaspr nav cancel` or manual resolution
+     * rather than an exception.
+     *
+     * In the [CherryPickResult.LeftInProgress] case, the working tree contains conflict markers and
+     * `.git/CHERRY_PICK_HEAD` is present; the caller is responsible for either resolving and
+     * continuing or aborting via [cherryPickAbort].
+     */
+    fun tryCherryPick(
+        commit: Commit,
+        committer: Ident? = null,
+        author: Ident? = null,
+        useTheirs: Boolean = false,
+    ): CherryPickResult
+
+    /**
+     * Pushes the current working tree (modified tracked files and, when [includeUntracked] is true,
+     * untracked files) onto the stash stack with [message] as the stash entry's message. Returns
+     * the stash commit's SHA when a stash was created, or null when there was nothing to stash.
+     *
+     * Used by `jaspr unsplit`'s replay path to set aside leftover working-tree content before
+     * cherry-picking the restored commit. The stash is for the operator's manual recovery and is
+     * not auto-popped.
+     */
+    fun stashPush(message: String, includeUntracked: Boolean = true): String?
+
     fun push(refSpecs: List<RefSpec>, remoteName: String = DEFAULT_REMOTE_NAME)
 
     /**
@@ -170,7 +199,7 @@ interface GitClient {
      *
      * When [useTheirs] is true, content-level conflicts are auto-resolved by taking [theirs]'s
      * content (matching `git merge -X theirs` semantics). Non-content conflict types
-     * (modify/delete, rename/rename, etc.) still surface in the [Conflict] result.
+     * (modify/delete, rename/rename, etc.) still surface in the [MergeTreeResult.Conflict] result.
      *
      * Use this to probe whether a merge / cherry-pick can be applied cleanly before attempting it
      * for real.
@@ -281,4 +310,17 @@ sealed class MergeTreeResult {
      * contributed to the conflict.
      */
     data class Conflict(val conflictingPaths: List<String>) : MergeTreeResult()
+}
+
+/** Outcome of a non-throwing cherry-pick via [GitClient.tryCherryPick]. */
+sealed class CherryPickResult {
+    /** Cherry-pick completed. [commit] is the new commit at HEAD. */
+    data class Success(val commit: Commit) : CherryPickResult()
+
+    /**
+     * Cherry-pick stopped on a path-level conflict (modify/delete, rename/rename, type-change) that
+     * the merge strategy could not auto-resolve. `.git/CHERRY_PICK_HEAD` is present; the working
+     * tree contains conflict markers.
+     */
+    data object LeftInProgress : CherryPickResult()
 }

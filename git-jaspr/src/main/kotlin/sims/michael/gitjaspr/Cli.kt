@@ -1589,7 +1589,7 @@ class Split : GitJasprSubcommand(helpText = "Split the HEAD commit into working 
 
 class Unsplit :
     GitJasprSubcommand(
-        helpText = "Restore the original commit (absorb edits or cherry-pick on top of new work)"
+        helpText = "Restore the original commit (fold working tree, or replay on top of new work)"
     ) {
     override suspend fun doRun() {
         when (val outcome = appWiring.gitJaspr.unsplit()) {
@@ -1618,30 +1618,51 @@ class Unsplit :
                         appendLine(command("git diff ${outcome.backupRef}"))
                         appendLine()
                         appendLine("To undo:")
-                        append(command("git reset --hard ${outcome.backupRef}"))
+                        appendLine(command("git reset --hard ${outcome.backupRef}"))
+                        if (outcome.stashSha != null) {
+                            appendLine()
+                            appendLine(
+                                "Your pre-unsplit working tree was stashed. " +
+                                    "Find it in ${command("git stash list")} " +
+                                    "(message prefix: jaspr unsplit pre-state)."
+                            )
+                        }
                     }
                 }
             }
-            is UnsplitOutcome.Unresolvable -> {
+            is UnsplitOutcome.LeftInProgress -> {
                 val commit = outcome.originalCommit
                 renderer.info {
                     buildString {
                         appendLine()
                         appendLine(
-                            "Restoring ${commitSubject(commit.shortMessage)} " +
-                                "(${hash(commit.hash.take(7))}) results in conflicts that " +
-                                "cannot be auto-resolved in:"
+                            "Replaying ${commitSubject(commit.shortMessage)} " +
+                                "(${hash(commit.hash.take(7))}) hit a conflict the merge " +
+                                "strategy could not auto-resolve."
                         )
-                        outcome.conflictingPaths.forEach { path -> appendLine(entity(path)) }
                         appendLine()
                         appendLine(
-                            "Your working tree has not been changed. Resolve manually with git:"
+                            "A cherry-pick is in progress. Resolve manually and continue, or " +
+                                "abort:"
                         )
-                        appendLine(command("git cherry-pick ${commit.hash.take(7)}"))
+                        appendLine(command("git cherry-pick --continue"))
+                        appendLine(command("git cherry-pick --abort"))
                         appendLine()
-                        append("or run ")
+                        append("Or run ")
                         append(command("jaspr nav cancel"))
                         append(" to abort the navigation session entirely.")
+                        appendLine()
+                        appendLine()
+                        appendLine(
+                            "Your pre-unsplit HEAD is saved at ${entity(outcome.backupRef)}."
+                        )
+                        if (outcome.stashSha != null) {
+                            appendLine(
+                                "Your pre-unsplit working tree was stashed. " +
+                                    "Find it in ${command("git stash list")} " +
+                                    "(message prefix: jaspr unsplit pre-state)."
+                            )
+                        }
                     }
                 }
                 throw ProgramResult(255)

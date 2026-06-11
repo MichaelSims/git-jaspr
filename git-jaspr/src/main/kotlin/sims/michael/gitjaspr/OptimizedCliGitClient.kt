@@ -55,14 +55,32 @@ private constructor(private val cliGitClient: CliGitClient, private val jGitClie
         author: Ident?,
         useTheirs: Boolean,
     ): Commit =
-        // `-X theirs` strategy lives on the CLI side; JGit's cherry-pick path doesn't support
-        // strategy options the same way. Routes only the strategy-using calls through the CLI;
-        // plain cherry-picks continue to use the JGit-backed fast path.
-        if (useTheirs) {
-            cliGitClient.cherryPick(commit, committer, author, useTheirs = true)
-        } else {
-            jGitClient.cherryPick(commit, committer, author)
-        }
+        // Always route cherry-pick through CliGitClient. JGit's CherryPickCommand has two
+        // practical bugs that bite our use cases (see JGitClient.cherryPick for the full
+        // writeup):
+        //   1. It returns a CherryPickResult with a status (OK / CONFLICTING / FAILED) but
+        //      the natural implementation uses "HEAD didn't move" as a proxy. That proxy
+        //      mis-classifies CONFLICTING and "merge no-op vs HEAD" as "empty source", and
+        //      the resulting empty-commit fallback silently writes a commit with the
+        //      source's message but only the current index's content.
+        //   2. JGit's ResolveMerger reads the working tree as merge state. Cherry-picking
+        //      onto a HEAD with a dirty workdir (the canonical jaspr-unsplit workflow:
+        //      split, `git add -p` a precursor, then unsplit with the remainder unstaged)
+        //      makes the merger conclude the merge is a no-op, HEAD doesn't move, and
+        //      bug (1) fires, silently dropping the cherry-pick's intended content.
+        // CLI cherry-pick costs ~50-100ms extra per call (process fork). Acceptable for
+        // every cherry-pick path in jaspr (unsplit, top, pull, sync, divergence probe).
+        cliGitClient.cherryPick(commit, committer, author, useTheirs)
+
+    override fun tryCherryPick(
+        commit: Commit,
+        committer: Ident?,
+        author: Ident?,
+        useTheirs: Boolean,
+    ): CherryPickResult = cliGitClient.tryCherryPick(commit, committer, author, useTheirs)
+
+    override fun stashPush(message: String, includeUntracked: Boolean): String? =
+        cliGitClient.stashPush(message, includeUntracked)
 
     override fun addWorktree(path: File, ref: String?, detached: Boolean) =
         cliGitClient.addWorktree(path, ref, detached)

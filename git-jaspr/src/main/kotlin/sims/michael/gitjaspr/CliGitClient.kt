@@ -317,19 +317,13 @@ class CliGitClient(
     ): Commit {
         logger.trace("cherryPick {} {} {} useTheirs={}", commit, committer, author, useTheirs)
         val env = getIdentEnvironmentMap(committer, author)
-        val command = buildList {
-            add("git")
-            add("cherry-pick")
-            add("--allow-empty")
-            if (useTheirs) {
-                add("-X")
-                add("theirs")
-            }
-            add(commit.hash)
-        }
+        val command = buildCherryPickCommand(commit.hash, useTheirs)
         executeCommand(command, env)
         if (author != null && log("HEAD", 1).single().author != author) {
-            logger.debug("Resetting author to {} after cherry-pick via commit --amend", author)
+            logger.debug(
+                "cherryPick: resetting author to {} after cherry-pick via commit --amend",
+                author,
+            )
             executeCommand(listOf("git", "commit", "--amend", "--no-edit", "--reset-author"), env)
         }
 
@@ -703,6 +697,80 @@ class CliGitClient(
     override fun cherryPickAbort() {
         logger.trace("cherryPickAbort")
         executeCommand(listOf("git", "cherry-pick", "--abort"))
+    }
+
+    override fun tryCherryPick(
+        commit: Commit,
+        committer: Ident?,
+        author: Ident?,
+        useTheirs: Boolean,
+    ): CherryPickResult {
+        logger.trace("tryCherryPick {} {} {} useTheirs={}", commit, committer, author, useTheirs)
+        val env = getIdentEnvironmentMap(committer, author)
+        val command = buildCherryPickCommand(commit.hash, useTheirs)
+        val result =
+            ProcessExecutor()
+                .directory(workingDirectory)
+                .environment(env)
+                .command(command)
+                .destroyOnExit()
+                .readOutput(true)
+                .apply { if (showStderr) redirectError(System.err) }
+                .execute()
+        return when {
+            result.exitValue == 0 -> {
+                if (author != null && log("HEAD", 1).single().author != author) {
+                    logger.debug(
+                        "tryCherryPick: resetting author to {} after cherry-pick via commit --amend",
+                        author,
+                    )
+                    executeCommand(
+                        listOf("git", "commit", "--amend", "--no-edit", "--reset-author"),
+                        env,
+                    )
+                }
+                CherryPickResult.Success(log("HEAD", 1).single())
+            }
+            isCherryPickInProgress() -> CherryPickResult.LeftInProgress
+            else ->
+                error(
+                    "cherry-pick failed with exit ${result.exitValue} but no cherry-pick is in " +
+                        "progress: ${result.output.string}"
+                )
+        }
+    }
+
+    private fun buildCherryPickCommand(commitHash: String, useTheirs: Boolean): List<String> {
+        return buildList {
+            add("git")
+            add("cherry-pick")
+            add("--allow-empty")
+            if (useTheirs) {
+                add("-X")
+                add("theirs")
+            }
+            add(commitHash)
+        }
+    }
+
+    override fun stashPush(message: String, includeUntracked: Boolean): String? {
+        logger.trace("stashPush message={} includeUntracked={}", message, includeUntracked)
+        val command = buildList {
+            add("git")
+            add("stash")
+            add("push")
+            if (includeUntracked) add("--include-untracked")
+            add("-m")
+            add(message)
+        }
+        val result = executeCommand(command)
+        // `git stash push` exits 0 whether or not a stash was created. The only reliable signal
+        // is the output: a successful stash prints "Saved working directory and index state ...";
+        // a no-op prints "No local changes to save". Parse the output rather than checking the
+        // stash stack to avoid races with concurrent stash use.
+        val output = result.output.string
+        if ("No local changes to save" in output) return null
+        return executeCommand(listOf("git", "rev-parse", "stash@{0}")).output.string.trim()
     }
 
     override fun getTree(ref: String): String {

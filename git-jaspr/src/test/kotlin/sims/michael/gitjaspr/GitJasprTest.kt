@@ -1508,6 +1508,14 @@ interface GitJasprTest {
             assertNotEquals(originalB.hash, head.hash)
             assertEquals(intermediate.hash, localGit.log(GitClient.HEAD, 2)[1].hash)
             assertNull(gitJaspr.readSplitState())
+
+            // b.txt must be tracked in HEAD's tree (left over from split, folded into
+            // the cherry-pick's commit). cleanUntracked wipes only untracked files; if
+            // b.txt survives the call it's tracked, which is what successful cherry-pick
+            // means here.
+            localGit.cleanUntracked()
+            assertTrue(localRepo.resolve("b.txt").exists(), "b.txt must be tracked in HEAD")
+            assertTrue(localRepo.resolve("refactor.txt").exists())
         }
     }
 
@@ -1552,6 +1560,10 @@ interface GitJasprTest {
             assertEquals(listOf("b.txt"), outcome.conflictingPaths)
             assertTrue(outcome.backupRef.startsWith("refs/jaspr-backup/pre-unsplit-"))
 
+            // Working tree was clean before unsplit (the precursor staged and committed
+            // everything), so replay didn't create a stash.
+            assertNull(outcome.stashSha)
+
             // Theirs won: b.txt now has B's content, not "conflicting content".
             assertEquals("Title: B\n", localRepo.resolve("b.txt").readText())
 
@@ -1563,7 +1575,7 @@ interface GitJasprTest {
 
     @Nav
     @Test
-    fun `unsplit refuses on modify-delete conflict and leaves the working tree untouched`() {
+    fun `unsplit leaves cherry-pick in progress on a modify-delete conflict`() {
         withTestSetup(useFakeRemote) {
             // Build a custom history: Initial -> A (a.txt added) -> B (a.txt modified). The DSL
             // creates A by adding a.txt; we manually create B that *modifies* it so the
@@ -1610,18 +1622,21 @@ interface GitJasprTest {
 
             val headBeforeUnsplit = localGit.log(GitClient.HEAD, 1).single().hash
             val splitStateBefore = gitJaspr.readSplitState()
-            val n1TreeSha = localGit.getTree(GitClient.HEAD)
 
-            val outcome = assertIs<UnsplitOutcome.Unresolvable>(gitJaspr.unsplit())
+            val outcome = assertIs<UnsplitOutcome.LeftInProgress>(gitJaspr.unsplit())
             assertEquals("B", outcome.originalCommit.shortMessage)
-            assertTrue(
-                outcome.conflictingPaths.contains("a.txt"),
-                "expected a.txt in ${outcome.conflictingPaths}",
-            )
+            assertTrue(outcome.backupRef.startsWith("refs/jaspr-backup/pre-unsplit-"))
+            assertEquals(headBeforeUnsplit, localGit.log(outcome.backupRef, 1).single().hash)
 
-            // Working tree, HEAD, and split state must all be unchanged.
+            // HEAD doesn't advance when cherry-pick stops on a conflict; the operator's
+            // pre-unsplit position is preserved without needing the backup ref.
             assertEquals(headBeforeUnsplit, localGit.log(GitClient.HEAD, 1).single().hash)
-            assertEquals(n1TreeSha, localGit.getTree(GitClient.HEAD))
+
+            // The cherry-pick is left in progress so the operator can resolve manually
+            // or run jaspr nav cancel to abort.
+            assertTrue(localGit.isCherryPickInProgress())
+
+            // Split state must remain so nav cancel can find and clean up the session.
             assertEquals(splitStateBefore, gitJaspr.readSplitState())
         }
     }
@@ -1673,9 +1688,20 @@ interface GitJasprTest {
 
             val head = localGit.log(GitClient.HEAD, 1).single()
             assertEquals(intermediate.hash, localGit.log(GitClient.HEAD, 2)[1].hash)
-            assertTrue(localRepo.resolve("refactor.txt").exists())
-            assertTrue(localRepo.resolve("b.txt").exists())
             assertEquals(head.hash, outcome.restoredCommit.hash)
+
+            // The dirty pre-replay working tree should have been stashed for recovery.
+            assertTrue(
+                localGit.refExists("refs/stash"),
+                "expected a stash entry preserving the pre-replay working tree",
+            )
+
+            // b.txt must be tracked in HEAD's tree (cherry-pick added it as part of B's
+            // diff after stashing the leftover workdir). cleanUntracked wipes only
+            // untracked files, so b.txt surviving the call proves it's tracked.
+            localGit.cleanUntracked()
+            assertTrue(localRepo.resolve("b.txt").exists(), "b.txt must be tracked in HEAD")
+            assertTrue(localRepo.resolve("refactor.txt").exists())
         }
     }
 

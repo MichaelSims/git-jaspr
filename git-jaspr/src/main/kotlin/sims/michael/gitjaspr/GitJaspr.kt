@@ -46,35 +46,46 @@ sealed interface NavMoveResult {
  * Outcome of `jaspr unsplit`. See ADR-0005 for the design rationale.
  *
  * Three variants:
- * - [Restored] : absorb path or clean cherry-pick. No follow-up messaging needed.
- * - [RestoredWithAutoResolvedConflicts] : cherry-pick path took the `-X theirs` branch; the caller
- *   should warn the operator and surface the backup ref.
- * - [Unresolvable] : cherry-pick would conflict and `-X theirs` cannot resolve. The working tree,
- *   HEAD, and split state are all left untouched so the operator can recover manually.
+ * - [Restored] : fold mode, or clean replay (cherry-pick). No follow-up messaging needed.
+ * - [RestoredWithAutoResolvedConflicts] : replay mode took the `-X theirs` branch on one or more
+ *   content conflicts; the caller should warn the operator and surface the backup ref (and stash,
+ *   if one was created).
+ * - [LeftInProgress] : replay mode's cherry-pick stopped on a path-level conflict the strategy
+ *   could not auto-resolve. The cherry-pick is left in progress; the operator resolves manually or
+ *   runs `jaspr nav cancel` to abort.
  */
 sealed interface UnsplitOutcome {
-    /** Absorb path or clean cherry-pick: nothing extra to surface. */
+    /** Fold success or clean replay: nothing extra to surface. */
     data class Restored(val restoredCommit: Commit) : UnsplitOutcome
 
     /**
-     * Cherry-pick path auto-resolved content conflicts using `-X theirs`. [conflictingPaths] lists
-     * each file whose content was resolved this way (one entry per path, regardless of how many
-     * stages contributed). [backupRef] points at HEAD's value before unsplit ran, suitable for `git
-     * reset --hard <ref>` recovery.
+     * Replay mode auto-resolved content conflicts using `-X theirs`. [conflictingPaths] lists each
+     * file whose content was resolved this way (one entry per path, regardless of how many stages
+     * contributed). [backupRef] points at HEAD's value before unsplit ran, suitable for `git reset
+     * --hard <ref>` recovery. [stashSha] is the SHA of the stash entry created from a dirty working
+     * tree, or null when the working tree was clean.
      */
     data class RestoredWithAutoResolvedConflicts(
         val restoredCommit: Commit,
         val conflictingPaths: List<String>,
         val backupRef: String,
+        val stashSha: String?,
     ) : UnsplitOutcome
 
     /**
-     * Cherry-pick would conflict and `-X theirs` cannot resolve (modify/delete, rename/rename,
-     * etc.). The working tree, HEAD, and split state are unchanged. [originalCommit] is the commit
-     * that was being restored; the operator can use its SHA to retry manually.
+     * Replay mode's cherry-pick stopped on a path-level conflict (modify/delete, rename/rename,
+     * type-change) that `-X theirs` could not auto-resolve. `.git/CHERRY_PICK_HEAD` is present and
+     * the working tree contains conflict markers. Split state is intentionally NOT cleared so
+     * `jaspr nav cancel` can find the in-flight session and abort cleanly.
+     *
+     * [backupRef] points at HEAD's value before unsplit ran. [stashSha] is the SHA of the stash
+     * entry created from a dirty working tree, or null when the working tree was clean.
      */
-    data class Unresolvable(val originalCommit: Commit, val conflictingPaths: List<String>) :
-        UnsplitOutcome
+    data class LeftInProgress(
+        val originalCommit: Commit,
+        val backupRef: String,
+        val stashSha: String?,
+    ) : UnsplitOutcome
 }
 
 class GitJaspr(
@@ -3180,20 +3191,22 @@ class GitJaspr(
     }
 
     /**
-     * Unsplit: restore the original commit from before the split. Routes between two paths based on
-     * whether HEAD has moved since the split:
-     * - **HEAD at the split point** (no intermediate commits): runs the absorb path (`resetSoft` to
-     *   the original SHA, stage everything, amend if anything changed). The no-op amend guard
-     *   handles the identical-result case where the operator made no edits.
-     * - **HEAD moved**: cherry-picks the original commit on top of the current HEAD. Probes first
-     *   with `git merge-tree`; if content conflicts exist, retries with `-X theirs`. If `-X theirs`
-     *   still can't resolve (modify/delete, rename/rename, etc.), returns
-     *   [UnsplitOutcome.Unresolvable] without touching the working tree.
+     * Unsplit: restore the original commit from before the split. Two modes, decided by HEAD
+     * position (see ADR-0005):
+     * - **Fold mode** (HEAD is at the original's parent): stage the working tree and amend so the
+     *   restored commit's tree equals the working tree, with the original's message and author.
+     *   Identity-restores to the original SHA when there is nothing to fold.
+     * - **Replay mode** (HEAD has moved): cherry-pick the original onto HEAD using `-X theirs`. Any
+     *   content conflicts are resolved by taking the original's side. A path-level conflict the
+     *   strategy cannot auto-resolve (modify/delete, rename/rename, type-change) leaves the
+     *   cherry-pick in progress and returns [UnsplitOutcome.LeftInProgress].
      *
-     * If a nav session is active and the original commit was restored, re-inserts it into the nav
-     * stack. On [UnsplitOutcome.Unresolvable] the nav stack and split state are both left as-is.
+     * Both modes record a backup ref at `refs/jaspr-backup/pre-unsplit-<unix-ts>`. Replay mode
+     * additionally stashes any dirty working-tree content (with a recognizable message) so the
+     * operator can recover it via `git stash pop`.
      *
-     * See ADR-0005 for the design rationale.
+     * If a nav session is active and the original was restored, re-inserts it into the nav stack.
+     * [UnsplitOutcome.LeftInProgress] leaves the nav stack and split state unchanged.
      */
     fun unsplit(): UnsplitOutcome {
         val splitState = requireNotNull(readSplitState()) { "No split in progress." }
@@ -3203,16 +3216,16 @@ class GitJaspr(
 
         val outcome =
             if (headSha == originalParent) {
-                unsplitAbsorb(splitState.unsplitSha)
+                unsplitFold(splitState.unsplitSha)
             } else {
-                unsplitCherryPick(originalCommit)
+                unsplitReplay(originalCommit)
             }
 
         val restoredCommit =
             when (outcome) {
                 is UnsplitOutcome.Restored -> outcome.restoredCommit
                 is UnsplitOutcome.RestoredWithAutoResolvedConflicts -> outcome.restoredCommit
-                is UnsplitOutcome.Unresolvable -> return outcome
+                is UnsplitOutcome.LeftInProgress -> return outcome
             }
 
         val navState = readNavState()
@@ -3234,54 +3247,68 @@ class GitJaspr(
         return outcome
     }
 
-    private fun unsplitAbsorb(unsplitSha: String): UnsplitOutcome {
+    private fun unsplitFold(unsplitSha: String): UnsplitOutcome {
+        val headSha = gitClient.log(GitClient.HEAD, 1).single().hash
+        val backupRef = "refs/jaspr-backup/pre-unsplit-${System.currentTimeMillis() / 1000}"
+        gitClient.updateRef(backupRef, headSha)
+
         gitClient.resetSoft(unsplitSha)
         gitClient.add(".")
         // Skip the amend when nothing actually changed since the split: HEAD is already
         // pointing at the original commit (the resetSoft did that), and amending would
         // produce a new commit object with a fresh committer date for no functional reason.
         // After `add(".")`, hasUncommittedChangesToTrackedFiles compares the staged tree to
-        // HEAD's tree -- exactly the condition we want. This also implements the identical-
-        // result optimization (ADR-0005): a clean tree at the split point reduces to HEAD =
-        // unsplitSha rather than a new SHA.
+        // HEAD's tree -- exactly the condition we want. This also implements the identity
+        // restore (ADR-0005): a clean tree at the split point reduces to HEAD = unsplitSha
+        // rather than a new SHA.
         if (gitClient.hasUncommittedChangesToTrackedFiles()) {
             gitClient.commit(amend = true)
         }
         return UnsplitOutcome.Restored(gitClient.log(GitClient.HEAD, 1).single())
     }
 
-    private fun unsplitCherryPick(originalCommit: Commit): UnsplitOutcome {
+    private fun unsplitReplay(originalCommit: Commit): UnsplitOutcome {
         val headSha = gitClient.log(GitClient.HEAD, 1).single().hash
-        val backupRef = "refs/jaspr-backup/pre-unsplit-${System.currentTimeMillis() / 1000}"
+        val timestamp = System.currentTimeMillis() / 1000
+        val backupRef = "refs/jaspr-backup/pre-unsplit-$timestamp"
         gitClient.updateRef(backupRef, headSha)
 
-        val base = "${originalCommit.hash}^"
-        val plainProbe = gitClient.mergeTreeWriteTree(base, headSha, originalCommit.hash)
-        return when (plainProbe) {
-            is MergeTreeResult.Clean ->
-                UnsplitOutcome.Restored(gitClient.cherryPick(originalCommit))
-            is MergeTreeResult.Conflict -> {
-                val theirsProbe =
-                    gitClient.mergeTreeWriteTree(
-                        base,
-                        headSha,
-                        originalCommit.hash,
-                        useTheirs = true,
+        val stashSha = gitClient.stashPush(message = "jaspr unsplit pre-state $timestamp")
+
+        return when (val attempt = gitClient.tryCherryPick(originalCommit, useTheirs = true)) {
+            is CherryPickResult.Success -> {
+                // Detect post-hoc which paths needed -X theirs to resolve. Re-run the merge
+                // *without* the strategy against the pre-cherry-pick state. Anything that comes
+                // back as a conflict is what the strategy auto-resolved.
+                val conflictingPaths =
+                    when (
+                        val probe =
+                            gitClient.mergeTreeWriteTree(
+                                base = "${originalCommit.hash}^",
+                                ours = backupRef,
+                                theirs = originalCommit.hash,
+                            )
+                    ) {
+                        is MergeTreeResult.Clean -> emptyList()
+                        is MergeTreeResult.Conflict -> probe.conflictingPaths
+                    }
+                if (conflictingPaths.isEmpty()) {
+                    UnsplitOutcome.Restored(attempt.commit)
+                } else {
+                    UnsplitOutcome.RestoredWithAutoResolvedConflicts(
+                        restoredCommit = attempt.commit,
+                        conflictingPaths = conflictingPaths,
+                        backupRef = backupRef,
+                        stashSha = stashSha,
                     )
-                when (theirsProbe) {
-                    is MergeTreeResult.Clean ->
-                        UnsplitOutcome.RestoredWithAutoResolvedConflicts(
-                            restoredCommit = gitClient.cherryPick(originalCommit, useTheirs = true),
-                            conflictingPaths = plainProbe.conflictingPaths,
-                            backupRef = backupRef,
-                        )
-                    is MergeTreeResult.Conflict ->
-                        UnsplitOutcome.Unresolvable(
-                            originalCommit = originalCommit,
-                            conflictingPaths = theirsProbe.conflictingPaths,
-                        )
                 }
             }
+            is CherryPickResult.LeftInProgress ->
+                UnsplitOutcome.LeftInProgress(
+                    originalCommit = originalCommit,
+                    backupRef = backupRef,
+                    stashSha = stashSha,
+                )
         }
     }
 

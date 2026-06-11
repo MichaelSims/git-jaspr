@@ -379,48 +379,61 @@ class JGitClient(
         author: Ident?,
         useTheirs: Boolean,
     ): Commit {
-        require(!useTheirs) {
-            "cherryPick with useTheirs=true is not implemented in JGitClient; route through " +
-                "CliGitClient (e.g., via OptimizedCliGitClient)."
-        }
-        logger.trace("cherryPick {} {} {}", commit, committer, author)
-        return useGit { git ->
-            val r = git.repository
-            val headBefore = r.findRef(GitClient.HEAD).objectId
-            git.cherryPick().include(r.resolve(commit.hash)).call()
-            val headAfter = r.findRef(GitClient.HEAD).objectId
+        // Not implemented. JGit's CherryPickCommand has two practical bugs that make it
+        // unsuitable for jaspr's cherry-pick paths:
+        //
+        // 1. CherryPickResult's status (OK / CONFLICTING / FAILED) is the only reliable
+        //    signal of what happened, but the natural implementation tends to use "HEAD
+        //    didn't move" as a proxy. That proxy mis-classifies CONFLICTING and "merge
+        //    no-op vs HEAD" as "empty source commit". The corresponding empty-commit
+        //    fallback then writes a commit carrying the source's message but only the
+        //    current index's content. Net effect: a commit with the right subject and the
+        //    wrong tree, silently.
+        //
+        // 2. JGit's ResolveMerger reads the working tree as merge state. Cherry-picking
+        //    onto a HEAD whose workdir has unstaged content matching the cherry-pick's
+        //    target (the standard jaspr-unsplit workflow: `jaspr split`, then `git add -p`
+        //    a precursor commit, then `jaspr unsplit` with the remainder still unstaged)
+        //    makes the merger see the merge as already-resolved. HEAD doesn't move and
+        //    bug (1) fires, dropping the cherry-pick's intended content from the new
+        //    commit while preserving its subject.
+        //
+        // OptimizedCliGitClient routes cherry-pick exclusively through CliGitClient to
+        // avoid both traps. Direct JGitClient callers should switch to CliGitClient (or
+        // OptimizedCliGitClient) for cherry-pick. Fixing the bugs above inside JGit's
+        // CherryPickCommand or building a CLI-equivalent via ResolveMerger directly was
+        // considered and rejected: the right behavior is well-defined and well-tested in
+        // CLI git already, the fork cost (~50-100ms) is invisible on the interactive
+        // paths that cherry-pick, and the alternative reimplements substantive parts of
+        // git's cherry-pick semantics.
+        throw UnsupportedOperationException(
+            "cherryPick is not implemented in JGitClient; use CliGitClient or " +
+                "OptimizedCliGitClient instead"
+        )
+    }
 
-            if (headBefore == headAfter) {
-                // JGit's cherry-pick reports Ok for empty commits but doesn't create a new commit.
-                // Clean up any leftover cherry-pick state and create the commit manually.
-                r.writeCherryPickHead(null)
-                r.writeMergeCommitMsg(null)
-                val sourceCommit = r.parseCommit(r.resolve(commit.hash))
-                git.commit()
-                    .setAllowEmpty(true)
-                    .setNoVerify(true)
-                    .setMessage(sourceCommit.fullMessage)
-                    .setAuthor(sourceCommit.authorIdent)
-                    .call()
-            }
+    override fun tryCherryPick(
+        commit: Commit,
+        committer: Ident?,
+        author: Ident?,
+        useTheirs: Boolean,
+    ): CherryPickResult {
+        // Same justification as cherryPick: JGit's CherryPickCommand has bugs that affect jaspr's
+        // use cases. Production wiring routes this through CliGitClient via OptimizedCliGitClient.
+        throw UnsupportedOperationException(
+            "tryCherryPick is not implemented in JGitClient; use CliGitClient or " +
+                "OptimizedCliGitClient instead"
+        )
+    }
 
-            val headCommit = r.parseCommit(r.findRef(GitClient.HEAD).objectId).toCommit(git)
-
-            val isUpdatingCommitter = committer != null && committer != headCommit.committer
-            val isUpdatingAuthor = author != null && author != headCommit.author
-            if (isUpdatingCommitter || isUpdatingAuthor) {
-                val amendCommand = git.commit().setAmend(true).setMessage(headCommit.fullMessage)
-                if (isUpdatingCommitter) {
-                    amendCommand.setCommitter(committer.toPersonIdent())
-                }
-                if (isUpdatingAuthor) {
-                    amendCommand.setAuthor(author.toPersonIdent())
-                }
-                amendCommand.call().toCommit(git)
-            } else {
-                headCommit
-            }
-        }
+    override fun stashPush(message: String, includeUntracked: Boolean): String? {
+        // JGit has StashCreateCommand but uses ResolveMerger internally, which is the same class
+        // of working-tree-sensitive bug we work around in cherryPick. Production wiring routes
+        // stash operations through CliGitClient via OptimizedCliGitClient.
+        throw UnsupportedOperationException(
+            "stashPush is not implemented in JGitClient; use CliGitClient or " +
+                "OptimizedCliGitClient instead"
+        )
     }
 
     override fun push(refSpecs: List<RefSpec>, remoteName: String) {

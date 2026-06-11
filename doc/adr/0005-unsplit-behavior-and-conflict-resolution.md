@@ -6,239 +6,280 @@ Accepted
 
 ## Context
 
-`jaspr split` resets HEAD past the current commit (mixed reset), leaving its
-changes in the working tree, and records the pre-split SHA in
-`.git/jaspr/split-state.json`. `jaspr unsplit` is the inverse: it consumes
-that state to restore the original commit, preserving its message and
-`commit-id:` trailer.
+`jaspr split` performs a mixed reset to the parent of the current
+commit, leaving the commit's changes in the working tree, and records
+the pre-split SHA in `.git/jaspr/split-state.json`. `jaspr unsplit` is
+the inverse: it consumes that state to restore the original commit,
+preserving its message and `commit-id:` trailer.
 
-The original unsplit (ADR-0001) only implements one pattern: **absorb**.
-It soft-resets to the pre-split SHA, stages the working tree, and amends,
-folding any work done since the split back into the original commit.
+The original unsplit implementation supports one workflow: the operator
+splits a commit to "open it up," edits the working tree (often with help
+from the IDE: rename refactor, inline, extract, reformatting), then
+unsplits to "close it back up" with the edits folded in. This is an
+amend done out in the open.
 
-In practice the operator's most common reason for splitting is not "absorb
-edits into the original" but **extract a precursor commit**: peel a
-refactor, rename, or cleanup out of a commit into its own commit *before*
-the original. The desired end state is `[N1=precursor, N2=original]`,
-where `N2` retains the original's message and `commit-id:` trailer so
-jaspr's stack tracking still works.
+In practice operators also use split to extract a precursor commit out
+of a larger one. The intuition: peel a refactor, rename, or cleanup off
+of a feature commit so it can land first on its own, with the original
+following. The desired end state is `[precursor, original-on-top]`,
+where the on-top commit retains the original's message and `commit-id:`
+trailer so jaspr's stack tracking still works.
 
-Today the operator does this manually after `jaspr split`:
+Today the operator does the precursor flow manually after `jaspr split`:
 
-1. `git add -p` (or `git restore` + `git add -A`) to build N1.
-2. `git commit` to land N1.
-3. `git cherry-pick <unsplitSha>` to put the original on top of N1.
+1. `git add -p` (or `git restore` + `git add -A`) to build the
+   precursor.
+2. `git commit` to land it.
+3. `git cherry-pick <unsplitSha>` to put the original on top.
 
-`jaspr unsplit` should support this pattern directly. The design questions
-are:
+`jaspr unsplit` should handle both workflows. The design questions are:
 
-1. How does `unsplit` know whether the operator wants absorb (fold
-   everything back) or extract (cherry-pick original on top of new work)?
-2. How are conflicts in the cherry-pick path handled, given that
-   `jaspr pull --theirs` (ADR-0003) establishes a precedent of non-
-   interactive resolution with a backup ref for recovery?
-3. What happens at the boundaries: identical-result cherry-picks,
-   in-progress cherry-picks left by failed unsplits, and the existing
-   `jaspr nav cancel` escape hatch?
+1. How does `unsplit` know which workflow the operator is in?
+2. How are conflicts in the precursor flow handled, given that
+   `jaspr pull --theirs` (ADR-0003) establishes a precedent of
+   non-interactive resolution with a backup ref for recovery?
+3. How does the operator recover if the result is not what they wanted?
 
 ## Decision
 
-### Auto-detect absorb vs cherry-pick
+### Two named modes, auto-detected from HEAD position
 
-`unsplit` chooses its path from two pieces of state: whether HEAD is
-still at the split point (i.e., the parent of `unsplitSha`), and whether
-the index plus working tree are clean. The absorb path is correct only
-when HEAD has not moved since the split, because its soft reset to
-`unsplitSha` would otherwise jump past intermediate commits and destroy
-them. Cherry-pick is the path everywhere else.
+`unsplit` has two modes, named for the dominant mental model of each:
 
-Combined rule: **absorb only when HEAD is at the split point *and* there
-are uncommitted changes to fold in. Cherry-pick in every other case.**
+- **Fold mode**: take whatever is in the working tree and fold it into
+  a new commit with the original's message and metadata. The working
+  tree is the truth. Used when the operator has been editing the
+  working tree since the split and now wants to close the commit back
+  up.
+- **Replay mode**: replay the original commit on top of whatever HEAD
+  now points at. The original commit is the truth. Used when the
+  operator has committed something since the split (a precursor) and
+  now wants the original to land on top.
 
-| HEAD position | Tree state | Path | Result |
-|---|---|---|---|
-| At split point | Dirty | Absorb | Original recreated with edits folded in. |
-| At split point | Clean | Cherry-pick | Original recreated; see "Identical-result optimization". |
-| Moved (one or more intermediate commits) | Clean | Cherry-pick | `[N1, ..., original-on-top]`. |
-| Moved | Dirty | Cherry-pick | Same as above; the dirty working tree participates in cherry-pick's 3-way merge. |
+The mode is decided from one piece of state: whether HEAD has moved
+since the split.
 
-The fourth case is the one where a tree-state-only discriminator would
-silently destroy intermediate commits. Routing it to cherry-pick instead
-of absorb matches the operator's manual workflow (`add -p` + commit + run
-unsplit without first stashing the remainder), and modern cherry-pick's
-3-way merge correctly resolves the overlap between the dirty working
-tree and the patch when the dirty content is what the patch would write
-anyway.
+| HEAD position                       | Mode   |
+|-------------------------------------|--------|
+| At the split's parent               | Fold   |
+| Anywhere else (precursor committed) | Replay |
 
-### Cherry-pick path: probe with merge-tree, then act
+Working-tree state does not participate in the decision. In fold mode
+the working tree *is* the answer. In replay mode the working tree is
+leftover snapshot content from the split, and is set aside (see
+"Disaster recovery").
 
-The cherry-pick path probes for conflicts with `git merge-tree
---write-tree` before touching the working tree, then chooses how to
-actually run the cherry-pick based on what the probe found. This mirrors
-the approach in ADR-0003's pull command and keeps the bail path's side
-effects to a minimum (working tree untouched if we know we'd fail).
+### Why working-tree state is not part of the decision
 
-1. Save a backup ref at `refs/jaspr-backup/pre-unsplit-<unix-timestamp>`
-   pointing at current HEAD. Matches the naming used by
-   `resolveTheirsAndPull` (ADR-0003).
-2. Probe in-memory:
-   ```
-   git merge-tree --write-tree --merge-base=<unsplitSha>^ HEAD <unsplitSha>
-   ```
-   The output names any conflicting paths and classifies their conflict
-   types via exit code and the diagnostic section of merge-tree's
-   output.
-3. Branch on probe outcome:
-   - **No conflicts** → `git cherry-pick <unsplitSha>` (no strategy
-     option needed). Clear split state. Quiet success.
-   - **Only content-level conflicts** → `git cherry-pick -X theirs
-     <unsplitSha>`. The recursive/ort strategy resolves each conflicting
-     hunk in favor of `unsplitSha`. Clear split state. Emit the
-     auto-resolved warning citing the file count from the probe.
-   - **Conflicts `-X theirs` cannot resolve** (modify/delete,
-     rename/rename, etc.) → refuse without running cherry-pick at all.
-     Working tree and HEAD are unchanged. Emit the bail message
-     pointing at manual resolution or `jaspr nav cancel`.
-4. The final commit's message and `commit-id:` trailer are preserved
-   automatically: `git cherry-pick` reuses the source commit's message
-   by default, so no `-C` flag is needed in the success paths.
+The working tree is a set of files on disk; it does not remember which
+commit produced it. `git diff` and `git status` compute their output at
+display time, as the difference between the working tree's files and
+whatever HEAD currently points at. After `jaspr split`, the working
+tree's content is the original commit's tree, and HEAD is the
+original's parent, so the implied diff is exactly the original's diff.
+That is the diff a fold would commit.
 
-### Why "theirs" on content conflicts
+If the operator commits a precursor, the working tree's content does
+not change (commit operates on the index, not the working tree), but
+HEAD has moved. The implied diff is now (original's tree) minus
+(precursor's tree), which is a gap, not the original's diff. Folding
+that gap produces a tree that depends on the precursor in ways the
+operator did not intend: when the precursor renamed or refactored
+content that the original later removed, the fold leaves the renamed
+line in place rather than deleting it.
 
-When the operator extracts a precursor commit, the original is the "real"
-change they wanted to land; the precursor is preparation. If the two
-genuinely conflict at the same lines, the original's content is what
-should appear in the final tree. This matches the operator's manual
-workflow today (running `git cherry-pick` and resolving conflicts by
-preferring the cherry-picked side) and aligns with the precedent in
-ADR-0003's `--theirs` resolution mode.
+The right operation on top of a precursor is cherry-pick. Cherry-pick
+applies the original's diff against its true parent (a 3-way merge
+with the original's parent as the merge base) onto the precursor's
+tree. The working tree's snapshot does not enter the calculation.
 
-Git's rename detection covers the common rename precursor case without
-needing the `--theirs` resolution at all: if N1 renames `foo` → `bar` and
+### Fold mode mechanics
+
+1. Save current HEAD as
+   `refs/jaspr-backup/pre-unsplit-<unix-timestamp>` so the operator can
+   roll back. Naming matches the precedent in ADR-0003.
+2. `git add --all` to stage the working tree (matches the operator's
+   manual amend flow).
+3. Commit using the original's message (including `commit-id:` trailer)
+   and the original's author identity. Committer is the current
+   operator.
+4. Clear the split state.
+
+If the working tree matches HEAD (nothing to fold), the fold would
+produce a commit with the original's message but without the original's
+content, because HEAD's tree is the original's parent, not the
+original. This edge case is treated as an identity restore: set HEAD to
+the original's SHA directly without creating a new commit. This is the
+only situation in which `unsplit` reuses the original SHA rather than
+producing a fresh one.
+
+### Replay mode mechanics
+
+1. Save current HEAD as
+   `refs/jaspr-backup/pre-unsplit-<unix-timestamp>`.
+2. If the working tree is dirty,
+   `git stash push --include-untracked -m "jaspr unsplit pre-state <ts>"`.
+   The stash exists for the operator's recovery and is not auto-popped.
+3. `git cherry-pick -X theirs <unsplitSha>` onto current HEAD. The
+   `-X theirs` strategy resolves any content conflict in favor of the
+   original commit. The resulting commit reuses the original's message
+   and `commit-id:` trailer automatically; cherry-pick preserves both
+   by default.
+4. Clear the split state.
+
+Path-level conflicts (modify/delete, rename/rename, type-change) can
+still surface even with `-X theirs`, because the strategy resolves
+*content* conflicts, not structural ones. When the cherry-pick fails
+in this way, leave it in progress and surface the standard
+"cherry-pick is in conflict" message. `jaspr nav cancel` aborts the
+in-progress cherry-pick and rewinds, restoring the pre-unsplit state.
+
+### Why "theirs" in replay mode
+
+When the operator extracts a precursor, the original commit is the one
+they meant to land. The precursor is preparation. If the two genuinely
+conflict at the same lines, the original's content is what should
+appear in the final tree. This matches the operator's manual workflow
+(running `git cherry-pick` and preferring the cherry-picked side) and
+aligns with ADR-0003's `--theirs` mode.
+
+Git's rename detection covers the common rename-precursor case without
+`-X theirs` doing anything: if the precursor renames `foo` to `bar` and
 the original modifies `foo`, the 3-way merge tracks the rename and
-applies the modification to `bar` cleanly. `--theirs` only kicks in when
-the same lines were touched on both sides.
+applies the modification to `bar`. `-X theirs` only activates when the
+same lines were touched on both sides.
 
-### Identical-result optimization
+### Disaster recovery contract
 
-If the prospective cherry-pick result would have the same tree, parent,
-and commit message as `unsplitSha` itself (e.g., split immediately
-followed by unsplit with no work done in between), `unsplit` sets HEAD to
-`unsplitSha` directly rather than creating a new commit with a fresh SHA.
+Every `unsplit` invocation, in either mode, leaves a backup ref at
+`refs/jaspr-backup/pre-unsplit-<unix-timestamp>` pointing at the
+pre-unsplit HEAD. Operators recover via:
 
-This avoids manufacturing a new SHA when the prior SHA is reachable and
-equivalent. Scoped to `unsplit` only; other nav operations don't
-construct commits whose tree+parent+message could collide with a known
-prior SHA.
+- **Fold mode rollback**:
+  `git reset --mixed refs/jaspr-backup/pre-unsplit-<ts>`. HEAD rewinds,
+  the new commit's tree drops back into the working tree (matching what
+  was there before the fold), and the operator is back to the
+  pre-unsplit state.
+- **Replay mode rollback**:
+  `git reset --hard refs/jaspr-backup/pre-unsplit-<ts>` to rewind HEAD
+  and the working tree. If a stash entry was created (the working tree
+  was dirty before replay), follow with `git stash pop` to restore the
+  dirty working-tree content. The stash is identified by its message
+  prefix `jaspr unsplit pre-state`.
+
+Recovery is operator-initiated. `unsplit` never auto-pops the stash,
+never auto-rewinds, and never reads the backup ref programmatically.
+The point of the contract is that the operator looking at the result
+and saying "that's not what I wanted" has a documented one-or-two
+command undo.
+
+`unsplit` does not garbage-collect old backup refs. They accrue
+alongside `pre-pull-*` from ADR-0003. Retention is left to the operator
+and is open across the `refs/jaspr-backup/` namespace as a whole.
 
 ### Operator-facing messages
 
-The cherry-pick path produces one of three message shapes. All name the
-restored commit's short SHA and subject; the literal text is
-implementation detail and not committed by this ADR.
+Message shapes, all naming the restored commit's short SHA and subject.
+Literal text is implementation detail.
 
-- **Clean success** (no conflicts encountered): a confirmation line.
-- **Auto-resolved** (one or more files had content conflicts resolved
-  via "theirs"): an emphatic warning that includes the count of files
-  affected, the backup-ref name, the command to view the auto-resolved
-  diff against the backup, and the command to hard-reset to the backup
-  if the result is wrong.
-- **Unresolvable** (a conflict "theirs" cannot handle, e.g. modify/
-  delete or rename/rename, detected by the merge-tree probe): an error
-  naming what merge-tree found and noting that the working tree was
-  not touched. Suggests resolving manually with raw git commands, and
-  points at `jaspr nav cancel` as the ultimate bailout.
+- **Fold mode success**: a confirmation line stating the original was
+  folded back from the working tree, on top of the original's parent.
+- **Replay mode clean success**: a confirmation line stating the
+  original was replayed on top of HEAD.
+- **Replay mode with auto-resolved conflicts**: a multi-line warning
+  that includes the count and list of files whose content conflicts
+  were resolved by taking the original's content, the backup-ref name,
+  and a pointer to `git stash list` if a stash was created.
+- **Replay mode with path-level conflicts**: the standard "cherry-pick
+  is in progress, resolve and continue or run `jaspr nav cancel`"
+  message. This is the only outcome that leaves an in-progress
+  cherry-pick.
 
-The absorb path's message is unchanged from the existing implementation.
+### `jaspr nav cancel` aborts in-progress cherry-picks
 
-### Teach `jaspr nav cancel` to handle in-progress cherry-picks
-
-`jaspr nav cancel` is the framed "hard escape" from any navigation state
-(GitJaspr.kt: `cancelNavSession`). The merge-tree probe means `unsplit`
-itself never leaves a cherry-pick in progress, but the operator can land
-in that state by running `git cherry-pick <unsplitSha>` manually after a
-split, by `unsplit`'s success path being interrupted between the cherry-
-pick and the split-state clear, or by any other workflow that leaves
-`.git/CHERRY_PICK_HEAD` present.
-
-When `cancel` runs and `.git/CHERRY_PICK_HEAD` exists, it aborts the
-cherry-pick before performing its normal restore. This is a small
-addition to `cancel`'s existing "clear split state if present" behavior
-and matches the role it already plays.
+`jaspr nav cancel` is the framed "hard escape" from any navigation
+state. When `cancel` runs and `.git/CHERRY_PICK_HEAD` exists (whether
+left by a failed `unsplit`, by a manual `git cherry-pick`, or by any
+other workflow), it runs `git cherry-pick --abort` before performing
+its normal restore. This is a small addition to `cancel`'s existing
+behavior and complements `unsplit`'s replay-mode path-conflict outcome.
 
 ## Alternatives Considered
 
-### Explicit flag (`--absorb` / `--on-top`)
+### Explicit flags (`--fold` / `--replay`)
 
-Requiring the operator to choose explicitly between absorb and cherry-
-pick on every invocation. Rejected: the choice is determinable from
-HEAD position and tree state in every case, and a mandatory flag adds
-friction to the common path.
+Requiring the operator to choose explicitly on every invocation.
+Rejected: HEAD position already disambiguates without ambiguity, and a
+mandatory flag adds friction to the common path. The two modes are
+distinguishable not by intent but by objective git state.
 
-### Separate commands (`jaspr unsplit` vs. `jaspr resume`)
+### Working-tree state as the discriminator
 
-Splitting the two intents into named commands. Rejected on the same
-grounds: in the common cases the tree state already disambiguates, so the
-operator gains no information from a second command name. The naming
-overhead also lands on muscle memory for an operation done frequently.
+Using "is the working tree dirty?" or "is anything staged?" to choose
+between fold and replay. Rejected: working-tree state is incidental to
+the decision. The operator who committed a precursor often still has
+working-tree content (the post-stage remainder from `git add -p`), and
+they want replay, not fold. A working-tree discriminator would route
+them to fold and produce the wrong tree.
 
-### `git cherry-pick -X theirs` unconditionally
+### Merge-tree probe before cherry-pick
 
-Always passing the strategy flag and letting git resolve everything in
-one call. Rejected: gives no way to report N files affected to the
-operator and no hook to distinguish "no conflicts at all" from
-"auto-resolved silently." The merge-tree probe preserves both signals
-at the cost of one read-only call before the cherry-pick.
-
-### Run cherry-pick first, abort on unresolvable
-
-`git cherry-pick --no-commit`, then inspect unmerged paths, attempt
-`git checkout --theirs` on each, then commit or abort. Rejected:
-when conflicts are unresolvable, this approach leaves the cherry-pick
-in progress and the working tree partially modified, forcing the bail
-message to spell out the abort + reset sequence. Probing first with
-`merge-tree` means the working tree is untouched in the unresolvable
-case, simplifying both the messaging and the recovery story.
+Probing for conflicts with `git merge-tree --write-tree` before running
+cherry-pick, then choosing the strategy or refusing based on the probe.
+Rejected: with `-X theirs` as the always-applied strategy in replay
+mode, the probe's only remaining purpose is to count conflicts for the
+operator message. That can be done by parsing cherry-pick's output
+post-hoc, without the probe's extra round trip.
 
 ### Auto-resolve via `-X ours`
 
-Picking the operator's side (N1) on conflict. Rejected: contrary to the
-operator's stated intent. The original commit is what they meant to land;
-N1 is scaffolding around it.
+Picking the operator's side (the precursor) on conflict. Rejected:
+contrary to the operator's stated intent. The original commit is what
+they meant to land; the precursor is scaffolding around it.
+
+### Auto-pop the stash in replay mode
+
+After a successful replay, automatically `git stash pop` the captured
+pre-state. Rejected: the working tree after a successful replay matches
+the original commit's tree, which is already what the operator wants.
+Auto-popping the stash would reintroduce the pre-replay dirty content
+on top of that tree, producing a workspace that holds two overlapping
+snapshots of the original's content with no clear merge. Leaving the
+stash for manual recovery preserves the operator's control.
 
 ### Pruning backup refs automatically
 
-Cleaning up `refs/jaspr-backup/pre-unsplit-<ts>` after some period or on
-next `unsplit`. Rejected for now (matches pull's stance in ADR-0003):
-backups are cheap, and an operator finding an old backup and reading the
-timestamp is less surprising than a backup having vanished when they
-went to recover. Retention policy is open across all of
-`refs/jaspr-backup/` and should be revisited as one decision.
+Cleaning up `refs/jaspr-backup/pre-unsplit-<ts>` after some period or
+on next `unsplit`. Rejected for now (matches the stance in ADR-0003):
+backups are cheap, and an operator finding an old backup is less
+surprising than a backup having vanished. Retention is open across the
+`refs/jaspr-backup/` namespace as a whole.
 
 ## Consequences
 
-- `unsplit`'s contract widens: it now supports both absorb and extract
-  patterns, with the path chosen non-interactively.
-- The original closed work item for `jaspr unsplit` is superseded by
-  this ADR for the conflict-handling and cherry-pick-path behavior.
-  Either reopen it with a revised description or file a follow-up.
+- `unsplit`'s contract widens: it now supports both the review-and-
+  amend workflow (fold) and the extract-a-precursor workflow (replay),
+  with the mode chosen non-interactively from HEAD position.
 - `refs/jaspr-backup/` accrues `pre-unsplit-*` entries alongside
   `pre-pull-*`. No retention policy in either case.
-- `jaspr nav cancel` gains a small in-progress-cherry-pick cleanup step;
-  its visible behavior is unchanged for callers who don't have a
+- Replay mode adds a stash entry when the working tree is dirty. The
+  entry uses a recognizable message prefix so the operator can identify
+  it in `git stash list`.
+- `jaspr nav cancel` gains a small in-progress-cherry-pick cleanup
+  step; its visible behavior is unchanged for callers who don't have a
   cherry-pick in flight.
-- Documentation and help text for `jaspr unsplit` need to describe the
-  auto-detect rule and the conflict-resolution behavior so operators
-  understand the "theirs" choice.
-- Tests need to cover: absorb path unchanged, cherry-pick clean path
-  with HEAD moved and with HEAD at split point, cherry-pick auto-
-  resolved path (file count surfaced), cherry-pick unresolvable path,
-  cherry-pick with dirty working tree and intermediate commits (the
-  4th-cell case), identical-result optimization, and `nav cancel`
-  cleaning up an in-progress cherry-pick.
+- Documentation and help text for `jaspr unsplit` should describe the
+  fold/replay vocabulary, the auto-detect rule, the conflict-resolution
+  behavior, and the disaster-recovery contract.
+- Tests need to cover: fold mode with dirty working tree, fold mode
+  with clean working tree (identity restore), replay mode clean
+  cherry-pick, replay mode with auto-resolved content conflicts, replay
+  mode with path-level conflicts (cherry-pick left in progress), replay
+  mode with dirty working tree (stash captured), and `nav cancel`
+  aborting an in-progress cherry-pick.
 
 ## Future Considerations
 
-- Retention policy for `refs/jaspr-backup/` ref namespace.
-- Surfacing the auto-resolved file list in the warning rather than just
-  the count.
+- Retention policy for the `refs/jaspr-backup/` ref namespace.
+- Operator-facing help that lists active backup refs and stashes from
+  prior unsplits.

@@ -225,12 +225,11 @@ class NativeImageMetadataTest {
 
     @Test
     fun `exercise cherry-pick`() {
-        // Drives JGit's CherryPickCommand, whose first invocation reflects on
-        // CommitConfig$CleanupMode.values() to read core.commitCleanup. Without this exercise,
-        // the native image lacks reflect-config for that enum and cherry-pick paths
-        // (DivergenceClassifier worktree probe, jaspr pull, jaspr unsplit on a moved HEAD)
-        // crash at runtime with `Enumerated values of type CommitConfig$CleanupMode not
-        // available`.
+        // Drives cherry-pick through OptimizedCliGitClient, which routes to CliGitClient
+        // (CLI git rather than JGit; see OptimizedCliGitClient.cherryPick for the
+        // rationale). Captures the native-image reflection metadata for the subprocess
+        // path. JGit's CommitConfig$CleanupMode entry in reflect-config.json is retained
+        // defensively in case other JGit operations (commit, merge) load CommitConfig.
         withTestSetup(useFakeRemote = true) {
             createCommitsFrom(
                 testCase {
