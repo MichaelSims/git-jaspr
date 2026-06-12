@@ -2700,7 +2700,16 @@ class GitJaspr(
         return try {
             json.decodeFromString<NavState>(file.readText())
         } catch (e: Exception) {
-            logger.warn("Failed to read nav state, clearing", e)
+            // Nav state is ephemeral session state; we don't carry forward
+            // schema changes across jaspr versions. Any deserialization
+            // failure (missing required field, type mismatch, malformed
+            // JSON) drops the session and forces the operator to restart.
+            renderer.warn {
+                "Navigation state could not be read (likely from a jaspr " +
+                    "version change). Clearing it; you'll need to restart " +
+                    "your nav session."
+            }
+            logger.debug("readNavState deserialization failure", e)
             clearNavState()
             null
         }

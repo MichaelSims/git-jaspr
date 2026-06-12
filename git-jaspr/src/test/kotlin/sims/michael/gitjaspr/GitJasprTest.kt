@@ -151,6 +151,20 @@ interface GitJasprTest {
         }
     }
 
+    @Nav
+    @Test
+    fun `readNavState clears the file when it fails to deserialize`() {
+        withTestSetup(useFakeRemote) {
+            val navStateFile = localRepo.resolve(".git/jaspr/nav-state.json")
+            navStateFile.parentFile.mkdirs()
+            navStateFile.writeText("""{"this":"is not a valid NavState"}""")
+            assertTrue(navStateFile.exists())
+
+            assertNull(gitJaspr.readNavState())
+            assertFalse(navStateFile.exists())
+        }
+    }
+
     // endregion
 
     // region navigation tests

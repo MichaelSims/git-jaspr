@@ -123,6 +123,11 @@ private fun String.iso8601ToLocalDate(): LocalDateTime =
  * points at the commit HEAD is currently on. Entries at `0..cursorIndex` are materialized in git;
  * entries at `cursorIndex+1..lastIndex` form the replay queue that gets cherry-picked on `jaspr up`
  * / `jaspr top`.
+ *
+ * Schema policy: this class has no backwards-compatibility guarantee across jaspr versions. Adding
+ * a required field or changing a field's type is allowed; existing nav-state.json files that fail
+ * to deserialize are discarded with a warning (see [GitJaspr.readNavState]). The operator restarts
+ * their nav session.
  */
 @Serializable
 data class NavState(
