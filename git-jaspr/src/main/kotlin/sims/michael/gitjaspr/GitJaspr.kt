@@ -2776,7 +2776,11 @@ class GitJaspr(
             "Cannot move down $n commit(s) — only ${state.cursorIndex} commit(s) below current position."
         }
 
-        gitClient.checkout(state.stack[targetIndex].sha)
+        val target = gitClient.log(state.stack[targetIndex].sha, 1).single()
+        gitClient.checkout(
+            state.stack[targetIndex].sha,
+            reflogMessage = "jaspr nav down $n to ${target.shortMessage}",
+        )
         val newState = state.copy(cursorIndex = targetIndex)
         writeNavState(newState)
         installNavSessionHook()
@@ -2795,7 +2799,11 @@ class GitJaspr(
 
         require(state.cursorIndex > 0) { "Already at the bottom of the stack." }
 
-        gitClient.checkout(state.stack.first().sha)
+        val target = gitClient.log(state.stack.first().sha, 1).single()
+        gitClient.checkout(
+            state.stack.first().sha,
+            reflogMessage = "jaspr nav bottom to ${target.shortMessage}",
+        )
         val newState = state.copy(cursorIndex = 0)
         writeNavState(newState)
         installNavSessionHook()
@@ -2816,11 +2824,19 @@ class GitJaspr(
         }
 
         val updatedStack =
-            replayEntries(state.stack, (state.cursorIndex + 1)..(state.cursorIndex + n))
+            replayEntries(
+                state.stack,
+                (state.cursorIndex + 1)..(state.cursorIndex + n),
+                reflogCommand = "nav up",
+            )
 
         val newCursor = state.cursorIndex + n
         return if (newCursor == updatedStack.lastIndex) {
-            endNavSession(state.copy(stack = updatedStack))
+            val finalCommit = gitClient.log(GitClient.HEAD, 1).single()
+            endNavSession(
+                state.copy(stack = updatedStack),
+                reflogMessage = "jaspr nav up to ${finalCommit.shortMessage}",
+            )
             NavMoveResult.ReachedTop(
                 replayedCount = n,
                 restoredName = state.stackName ?: state.headBeforeDetach,
@@ -2840,9 +2856,17 @@ class GitJaspr(
         require(aboveCount > 0) { "Already at the top of the stack." }
 
         val updatedStack =
-            replayEntries(state.stack, (state.cursorIndex + 1)..state.stack.lastIndex)
+            replayEntries(
+                state.stack,
+                (state.cursorIndex + 1)..state.stack.lastIndex,
+                reflogCommand = "nav top",
+            )
 
-        endNavSession(state.copy(stack = updatedStack))
+        val finalCommit = gitClient.log(GitClient.HEAD, 1).single()
+        endNavSession(
+            state.copy(stack = updatedStack),
+            reflogMessage = "jaspr nav top to ${finalCommit.shortMessage}",
+        )
         return NavMoveResult.ReachedTop(
             replayedCount = aboveCount,
             restoredName = state.stackName ?: state.headBeforeDetach,
@@ -2875,7 +2899,11 @@ class GitJaspr(
         require(targetIndex != cursor) { "Already at position $position of the stack." }
 
         if (targetIndex < cursor) {
-            gitClient.checkout(state.stack[targetIndex].sha)
+            val target = gitClient.log(state.stack[targetIndex].sha, 1).single()
+            gitClient.checkout(
+                state.stack[targetIndex].sha,
+                reflogMessage = "jaspr nav to $position (${target.shortMessage})",
+            )
             val newState = state.copy(cursorIndex = targetIndex)
             writeNavState(newState)
             installNavSessionHook()
@@ -2883,9 +2911,18 @@ class GitJaspr(
         }
 
         val replayedCount = targetIndex - cursor
-        val updatedStack = replayEntries(state.stack, (cursor + 1)..targetIndex)
+        val updatedStack =
+            replayEntries(
+                state.stack,
+                (cursor + 1)..targetIndex,
+                reflogCommand = "nav to $position",
+            )
         return if (targetIndex == updatedStack.lastIndex) {
-            endNavSession(state.copy(stack = updatedStack))
+            val finalCommit = gitClient.log(GitClient.HEAD, 1).single()
+            endNavSession(
+                state.copy(stack = updatedStack),
+                reflogMessage = "jaspr nav to $position (${finalCommit.shortMessage})",
+            )
             NavMoveResult.ReachedTop(
                 replayedCount = replayedCount,
                 restoredName = state.stackName ?: state.headBeforeDetach,
@@ -2917,7 +2954,11 @@ class GitJaspr(
      * entry's SHA has been overwritten with the rewritten one, but the next entry (not yet touched)
      * still carries the original commit whose actual git parent is the unmodified previous SHA.
      */
-    private fun replayEntries(stack: List<StackEntry>, range: IntRange): List<StackEntry> {
+    private fun replayEntries(
+        stack: List<StackEntry>,
+        range: IntRange,
+        reflogCommand: String,
+    ): List<StackEntry> {
         val result = stack.toMutableList()
         for (i in range) {
             val entry = result[i]
@@ -2925,9 +2966,18 @@ class GitJaspr(
             val parentSha = gitClient.getParents(entryCommit).singleOrNull()?.hash
             val headSha = gitClient.log(GitClient.HEAD, 1).single().hash
             if (parentSha == headSha) {
-                gitClient.checkout(entry.sha)
+                gitClient.checkout(
+                    entry.sha,
+                    reflogMessage = "jaspr $reflogCommand: ${entryCommit.shortMessage}",
+                )
             } else {
-                val newCommit = gitClient.cherryPick(entryCommit, commitIdentOverride)
+                val newCommit =
+                    gitClient.cherryPick(
+                        entryCommit,
+                        commitIdentOverride,
+                        reflogMessage =
+                            "jaspr $reflogCommand: cherry-pick of ${entryCommit.shortMessage}",
+                    )
                 result[i] = entry.copy(sha = newCommit.hash)
             }
         }
@@ -3097,7 +3147,11 @@ class GitJaspr(
     fun finishNavSession(): List<StackEntry> {
         val state = requireActiveNavSession()
         val discarded = state.stack.subList(state.cursorIndex + 1, state.stack.size).toList()
-        endNavSession(state)
+        val finalCommit = gitClient.log(GitClient.HEAD, 1).single()
+        endNavSession(
+            state,
+            reflogMessage = "jaspr nav finish at ${finalCommit.shortMessage}",
+        )
         return discarded
     }
 
@@ -3132,16 +3186,17 @@ class GitJaspr(
             gitClient.cherryPickAbort()
         }
 
+        val cancelMessage = "jaspr nav cancel to ${state.headBeforeDetach}"
         // Always hard-escape: discard working tree changes (including untracked) and any
         // commits made during the session. This is destructive by contract; the operator
         // stashes beforehand if they want to preserve work.
-        gitClient.reset(state.headBeforeDetach)
+        gitClient.reset(state.headBeforeDetach, reflogMessage = cancelMessage)
         gitClient.cleanUntracked()
         if (isSplitInProgress()) {
             clearSplitState()
         }
 
-        gitClient.checkout(state.headBeforeDetach)
+        gitClient.checkout(state.headBeforeDetach, reflogMessage = cancelMessage)
         clearNavState()
         return orphanedShas
     }
@@ -3150,10 +3205,15 @@ class GitJaspr(
      * End the navigation session: update the original branch to the new tip, check it out, clear
      * the state.
      */
-    private fun endNavSession(state: NavState) {
+    private fun endNavSession(state: NavState, reflogMessage: String? = null) {
         val newTip = gitClient.log(GitClient.HEAD, 1).single().hash
-        gitClient.branch(state.headBeforeDetach, startPoint = newTip, force = true)
-        gitClient.checkout(state.headBeforeDetach)
+        gitClient.branch(
+            state.headBeforeDetach,
+            startPoint = newTip,
+            force = true,
+            reflogMessage = reflogMessage,
+        )
+        gitClient.checkout(state.headBeforeDetach, reflogMessage = reflogMessage)
         clearNavState()
     }
 
@@ -3182,7 +3242,7 @@ class GitJaspr(
                 }
             val newCursor = reconciled.cursorIndex - n
 
-            gitClient.reset("HEAD~$n")
+            gitClient.reset("HEAD~$n", reflogMessage = "jaspr drop $n")
 
             if (newStack.isEmpty()) {
                 // Dropped everything — end the session
@@ -3192,7 +3252,7 @@ class GitJaspr(
             }
         } else {
             // No nav session — just hard reset
-            gitClient.reset("HEAD~$n")
+            gitClient.reset("HEAD~$n", reflogMessage = "jaspr drop $n")
         }
     }
 

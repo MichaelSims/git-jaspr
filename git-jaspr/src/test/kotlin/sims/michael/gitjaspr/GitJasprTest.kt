@@ -937,6 +937,70 @@ interface GitJasprTest {
 
     @Nav
     @Test
+    fun `nav operations annotate the HEAD reflog with the originating command`() {
+        // Drive a nav sequence (down, up, top, drop, cancel) and walk the HEAD reflog to
+        // verify each operation's reflog entry carries a "jaspr <command>" prefix. This
+        // makes `git reflog` after a jaspr session diagnosable: each HEAD move names the
+        // command that performed it.
+        withTestSetup(useFakeRemote) {
+            createCommitsFrom(
+                testCase {
+                    repository {
+                        commit { title = "A" }
+                        commit { title = "B" }
+                        commit { title = "C" }
+                        commit {
+                            title = "D"
+                            localRefs += "development"
+                        }
+                    }
+                    checkout = "development"
+                }
+            )
+
+            fun reflogMessages(): List<String> =
+                localRepo.resolve(".git/logs/HEAD").readLines().map { line ->
+                    line.substringAfter('\t')
+                }
+
+            val baselineCount = reflogMessages().size
+
+            gitJaspr.navigateDown(DEFAULT_TARGET_REF, 2) // detach at B
+            gitJaspr.navigateUp(1) // cherry-pick C
+            gitJaspr.navigateDown(DEFAULT_TARGET_REF, 1) // back to B
+            gitJaspr.drop(1) // drop B's child
+            gitJaspr.cancelNavSession()
+
+            val messages = reflogMessages().drop(baselineCount)
+            val matching = messages.filter { it.startsWith("jaspr ") }
+
+            assertTrue(
+                matching.any { it.startsWith("jaspr nav down 2 to ") },
+                "expected a 'jaspr nav down 2 to ...' entry, got: $messages",
+            )
+            // nav up replays C; whether that's via checkout (when parent matches HEAD) or
+            // cherry-pick (when it doesn't), the entry carries the same command prefix.
+            assertTrue(
+                matching.any { it.startsWith("jaspr nav up:") && it.contains("C") },
+                "expected a 'jaspr nav up: ...' entry naming C, got: $messages",
+            )
+            assertTrue(
+                matching.any { it.startsWith("jaspr nav down 1 to ") },
+                "expected a 'jaspr nav down 1 to ...' entry, got: $messages",
+            )
+            assertTrue(
+                matching.any { it.startsWith("jaspr drop 1") },
+                "expected a 'jaspr drop 1' entry, got: $messages",
+            )
+            assertTrue(
+                matching.any { it.startsWith("jaspr nav cancel to development") },
+                "expected a 'jaspr nav cancel to development' entry, got: $messages",
+            )
+        }
+    }
+
+    @Nav
+    @Test
     fun `active nav session is detectable for edit guard`() {
         withTestSetup(useFakeRemote) {
             createCommitsFrom(
