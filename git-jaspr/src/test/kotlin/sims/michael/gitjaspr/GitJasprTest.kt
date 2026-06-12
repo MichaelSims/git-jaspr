@@ -4333,6 +4333,14 @@ interface GitJasprTest {
 
             assertEquals("Pulled; your stack now matches remote.\n", output)
             assertEquals("three", localGit.log("HEAD", 1).single().shortMessage)
+
+            // The pull's hard reset should be tagged with the jaspr command.
+            val reflogMessages =
+                localRepo.resolve(".git/logs/HEAD").readLines().map { it.substringAfter('\t') }
+            assertTrue(
+                reflogMessages.any { it.startsWith("jaspr pull: reset to remote tip") },
+                "expected a 'jaspr pull: reset to remote tip' entry, got: $reflogMessages",
+            )
         }
     }
 

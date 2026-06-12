@@ -750,11 +750,17 @@ class GitJaspr(
         val backupRef = "refs/jaspr-backup/pre-pull-${System.currentTimeMillis() / 1000}"
         gitClient.updateRef(backupRef, currentHead)
 
+        val rollbackMessage = "jaspr pull --theirs: rollback to $backupRef"
         try {
-            gitClient.reset(localBase)
-            for (commit in resolvedQueue) gitClient.cherryPick(commit)
+            gitClient.reset(localBase, reflogMessage = "jaspr pull --theirs: reset to base")
+            for (commit in resolvedQueue) {
+                gitClient.cherryPick(
+                    commit,
+                    reflogMessage = "jaspr pull --theirs: cherry-pick of ${commit.shortMessage}",
+                )
+            }
         } catch (e: Exception) {
-            gitClient.reset(backupRef)
+            gitClient.reset(backupRef, reflogMessage = rollbackMessage)
             throw e
         }
 
@@ -765,7 +771,7 @@ class GitJaspr(
             getPullPlan(newLocalStack, remoteStack, newRemoteTipSha, baseRelation, emptySet())
 
         if (newPlan is PullPlan.Punt) {
-            gitClient.reset(backupRef)
+            gitClient.reset(backupRef, reflogMessage = rollbackMessage)
             throw GitJasprException(
                 "Resolved divergence with --theirs, but pull still can't complete: " +
                     puntMessage(newPlan.reason) +
@@ -777,7 +783,7 @@ class GitJaspr(
             try {
                 executePullPlan(newPlan, theme)
             } catch (e: Exception) {
-                gitClient.reset(backupRef)
+                gitClient.reset(backupRef, reflogMessage = rollbackMessage)
                 throw e
             }
 
@@ -826,14 +832,25 @@ class GitJaspr(
             is PullPlan.Punt -> appendLine(theme.warning(puntMessage(plan.reason)))
             is PullPlan.HardResetToRemoteTip -> {
                 requireCleanWorkingTree()
-                gitClient.reset(plan.remoteTipSha)
+                gitClient.reset(
+                    plan.remoteTipSha,
+                    reflogMessage = "jaspr pull: reset to remote tip",
+                )
                 appendLine(theme.success("Pulled; your stack now matches remote."))
             }
             is PullPlan.CherryPickLoOntoRemoteTip -> {
                 requireCleanWorkingTree()
                 probeCherryPickQueue(plan.commits, plan.remoteTipSha)
-                gitClient.reset(plan.remoteTipSha)
-                for (commit in plan.commits) gitClient.cherryPick(commit)
+                gitClient.reset(
+                    plan.remoteTipSha,
+                    reflogMessage = "jaspr pull: reset to remote tip",
+                )
+                for (commit in plan.commits) {
+                    gitClient.cherryPick(
+                        commit,
+                        reflogMessage = "jaspr pull: cherry-pick of ${commit.shortMessage}",
+                    )
+                }
                 val n = plan.commits.size
                 appendLine(
                     theme.success(
@@ -845,7 +862,12 @@ class GitJaspr(
             is PullPlan.CherryPickRoOntoLocalHead -> {
                 val headSha = gitClient.log(GitClient.HEAD, 1).single().hash
                 probeCherryPickQueue(plan.commits, headSha)
-                for (commit in plan.commits) gitClient.cherryPick(commit)
+                for (commit in plan.commits) {
+                    gitClient.cherryPick(
+                        commit,
+                        reflogMessage = "jaspr pull: cherry-pick of ${commit.shortMessage}",
+                    )
+                }
                 val n = plan.commits.size
                 appendLine(
                     theme.success(
@@ -2494,9 +2516,14 @@ class GitJaspr(
         val remoteTrackingRef = "$remoteName/${namedStackRef.name()}"
         val branchExists = localBranchName in gitClient.getBranchNames()
 
+        val reflogMessage = "jaspr checkout $localBranchName"
         if (!branchExists) {
-            gitClient.branch(localBranchName, startPoint = remoteTrackingRef)
-            gitClient.checkout(localBranchName)
+            gitClient.branch(
+                localBranchName,
+                startPoint = remoteTrackingRef,
+                reflogMessage = reflogMessage,
+            )
+            gitClient.checkout(localBranchName, reflogMessage = reflogMessage)
             gitClient.setUpstreamBranch(remoteName, namedStackRef.name())
             renderer.info {
                 "Checked out named stack '${entity(localBranchName)}' on new local branch"
@@ -2504,13 +2531,16 @@ class GitJaspr(
         } else {
             // Branch exists - checkout and verify upstream matches
             val previousRef = gitClient.log(GitClient.HEAD, 1).single().hash
-            gitClient.checkout(localBranchName)
+            gitClient.checkout(localBranchName, reflogMessage = reflogMessage)
             val upstream = gitClient.getUpstreamBranch(remoteName)
             if (upstream != null && upstream.name == namedStackRef.name()) {
                 renderer.info { "Switched to existing local branch '${entity(localBranchName)}'" }
             } else {
                 // Restore the previous branch before throwing
-                gitClient.checkout(previousRef)
+                gitClient.checkout(
+                    previousRef,
+                    reflogMessage = "jaspr checkout: restore previous after mismatch",
+                )
                 val upstreamDesc = upstream?.name ?: "none"
                 throw GitJasprException(
                     "A local branch '$localBranchName' already exists but its upstream " +
@@ -3723,11 +3753,17 @@ class GitJaspr(
             }
         }
 
+        val reflogMessage = "jaspr sync $branch"
         if (commitsToReplay.isEmpty()) {
             // All commits were already rebased by a shallower branch, just update the ref
             val tip = commitMap[commits.last().hash]
             if (tip != null) {
-                gitClient.branch(branch, startPoint = tip, force = true)
+                gitClient.branch(
+                    branch,
+                    startPoint = tip,
+                    force = true,
+                    reflogMessage = reflogMessage,
+                )
                 renderer.info {
                     "Updated ${entity(branch)} (all commits shared with earlier branch)"
                 }
@@ -3737,7 +3773,7 @@ class GitJaspr(
 
         // Checkout the new base in the worktree (checkout of a SHA detaches HEAD)
         try {
-            worktreeClient.checkout(newBase)
+            worktreeClient.checkout(newBase, reflogMessage = reflogMessage)
         } catch (e: Exception) {
             logger.debug("Failed to checkout base $newBase in worktree", e)
             return SyncBranchResult(branch, false, "Failed to checkout base")
@@ -3746,7 +3782,10 @@ class GitJaspr(
         // Cherry-pick each commit
         for (commit in commitsToReplay) {
             try {
-                worktreeClient.cherryPick(commit)
+                worktreeClient.cherryPick(
+                    commit,
+                    reflogMessage = "$reflogMessage: cherry-pick of ${commit.shortMessage}",
+                )
             } catch (e: Exception) {
                 logger.debug("cherryPick failed during rebase of $branch", e)
                 // Abort the cherry-pick and bail
@@ -3763,7 +3802,7 @@ class GitJaspr(
 
         // Update the branch ref in the main repo to point at the new tip
         val newTip = worktreeClient.log(GitClient.HEAD, 1).single().hash
-        gitClient.branch(branch, startPoint = newTip, force = true)
+        gitClient.branch(branch, startPoint = newTip, force = true, reflogMessage = reflogMessage)
         renderer.info { "Rebased ${entity(branch)}" }
         return SyncBranchResult(branch, true, "Rebased")
     }
@@ -3807,18 +3846,22 @@ class GitJaspr(
             }
         }
 
+        val reflogMessage = "jaspr sync $branch"
         // Detach HEAD at the new base (checkout of a SHA detaches HEAD)
-        gitClient.checkout(newBase)
+        gitClient.checkout(newBase, reflogMessage = reflogMessage)
 
         // Cherry-pick remaining commits
         for (commit in commitsToReplay) {
             try {
-                gitClient.cherryPick(commit)
+                gitClient.cherryPick(
+                    commit,
+                    reflogMessage = "$reflogMessage: cherry-pick of ${commit.shortMessage}",
+                )
             } catch (e: Exception) {
                 logger.debug("cherryPick failed during rebase of $branch", e)
                 gitClient.cherryPickAbort()
                 // Try to get back on the branch
-                gitClient.checkout(branch)
+                gitClient.checkout(branch, reflogMessage = "$reflogMessage: restore after conflict")
                 renderer.warn {
                     "Conflict rebasing ${entity(branch)} at commit " +
                         "${entity(commit.hash.take(7))} (${commit.shortMessage})"
@@ -3829,8 +3872,8 @@ class GitJaspr(
 
         // Update branch and check it out
         val newTip = gitClient.log(GitClient.HEAD, 1).single().hash
-        gitClient.branch(branch, startPoint = newTip, force = true)
-        gitClient.checkout(branch)
+        gitClient.branch(branch, startPoint = newTip, force = true, reflogMessage = reflogMessage)
+        gitClient.checkout(branch, reflogMessage = reflogMessage)
         renderer.info { "Rebased ${entity(branch)}" }
         return SyncBranchResult(branch, true, "Rebased")
     }
