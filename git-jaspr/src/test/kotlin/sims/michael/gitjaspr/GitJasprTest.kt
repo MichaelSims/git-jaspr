@@ -119,6 +119,7 @@ interface GitJasprTest {
                             StackEntry(sha = "def456", commitId = "id-2"),
                         ),
                     cursorIndex = 0,
+                    targetRef = DEFAULT_TARGET_REF,
                 )
             gitJaspr.writeNavState(state)
             assertEquals(state, gitJaspr.readNavState())
@@ -144,6 +145,7 @@ interface GitJasprTest {
                             StackEntry(sha = "def456", commitId = "id-2"),
                         ),
                     cursorIndex = 0,
+                    targetRef = DEFAULT_TARGET_REF,
                 )
             gitJaspr.writeNavState(state)
             gitJaspr.clearNavState()
@@ -1553,9 +1555,15 @@ interface GitJasprTest {
 
             // Make an intermediate commit on top of A that touches a different file.
             // b.txt remains untracked; it will get incorporated by the cherry-pick.
+            // The commit-id trailer keeps reconcile's id-install no-op so this test
+            // focuses on the cherry-pick mechanics rather than the id-install path.
             localRepo.resolve("refactor.txt").writeText("refactor content\n")
             localGit.add("refactor.txt")
-            val intermediate = localGit.commit(message = "intermediate")
+            val intermediate =
+                localGit.commit(
+                    message = "intermediate",
+                    footerLines = mapOf("commit-id" to "intermediate"),
+                )
             assertNotEquals(splitPointSha, intermediate.hash)
 
             val outcome = assertIs<UnsplitOutcome.Restored>(gitJaspr.unsplit())
@@ -1604,10 +1612,14 @@ interface GitJasprTest {
             gitJaspr.split()
 
             // Replace b.txt with conflicting content, commit as N1. After commit, workdir is
-            // clean and HEAD is N1.
+            // clean and HEAD is N1. The commit-id trailer keeps reconcile's id-install no-op
+            // so this test focuses on auto-resolution, not id installation.
             localRepo.resolve("b.txt").writeText("conflicting content\n")
             localGit.add(".")
-            localGit.commit(message = "intermediate")
+            localGit.commit(
+                message = "intermediate",
+                footerLines = mapOf("commit-id" to "intermediate"),
+            )
 
             val headBeforeUnsplit = localGit.log(GitClient.HEAD, 1).single().hash
 
@@ -1675,10 +1687,14 @@ interface GitJasprTest {
             // Split B: HEAD at A, a.txt with B's modification sitting in workdir.
             gitJaspr.split()
 
-            // Intermediate commit deletes a.txt — sets up the modify/delete conflict.
+            // Intermediate commit deletes a.txt -- sets up the modify/delete conflict.
+            // The commit-id trailer keeps reconcile's id-install path out of this test.
             localRepo.resolve("a.txt").delete()
             localGit.add(".")
-            localGit.commit(message = "delete a.txt")
+            localGit.commit(
+                message = "delete a.txt",
+                footerLines = mapOf("commit-id" to "delete-a"),
+            )
 
             val headBeforeUnsplit = localGit.log(GitClient.HEAD, 1).single().hash
             val splitStateBefore = gitJaspr.readSplitState()
@@ -1732,9 +1748,14 @@ interface GitJasprTest {
             // Make a precursor commit that touches a *different* file ("refactor"), leaving
             // b.txt unstaged. After commit, HEAD has moved (to N1) and the working tree is
             // still dirty (b.txt is untracked from the cherry-pick's perspective).
+            // The commit-id trailer keeps reconcile's id-install no-op.
             localRepo.resolve("refactor.txt").writeText("refactor\n")
             localGit.add("refactor.txt")
-            val intermediate = localGit.commit(message = "intermediate")
+            val intermediate =
+                localGit.commit(
+                    message = "intermediate",
+                    footerLines = mapOf("commit-id" to "intermediate"),
+                )
 
             assertTrue(
                 localGit.hasUncommittedChangesToTrackedFiles() ||
@@ -1762,6 +1783,197 @@ interface GitJasprTest {
             localGit.cleanUntracked()
             assertTrue(localRepo.resolve("b.txt").exists(), "b.txt must be tracked in HEAD")
             assertTrue(localRepo.resolve("refactor.txt").exists())
+        }
+    }
+
+    @Nav
+    @Test
+    fun `unsplit replay inserts manual precursor into nav stack`() {
+        withTestSetup(useFakeRemote) {
+            createCommitsFrom(
+                testCase {
+                    repository {
+                        commit { title = "A" }
+                        commit { title = "B" }
+                        commit { title = "C" }
+                        commit {
+                            title = "D"
+                            localRefs += "development"
+                        }
+                    }
+                    checkout = "development"
+                }
+            )
+
+            // Nav down 2: HEAD at B. Stack [A, B, C, D], cursor=1.
+            gitJaspr.navigateDown(DEFAULT_TARGET_REF, 2)
+
+            // Split B: HEAD at A, b.txt in workdir.
+            gitJaspr.split()
+
+            // Manually create a precursor that touches a different file. The commit-id
+            // trailer means reconcile's id-install is a no-op and the precursor's sha
+            // stays put through unsplit.
+            localRepo.resolve("refactor.txt").writeText("refactor\n")
+            localGit.add("refactor.txt")
+            val precursor =
+                localGit.commit(
+                    message = "precursor",
+                    footerLines = mapOf("commit-id" to "precursor"),
+                )
+
+            assertIs<UnsplitOutcome.Restored>(gitJaspr.unsplit())
+
+            val navState = gitJaspr.readNavState()
+            assertNotNull(navState)
+            // Precursor sits between A and the restored B; cursor lands on the restored B.
+            assertEquals(
+                listOf("A", "precursor", "B", "C", "D"),
+                navState.stack.map(StackEntry::commitId),
+            )
+            assertEquals(2, navState.cursorIndex)
+            assertEquals(precursor.hash, navState.stack[1].sha)
+        }
+    }
+
+    @Nav
+    @Test
+    fun `bare git commit during nav appears in stack on next nav move`() {
+        withTestSetup(useFakeRemote) {
+            createCommitsFrom(
+                testCase {
+                    repository {
+                        commit { title = "A" }
+                        commit { title = "B" }
+                        commit { title = "C" }
+                        commit {
+                            title = "D"
+                            localRefs += "development"
+                        }
+                    }
+                    checkout = "development"
+                }
+            )
+
+            // Nav down 2: HEAD at B. Stack [A, B, C, D], cursor=1.
+            gitJaspr.navigateDown(DEFAULT_TARGET_REF, 2)
+
+            // Plain git commit on top of B (no split, no jaspr involvement).
+            localRepo.resolve("extra.txt").writeText("extra\n")
+            localGit.add("extra.txt")
+            val extra =
+                localGit.commit(
+                    message = "extra",
+                    footerLines = mapOf("commit-id" to "extra"),
+                )
+
+            // Nav up 1: reconcile picks up the new commit before advancing.
+            gitJaspr.navigateUp(1)
+
+            val navState = gitJaspr.readNavState()
+            assertNotNull(navState)
+            assertEquals(
+                listOf("A", "B", "extra", "C", "D"),
+                navState.stack.map(StackEntry::commitId),
+            )
+            // Cursor advanced to C (index 3) after reconcile slotted extra in at index 2.
+            assertEquals(3, navState.cursorIndex)
+            assertEquals(extra.hash, navState.stack[2].sha)
+        }
+    }
+
+    @Nav
+    @Test
+    fun `nav reconcile auto-installs commit-id on a bare commit lacking one`() {
+        withTestSetup(useFakeRemote) {
+            createCommitsFrom(
+                testCase {
+                    repository {
+                        commit { title = "A" }
+                        commit { title = "B" }
+                        commit { title = "C" }
+                        commit {
+                            title = "D"
+                            localRefs += "development"
+                        }
+                    }
+                    checkout = "development"
+                }
+            )
+
+            // Nav down 2: HEAD at B.
+            gitJaspr.navigateDown(DEFAULT_TARGET_REF, 2)
+
+            // Bare git commit on top of B with NO commit-id trailer. Reconcile must
+            // install one in place via the same mechanism push uses.
+            localRepo.resolve("extra.txt").writeText("extra\n")
+            localGit.add("extra.txt")
+            val extra = localGit.commit(message = "extra")
+            assertNull(extra.id, "fixture: bare commit should have no commit-id")
+
+            // Trigger reconcile by navigating up. Reconcile rewrites HEAD's lineage
+            // to install a commit-id on the bare commit, then rebuilds the stack.
+            gitJaspr.navigateUp(1)
+
+            val navState = gitJaspr.readNavState()
+            assertNotNull(navState)
+            assertEquals(5, navState.stack.size)
+            assertEquals(listOf("A", "B"), navState.stack.take(2).map(StackEntry::commitId))
+            // The bare commit got a fresh uuid as its id and a new sha; the entry
+            // at index 2 carries both.
+            assertNotEquals("extra", navState.stack[2].commitId)
+            assertNotEquals(extra.hash, navState.stack[2].sha)
+            assertNotNull(navState.stack[2].commitId)
+            // C and D follow above the installed precursor with their original ids.
+            assertEquals("C", navState.stack[3].commitId)
+            assertEquals("D", navState.stack[4].commitId)
+            // Cursor advanced to C after the up.
+            assertEquals(3, navState.cursorIndex)
+        }
+    }
+
+    @Nav
+    @Test
+    fun `amend of stack entry during nav updates entry in place`() {
+        withTestSetup(useFakeRemote) {
+            createCommitsFrom(
+                testCase {
+                    repository {
+                        commit { title = "A" }
+                        commit { title = "B" }
+                        commit { title = "C" }
+                        commit {
+                            title = "D"
+                            localRefs += "development"
+                        }
+                    }
+                    checkout = "development"
+                }
+            )
+
+            // Nav down 2: HEAD at B (the entry we'll amend).
+            gitJaspr.navigateDown(DEFAULT_TARGET_REF, 2)
+
+            // Amend B in place (matching commit-id is preserved by --amend without -m).
+            localRepo.resolve("b-extra.txt").writeText("more for B\n")
+            localGit.add("b-extra.txt")
+            localGit.commit(amend = true)
+            val amendedB = localGit.log(GitClient.HEAD, 1).single()
+            assertEquals("B", amendedB.id)
+
+            // Nav up 1: reconcile must update the B entry's sha in place rather than
+            // treating amended-B as a new commit (which would re-queue the pre-amend
+            // B for replay on top of itself).
+            gitJaspr.navigateUp(1)
+
+            val navState = gitJaspr.readNavState()
+            assertNotNull(navState)
+            assertEquals(
+                listOf("A", "B", "C", "D"),
+                navState.stack.map(StackEntry::commitId),
+            )
+            // B's entry now points at the amended sha.
+            assertEquals(amendedB.hash, navState.stack[1].sha)
         }
     }
 

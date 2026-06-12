@@ -2970,6 +2970,7 @@ class GitJaspr(
             headBeforeDetach = branchName,
             stack = stack,
             cursorIndex = stack.lastIndex,
+            targetRef = targetRef,
             stackName = stackName,
         )
     }
@@ -2982,13 +2983,25 @@ class GitJaspr(
      * - New commits are inserted into the stack at their actual position.
      * - Missing commits are prepended to the replay queue (above cursor) in their original order.
      * - SHA changes for the same Commit-Id are updated in place.
+     *
+     * Any commit below HEAD lacking a jaspr commit-id trailer has one installed in place via
+     * [addCommitIdsToLocalStack] (same mechanism push uses), since stack entries are keyed by
+     * commit-id and a missing id would either drop the commit from the stack or break entry
+     * matching across rewrites.
      */
     fun reconcile(state: NavState, targetRef: String): NavState {
         val remoteName = config.remoteName
         gitClient.fetch(remoteName)
 
         // Walk from HEAD to the merge base to get what's actually materialized
-        val actualBelow = gitClient.getCommitStack(remoteName, GitClient.HEAD, targetRef)
+        val initialBelow = gitClient.getCommitStack(remoteName, GitClient.HEAD, targetRef)
+        val actualBelow =
+            if (addCommitIdsToLocalStack(initialBelow)) {
+                // Rewriting installed ids and changed HEAD's lineage; re-read.
+                gitClient.getCommitStack(remoteName, GitClient.HEAD, targetRef)
+            } else {
+                initialBelow
+            }
 
         // The expected "below" portion of the stack
         val expectedBelow = state.stack.subList(0, state.cursorIndex + 1)
@@ -3044,13 +3057,17 @@ class GitJaspr(
      * Returns the active nav session state (after reconciliation), or null when no session is
      * active. Throws only for the invalid "detached HEAD without nav state" case. Auto-clears stale
      * state.
+     *
+     * Callers can pass [targetRef] to override the persisted one. When null, reconcile runs against
+     * the target ref captured in [NavState.targetRef] at session start, so operations like `up` /
+     * `top` / `drop` pick up any commits added during the session without the caller having to
+     * thread the target ref through.
      */
     private fun activeNavSessionOrNull(targetRef: String? = null): NavState? {
         val state = readNavState()
         val detached = gitClient.isHeadDetached()
         return when {
-            detached && state != null ->
-                if (targetRef != null) reconcile(state, targetRef) else state
+            detached && state != null -> reconcile(state, targetRef ?: state.targetRef)
             detached -> throw IllegalArgumentException(DETACHED_HEAD_NO_NAV_STATE)
             else -> {
                 if (state != null) clearNavState()
@@ -3141,7 +3158,7 @@ class GitJaspr(
 
         val state = readNavState()
         if (state != null && gitClient.isHeadDetached()) {
-            val reconciled = if (targetRef != null) reconcile(state, targetRef) else state
+            val reconciled = reconcile(state, targetRef ?: state.targetRef)
             require(n <= reconciled.cursorIndex + 1) {
                 "Cannot drop $n commit(s) — only ${reconciled.cursorIndex + 1} commit(s) at or below current position."
             }
@@ -3230,30 +3247,30 @@ class GitJaspr(
                 unsplitReplay(originalCommit)
             }
 
-        val restoredCommit =
-            when (outcome) {
-                is UnsplitOutcome.Restored -> outcome.restoredCommit
-                is UnsplitOutcome.RestoredWithAutoResolvedConflicts -> outcome.restoredCommit
-                is UnsplitOutcome.LeftInProgress -> return outcome
-            }
+        if (outcome is UnsplitOutcome.LeftInProgress) return outcome
 
         val navState = readNavState()
-        if (navState != null && gitClient.isHeadDetached()) {
-            val entry =
-                StackEntry(
-                    sha = restoredCommit.hash,
-                    commitId =
-                        checkNotNull(restoredCommit.id) {
-                            "Restored commit has no jaspr commit ID."
-                        },
-                )
-            val newStack =
-                navState.stack.toMutableList().apply { add(navState.cursorIndex + 1, entry) }
-            writeNavState(navState.copy(stack = newStack, cursorIndex = navState.cursorIndex + 1))
-        }
+        val finalOutcome =
+            if (navState != null && gitClient.isHeadDetached()) {
+                // Reconcile rebuilds the stack from git's actual history below HEAD, so any
+                // precursor commits the operator made between split and unsplit are picked up
+                // alongside the restored commit. Reconcile may auto-install commit-ids on
+                // precursors that lack them, which rewrites HEAD's lineage; refresh
+                // outcome.restoredCommit afterwards so the operator-facing sha matches HEAD.
+                val reconciled = reconcile(navState, navState.targetRef)
+                writeNavState(reconciled)
+                val currentHead = gitClient.log(GitClient.HEAD, 1).single()
+                when (outcome) {
+                    is UnsplitOutcome.Restored -> outcome.copy(restoredCommit = currentHead)
+                    is UnsplitOutcome.RestoredWithAutoResolvedConflicts ->
+                        outcome.copy(restoredCommit = currentHead)
+                }
+            } else {
+                outcome
+            }
 
         clearSplitState()
-        return outcome
+        return finalOutcome
     }
 
     private fun unsplitFold(unsplitSha: String): UnsplitOutcome {

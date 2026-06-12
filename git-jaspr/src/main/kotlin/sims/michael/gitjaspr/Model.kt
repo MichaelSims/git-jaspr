@@ -138,6 +138,12 @@ data class NavState(
     /** Index into [stack] of the commit HEAD is currently on. */
     val cursorIndex: Int,
     /**
+     * Target ref the stack was anchored to at session start (e.g., the remote development branch).
+     * Persisted so reconcile can run on operations like `up` / `top` / `cancel` that don't
+     * otherwise need a targetRef from the caller.
+     */
+    val targetRef: String,
+    /**
      * Resolved named-stack name at the time of detach; null when no named stack on the remote
      * contains the stack's commits (e.g., the stack hasn't been pushed yet). Cached here so nav UI
      * can render without re-walking remote refs on every move.
