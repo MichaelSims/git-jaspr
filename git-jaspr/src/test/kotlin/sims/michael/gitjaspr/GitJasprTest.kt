@@ -2043,6 +2043,70 @@ interface GitJasprTest {
 
     @Nav
     @Test
+    fun `split unsplit and fold operations annotate the HEAD reflog`() {
+        withTestSetup(useFakeRemote) {
+            createCommitsFrom(
+                testCase {
+                    repository {
+                        commit { title = "A" }
+                        commit { title = "B" }
+                        commit { title = "C" }
+                        commit {
+                            title = "D"
+                            localRefs += "development"
+                        }
+                    }
+                    checkout = "development"
+                }
+            )
+
+            fun reflogMessages(): List<String> =
+                localRepo.resolve(".git/logs/HEAD").readLines().map { line ->
+                    line.substringAfter('\t')
+                }
+
+            // Drive split + fold-mode unsplit (no precursor; HEAD stays at split point).
+            gitJaspr.navigateDown(DEFAULT_TARGET_REF, 1) // detach at C
+            gitJaspr.split() // HEAD at B, C's content in workdir, split state recorded
+            // Stage and modify so the fold actually amends rather than identity-restoring.
+            localRepo.resolve("c.txt").writeText("modified C\n")
+            gitJaspr.unsplit()
+
+            // Drive split + replay-mode unsplit (precursor between).
+            gitJaspr.split() // HEAD at A
+            localRepo.resolve("refactor.txt").writeText("refactor\n")
+            localGit.add("refactor.txt")
+            localGit.commit(
+                message = "precursor",
+                footerLines = mapOf("commit-id" to "precursor"),
+            )
+            gitJaspr.unsplit()
+
+            // Drive a fold up. Currently at the restored commit; fold the entry above (D) into it.
+            gitJaspr.fold("up")
+
+            val messages = reflogMessages().filter { it.startsWith("jaspr ") }
+            assertTrue(
+                messages.any { it.startsWith("jaspr split: C") },
+                "expected a 'jaspr split: C' entry, got: $messages",
+            )
+            assertTrue(
+                messages.any { it.startsWith("jaspr unsplit (fold): C") },
+                "expected a 'jaspr unsplit (fold): C' entry, got: $messages",
+            )
+            assertTrue(
+                messages.any { it.startsWith("jaspr unsplit (replay): C") },
+                "expected a 'jaspr unsplit (replay): C' entry, got: $messages",
+            )
+            assertTrue(
+                messages.any { it.startsWith("jaspr fold up into D") },
+                "expected a 'jaspr fold up into D' entry, got: $messages",
+            )
+        }
+    }
+
+    @Nav
+    @Test
     fun `status during nav reports against the pre-nav stack`() {
         withTestSetup(useFakeRemote) {
             createCommitsFrom(

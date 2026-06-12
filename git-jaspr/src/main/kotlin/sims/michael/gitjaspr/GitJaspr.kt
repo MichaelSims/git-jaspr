@@ -3283,7 +3283,7 @@ class GitJaspr(
             }
         }
 
-        gitClient.resetMixed("HEAD~1")
+        gitClient.resetMixed("HEAD~1", reflogMessage = "jaspr split: ${head.shortMessage}")
         return head.shortMessage
     }
 
@@ -3349,7 +3349,10 @@ class GitJaspr(
         val backupRef = "refs/jaspr-backup/pre-unsplit-${System.currentTimeMillis() / 1000}"
         gitClient.updateRef(backupRef, headSha)
 
-        gitClient.resetSoft(unsplitSha)
+        val original = gitClient.log(unsplitSha, 1).single()
+        val reflogMessage = "jaspr unsplit (fold): ${original.shortMessage}"
+
+        gitClient.resetSoft(unsplitSha, reflogMessage = reflogMessage)
         gitClient.add(".")
         // Skip the amend when nothing actually changed since the split: HEAD is already
         // pointing at the original commit (the resetSoft did that), and amending would
@@ -3359,7 +3362,7 @@ class GitJaspr(
         // restore (ADR-0005): a clean tree at the split point reduces to HEAD = unsplitSha
         // rather than a new SHA.
         if (gitClient.hasUncommittedChangesToTrackedFiles()) {
-            gitClient.commit(amend = true)
+            gitClient.commit(amend = true, reflogMessage = reflogMessage)
         }
         return UnsplitOutcome.Restored(gitClient.log(GitClient.HEAD, 1).single())
     }
@@ -3372,7 +3375,15 @@ class GitJaspr(
 
         val stashSha = gitClient.stashPush(message = "jaspr unsplit pre-state $timestamp")
 
-        return when (val attempt = gitClient.tryCherryPick(originalCommit, useTheirs = true)) {
+        val reflogMessage = "jaspr unsplit (replay): ${originalCommit.shortMessage}"
+        return when (
+            val attempt =
+                gitClient.tryCherryPick(
+                    originalCommit,
+                    useTheirs = true,
+                    reflogMessage = reflogMessage,
+                )
+        ) {
             is CherryPickResult.Success -> {
                 // Detect post-hoc which paths needed -X theirs to resolve. Re-run the merge
                 // *without* the strategy against the pre-cherry-pick state. Anything that comes
@@ -3437,9 +3448,11 @@ class GitJaspr(
             require(navState.cursorIndex > 0) {
                 "Cannot fold down — already at the bottom of the stack."
             }
+            val parent = gitClient.log("HEAD~1", 1).single()
+            val reflogMessage = "jaspr fold down into ${parent.shortMessage}"
             // Soft reset removes current commit, amend merges into parent
-            gitClient.resetSoft("HEAD~1")
-            gitClient.commit(amend = true)
+            gitClient.resetSoft("HEAD~1", reflogMessage = reflogMessage)
+            gitClient.commit(amend = true, reflogMessage = reflogMessage)
 
             val survivor = gitClient.log(GitClient.HEAD, 1).single()
 
@@ -3464,8 +3477,10 @@ class GitJaspr(
             // Top of stack, no nav session — just soft reset and amend
             val stack = gitClient.log(GitClient.HEAD, 2)
             require(stack.size >= 2) { "Cannot fold down — nothing below the current commit." }
-            gitClient.resetSoft("HEAD~1")
-            gitClient.commit(amend = true)
+            val parent = stack[1]
+            val reflogMessage = "jaspr fold down into ${parent.shortMessage}"
+            gitClient.resetSoft("HEAD~1", reflogMessage = reflogMessage)
+            gitClient.commit(amend = true, reflogMessage = reflogMessage)
             return gitClient.log(GitClient.HEAD, 1).single().shortMessage
         }
     }
@@ -3487,13 +3502,14 @@ class GitJaspr(
 
         val aboveEntry = navState.stack[aboveIndex]
         val aboveCommit = gitClient.log(aboveEntry.sha, 1).single()
+        val reflogMessage = "jaspr fold up into ${aboveCommit.shortMessage}"
 
         // Cherry-pick the above commit onto the current position
-        gitClient.cherryPick(aboveCommit, commitIdentOverride)
+        gitClient.cherryPick(aboveCommit, commitIdentOverride, reflogMessage = reflogMessage)
 
         // Now HEAD has: ...parent -> current -> above'
         // Soft reset 2 to collapse both into staged changes on top of parent
-        gitClient.resetSoft("HEAD~2")
+        gitClient.resetSoft("HEAD~2", reflogMessage = reflogMessage)
 
         // Recommit with the above commit's message, footers, and author
         val aboveFooters = CommitParsers.getFooters(aboveCommit.fullMessage)
@@ -3502,6 +3518,7 @@ class GitJaspr(
             message = aboveMessage,
             footerLines = aboveFooters,
             author = aboveCommit.author,
+            reflogMessage = reflogMessage,
         )
 
         val survivor = gitClient.log(GitClient.HEAD, 1).single()
