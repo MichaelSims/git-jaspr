@@ -3047,8 +3047,11 @@ class GitJaspr(
      * message. Handles all combinations of detached/attached HEAD and present/absent nav state,
      * including auto-clearing stale state.
      */
-    private fun requireActiveNavSession(targetRef: String? = null): NavState =
-        activeNavSessionOrNull(targetRef)
+    private fun requireActiveNavSession(
+        targetRef: String? = null,
+        reconcileStack: Boolean = true,
+    ): NavState =
+        activeNavSessionOrNull(targetRef, reconcileStack)
             ?: throw IllegalArgumentException(
                 "No navigation session in progress (already at the top of the stack)."
             )
@@ -3062,12 +3065,20 @@ class GitJaspr(
      * the target ref captured in [NavState.targetRef] at session start, so operations like `up` /
      * `top` / `drop` pick up any commits added during the session without the caller having to
      * thread the target ref through.
+     *
+     * Destructive callers (cancel) pass [reconcileStack] `= false`: reconcile may install
+     * commit-ids by running cherry-pick, which can't run if a cherry-pick is already in progress
+     * (precisely the state cancel is trying to clean up).
      */
-    private fun activeNavSessionOrNull(targetRef: String? = null): NavState? {
+    private fun activeNavSessionOrNull(
+        targetRef: String? = null,
+        reconcileStack: Boolean = true,
+    ): NavState? {
         val state = readNavState()
         val detached = gitClient.isHeadDetached()
         return when {
-            detached && state != null -> reconcile(state, targetRef ?: state.targetRef)
+            detached && state != null ->
+                if (reconcileStack) reconcile(state, targetRef ?: state.targetRef) else state
             detached -> throw IllegalArgumentException(DETACHED_HEAD_NO_NAV_STATE)
             else -> {
                 if (state != null) clearNavState()
@@ -3105,7 +3116,7 @@ class GitJaspr(
      *   branch (i.e., commits created or cherry-picked during the session)
      */
     fun cancelNavSession(): List<String> {
-        val state = requireActiveNavSession()
+        val state = requireActiveNavSession(reconcileStack = false)
 
         // Walk from the original branch tip to build the set of SHAs that will remain
         // reachable after we restore the branch. We walk enough commits to cover the stack.

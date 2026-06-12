@@ -54,6 +54,7 @@ private constructor(private val cliGitClient: CliGitClient, private val jGitClie
         committer: Ident?,
         author: Ident?,
         useTheirs: Boolean,
+        reflogMessage: String?,
     ): Commit =
         // Always route cherry-pick through CliGitClient. JGit's CherryPickCommand has two
         // practical bugs that bite our use cases (see JGitClient.cherryPick for the full
@@ -70,17 +71,49 @@ private constructor(private val cliGitClient: CliGitClient, private val jGitClie
         //      bug (1) fires, silently dropping the cherry-pick's intended content.
         // CLI cherry-pick costs ~50-100ms extra per call (process fork). Acceptable for
         // every cherry-pick path in jaspr (unsplit, top, pull, sync, divergence probe).
-        cliGitClient.cherryPick(commit, committer, author, useTheirs)
+        cliGitClient.cherryPick(commit, committer, author, useTheirs, reflogMessage)
 
     override fun tryCherryPick(
         commit: Commit,
         committer: Ident?,
         author: Ident?,
         useTheirs: Boolean,
-    ): CherryPickResult = cliGitClient.tryCherryPick(commit, committer, author, useTheirs)
+        reflogMessage: String?,
+    ): CherryPickResult =
+        cliGitClient.tryCherryPick(commit, committer, author, useTheirs, reflogMessage)
 
     override fun stashPush(message: String, includeUntracked: Boolean): String? =
         cliGitClient.stashPush(message, includeUntracked)
+
+    // Always route HEAD-moving ops through CliGitClient so that GIT_REFLOG_ACTION reaches git.
+    // JGit's API doesn't expose reflog-message setters for reset / checkout / branch, so a
+    // conditional "fast path via JGit when reflogMessage is null" would silently lose the
+    // annotation if a caller ever forgot to set one. Uniform routing is the simpler invariant;
+    // the fork cost (~50-100ms per call) is already paid for cherry-pick and is invisible on
+    // jaspr's interactive paths.
+
+    override fun reset(refName: String, reflogMessage: String?): GitClient = apply {
+        cliGitClient.reset(refName, reflogMessage)
+    }
+
+    override fun resetMixed(refName: String, reflogMessage: String?): GitClient = apply {
+        cliGitClient.resetMixed(refName, reflogMessage)
+    }
+
+    override fun resetSoft(refName: String, reflogMessage: String?): GitClient = apply {
+        cliGitClient.resetSoft(refName, reflogMessage)
+    }
+
+    override fun checkout(refName: String, reflogMessage: String?): GitClient = apply {
+        cliGitClient.checkout(refName, reflogMessage)
+    }
+
+    override fun branch(
+        name: String,
+        startPoint: String,
+        force: Boolean,
+        reflogMessage: String?,
+    ): Commit? = cliGitClient.branch(name, startPoint, force, reflogMessage)
 
     override fun addWorktree(path: File, ref: String?, detached: Boolean) =
         cliGitClient.addWorktree(path, ref, detached)

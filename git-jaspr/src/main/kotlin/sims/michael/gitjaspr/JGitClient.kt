@@ -47,7 +47,10 @@ class JGitClient(
         }
     }
 
-    override fun checkout(refName: String) = apply {
+    override fun checkout(refName: String, reflogMessage: String?) = apply {
+        // reflogMessage is intentionally ignored: JGit's CheckoutCommand has no setter for the
+        // reflog message, and production routes through CliGitClient via OptimizedCliGitClient
+        // whenever annotations are desired. Standalone JGitClient callers get JGit's default.
         logger.trace("checkout {}", refName)
         useGit { git ->
             val refExists = refExists(refName)
@@ -222,7 +225,8 @@ class JGitClient(
             .toMap()
     }
 
-    override fun reset(refName: String) = apply {
+    override fun reset(refName: String, reflogMessage: String?) = apply {
+        // reflogMessage ignored; see [checkout] for rationale.
         logger.trace("reset {}", refName)
         useGit { git ->
             git.reset()
@@ -232,7 +236,8 @@ class JGitClient(
         }
     }
 
-    override fun resetMixed(refName: String) = apply {
+    override fun resetMixed(refName: String, reflogMessage: String?) = apply {
+        // reflogMessage ignored; see [checkout] for rationale.
         logger.trace("resetMixed {}", refName)
         useGit { git ->
             git.reset()
@@ -242,7 +247,8 @@ class JGitClient(
         }
     }
 
-    override fun resetSoft(refName: String) = apply {
+    override fun resetSoft(refName: String, reflogMessage: String?) = apply {
+        // reflogMessage ignored; see [checkout] for rationale.
         logger.trace("resetSoft {}", refName)
         useGit { git ->
             git.reset()
@@ -257,7 +263,13 @@ class JGitClient(
         useGit { git -> git.clean().setCleanDirectories(true).setForce(true).call() }
     }
 
-    override fun branch(name: String, startPoint: String, force: Boolean): Commit? {
+    override fun branch(
+        name: String,
+        startPoint: String,
+        force: Boolean,
+        reflogMessage: String?,
+    ): Commit? {
+        // reflogMessage ignored; see [checkout] for rationale.
         logger.trace("branch {} start {} force {}", name, startPoint, force)
         val old = if (refExists(name)) log(name, maxCount = 1).single() else null
         useGit { git ->
@@ -311,6 +323,7 @@ class JGitClient(
         committer: Ident?,
         author: Ident?,
         amend: Boolean,
+        reflogMessage: String?,
     ): Commit {
         logger.trace("commit {} {} {} {} {}", message, footerLines, committer, author, amend)
 
@@ -321,6 +334,9 @@ class JGitClient(
                 // Allow empty so commits with no tree changes (e.g. --allow-empty) don't get
                 // rejected
                 val commitCommand = git.commit().setAmend(amend).setAllowEmpty(true)
+                if (reflogMessage != null) {
+                    commitCommand.setReflogComment(reflogMessage)
+                }
                 if (message != null || footerLines != null) {
                     val existingFullMessage: String?
                     val existingFooterLines: Map<String, String>?
@@ -378,6 +394,7 @@ class JGitClient(
         committer: Ident?,
         author: Ident?,
         useTheirs: Boolean,
+        reflogMessage: String?,
     ): Commit {
         // Not implemented. JGit's CherryPickCommand has two practical bugs that make it
         // unsuitable for jaspr's cherry-pick paths:
@@ -417,6 +434,7 @@ class JGitClient(
         committer: Ident?,
         author: Ident?,
         useTheirs: Boolean,
+        reflogMessage: String?,
     ): CherryPickResult {
         // Same justification as cherryPick: JGit's CherryPickCommand has bugs that affect jaspr's
         // use cases. Production wiring routes this through CliGitClient via OptimizedCliGitClient.

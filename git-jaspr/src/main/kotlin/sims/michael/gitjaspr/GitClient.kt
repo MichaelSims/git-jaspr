@@ -9,7 +9,7 @@ interface GitClient {
 
     fun init(): GitClient
 
-    fun checkout(refName: String): GitClient
+    fun checkout(refName: String, reflogMessage: String? = null): GitClient
 
     fun clone(
         uri: String,
@@ -59,16 +59,21 @@ interface GitClient {
 
     fun getRemoteBranchesById(remoteName: String = DEFAULT_REMOTE_NAME): Map<String, RemoteBranch>
 
-    fun reset(refName: String): GitClient
+    fun reset(refName: String, reflogMessage: String? = null): GitClient
 
-    fun resetMixed(refName: String): GitClient
+    fun resetMixed(refName: String, reflogMessage: String? = null): GitClient
 
-    fun resetSoft(refName: String): GitClient
+    fun resetSoft(refName: String, reflogMessage: String? = null): GitClient
 
     /** Equivalent to `git clean -d -f` — removes untracked files and directories. */
     fun cleanUntracked(): GitClient
 
-    fun branch(name: String, startPoint: String = "HEAD", force: Boolean = false): Commit?
+    fun branch(
+        name: String,
+        startPoint: String = "HEAD",
+        force: Boolean = false,
+        reflogMessage: String? = null,
+    ): Commit?
 
     fun deleteBranches(names: List<String>, force: Boolean = false): List<String>
 
@@ -82,6 +87,7 @@ interface GitClient {
         committer: Ident? = null,
         author: Ident? = null,
         amend: Boolean = false,
+        reflogMessage: String? = null,
     ): Commit
 
     /**
@@ -94,6 +100,7 @@ interface GitClient {
         committer: Ident? = null,
         author: Ident? = null,
         useTheirs: Boolean = false,
+        reflogMessage: String? = null,
     ): Commit
 
     /**
@@ -112,6 +119,7 @@ interface GitClient {
         committer: Ident? = null,
         author: Ident? = null,
         useTheirs: Boolean = false,
+        reflogMessage: String? = null,
     ): CherryPickResult
 
     /**

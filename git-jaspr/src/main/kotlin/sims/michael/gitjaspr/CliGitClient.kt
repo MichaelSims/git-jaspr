@@ -25,9 +25,9 @@ class CliGitClient(
         return apply { executeCommand(listOf("git", "init", "-b", "main")) }
     }
 
-    override fun checkout(refName: String): GitClient = apply {
+    override fun checkout(refName: String, reflogMessage: String?): GitClient = apply {
         logger.trace("checkout {}", refName)
-        executeCommand(listOf("git", "checkout", refName))
+        executeCommand(listOf("git", "checkout", refName), reflogEnv(reflogMessage))
     }
 
     override fun clone(uri: String, remoteName: String, bare: Boolean): GitClient {
@@ -166,19 +166,31 @@ class CliGitClient(
             .toMap()
     }
 
-    override fun reset(refName: String): GitClient {
+    override fun reset(refName: String, reflogMessage: String?): GitClient {
         logger.trace("reset {}", refName)
-        return apply { executeCommand(listOf("git", "reset", "--hard", refName)) }
+        return apply {
+            executeCommand(
+                listOf("git", "reset", "--hard", refName),
+                reflogEnv(reflogMessage),
+            )
+        }
     }
 
-    override fun resetMixed(refName: String): GitClient {
+    override fun resetMixed(refName: String, reflogMessage: String?): GitClient {
         logger.trace("resetMixed {}", refName)
-        return apply { executeCommand(listOf("git", "reset", refName)) }
+        return apply {
+            executeCommand(listOf("git", "reset", refName), reflogEnv(reflogMessage))
+        }
     }
 
-    override fun resetSoft(refName: String): GitClient {
+    override fun resetSoft(refName: String, reflogMessage: String?): GitClient {
         logger.trace("resetSoft {}", refName)
-        return apply { executeCommand(listOf("git", "reset", "--soft", refName)) }
+        return apply {
+            executeCommand(
+                listOf("git", "reset", "--soft", refName),
+                reflogEnv(reflogMessage),
+            )
+        }
     }
 
     override fun cleanUntracked(): GitClient {
@@ -186,7 +198,12 @@ class CliGitClient(
         return apply { executeCommand(listOf("git", "clean", "-d", "-f")) }
     }
 
-    override fun branch(name: String, startPoint: String, force: Boolean): Commit? {
+    override fun branch(
+        name: String,
+        startPoint: String,
+        force: Boolean,
+        reflogMessage: String?,
+    ): Commit? {
         logger.trace("branch {} start {} force {}", name, startPoint, force)
         val old =
             if (refExists(name)) {
@@ -194,8 +211,25 @@ class CliGitClient(
             } else {
                 null
             }
-        val forceOption = if (force) listOf("-f") else emptyList()
-        executeCommand(listOf("git", "branch") + forceOption + listOf(name, startPoint))
+        if (force) {
+            // `git branch -f` refuses to update a branch that's checked out in any worktree
+            // (including the current one). JGit's branchCreate with setForce(true) updates the
+            // ref directly without that check, and jaspr relied on the permissive behavior --
+            // both endNavSession (updating the source branch from a detached HEAD that may
+            // have wandered) and various test fixtures hit this. Use `git update-ref`, which
+            // bypasses the worktree check, to match the prior semantics.
+            val resolved =
+                executeCommand(listOf("git", "rev-parse", startPoint)).output.string.trim()
+            executeCommand(
+                listOf("git", "update-ref", refsHeads(name), resolved),
+                reflogEnv(reflogMessage),
+            )
+        } else {
+            executeCommand(
+                listOf("git", "branch", name, startPoint),
+                reflogEnv(reflogMessage),
+            )
+        }
         return old
     }
 
@@ -267,6 +301,7 @@ class CliGitClient(
         committer: Ident?,
         author: Ident?,
         amend: Boolean,
+        reflogMessage: String?,
     ): Commit {
         logger.trace("commit {} {} {} {} {}", message, footerLines, committer, author, amend)
 
@@ -305,7 +340,10 @@ class CliGitClient(
                 add("--reset-author")
             }
         }
-        executeCommand(command, getIdentEnvironmentMap(committer, author))
+        executeCommand(
+            command,
+            getIdentEnvironmentMap(committer, author) + reflogEnv(reflogMessage),
+        )
         return log("HEAD", 1).single()
     }
 
@@ -314,9 +352,10 @@ class CliGitClient(
         committer: Ident?,
         author: Ident?,
         useTheirs: Boolean,
+        reflogMessage: String?,
     ): Commit {
         logger.trace("cherryPick {} {} {} useTheirs={}", commit, committer, author, useTheirs)
-        val env = getIdentEnvironmentMap(committer, author)
+        val env = getIdentEnvironmentMap(committer, author) + reflogEnv(reflogMessage)
         val command = buildCherryPickCommand(commit.hash, useTheirs)
         executeCommand(command, env)
         if (author != null && log("HEAD", 1).single().author != author) {
@@ -571,6 +610,9 @@ class CliGitClient(
         return refs.associateWith { ref -> refToFullHash[ref]?.let { hashToCommit[it] } }
     }
 
+    private fun reflogEnv(reflogMessage: String?): Map<String, String> =
+        if (reflogMessage != null) mapOf("GIT_REFLOG_ACTION" to reflogMessage) else emptyMap()
+
     private fun getIdentEnvironmentMap(committer: Ident?, author: Ident?) = buildMap {
         if (committer != null) {
             put("GIT_COMMITTER_NAME", committer.name)
@@ -704,9 +746,10 @@ class CliGitClient(
         committer: Ident?,
         author: Ident?,
         useTheirs: Boolean,
+        reflogMessage: String?,
     ): CherryPickResult {
         logger.trace("tryCherryPick {} {} {} useTheirs={}", commit, committer, author, useTheirs)
-        val env = getIdentEnvironmentMap(committer, author)
+        val env = getIdentEnvironmentMap(committer, author) + reflogEnv(reflogMessage)
         val command = buildCherryPickCommand(commit.hash, useTheirs)
         val result =
             ProcessExecutor()
