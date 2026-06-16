@@ -314,7 +314,11 @@ private constructor(
                 val existingPr = existingPrsByTitle[pr.title]
                 val createdOrUpdatedPr =
                     if (existingPr == null) {
-                        gitHubClient.createPullRequest(newPullRequest)
+                        // Seed pre-existing PRs through the stub's non-validating path so fixtures
+                        // can model PRs whose base branch no longer exists. A real client (external
+                        // variant) goes through createPullRequest, matching prior behavior.
+                        (gitHubClient as? GitHubStubClient)?.seedPullRequest(newPullRequest)
+                            ?: gitHubClient.createPullRequest(newPullRequest)
                     } else {
                         newPullRequest.copy(id = existingPr.id).also {
                             gitHubClient.updatePullRequest(it)

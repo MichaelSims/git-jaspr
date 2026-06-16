@@ -193,6 +193,16 @@ class JGitClient(
         }
     }
 
+    override fun remoteBranchExists(remoteName: String, branchName: String): Boolean {
+        // Like other transport operations (fetch, push, cherryPick), this routes through
+        // CliGitClient in production via OptimizedCliGitClient. JGit's lsRemote would hit the
+        // same SSH-agent transport issues that motivated the CLI routing in the first place.
+        throw UnsupportedOperationException(
+            "remoteBranchExists is not implemented in JGitClient; use CliGitClient or " +
+                "OptimizedCliGitClient instead"
+        )
+    }
+
     override fun getRemoteBranches(remoteName: String): List<RemoteBranch> {
         logger.trace("getRemoteBranches")
         return useGit { git ->

@@ -30,6 +30,9 @@ private constructor(private val cliGitClient: CliGitClient, private val jGitClie
         cliGitClient.fetch(remoteName, prune)
     }
 
+    override fun remoteBranchExists(remoteName: String, branchName: String): Boolean =
+        cliGitClient.remoteBranchExists(remoteName, branchName)
+
     override fun push(refSpecs: List<RefSpec>, remoteName: String) {
         cliGitClient.push(refSpecs, remoteName)
     }

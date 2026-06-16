@@ -124,6 +124,18 @@ class CliGitClient(
             .map { line -> if (line.contains("HEAD detached")) "HEAD" else line }
     }
 
+    override fun remoteBranchExists(remoteName: String, branchName: String): Boolean {
+        logger.trace("remoteBranchExists {} {}", remoteName, branchName)
+        // ls-remote queries the remote directly, so it sees a branch deletion that a stale local
+        // remote-tracking ref would still report as present.
+        return executeCommand(
+                listOf("git", "ls-remote", "--heads", remoteName, "refs/heads/$branchName")
+            )
+            .output
+            .string
+            .isNotBlank()
+    }
+
     override fun getRemoteBranches(remoteName: String): List<RemoteBranch> {
         logger.trace("getRemoteBranches {}", remoteName)
         val command =

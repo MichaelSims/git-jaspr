@@ -53,6 +53,13 @@ interface GitClient {
 
     fun refExists(ref: String): Boolean
 
+    /**
+     * Returns true if [branchName] exists as a branch on the live remote [remoteName]. Unlike
+     * [refExists] and [getRemoteBranches], which consult local remote-tracking refs (and can be
+     * stale after a branch is deleted on the remote), this queries the remote directly.
+     */
+    fun remoteBranchExists(remoteName: String = DEFAULT_REMOTE_NAME, branchName: String): Boolean
+
     fun getBranchNames(): List<String>
 
     fun getRemoteBranches(remoteName: String = DEFAULT_REMOTE_NAME): List<RemoteBranch>

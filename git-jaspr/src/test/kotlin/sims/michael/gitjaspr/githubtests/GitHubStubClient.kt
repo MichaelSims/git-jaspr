@@ -55,6 +55,25 @@ class GitHubStubClient(
 
     override suspend fun createPullRequest(pullRequest: PullRequest): PullRequest {
         logger.trace("createPullRequest {}", pullRequest)
+        // Mimic GitHub's rejection of a PR whose base branch does not exist on the remote
+        // ("Base ref must be a branch"). Checked against the live remote so a stale local
+        // remote-tracking ref doesn't mask a branch that was deleted on the remote. Fixture
+        // seeding bypasses this via seedPullRequest, since it models PRs that already exist.
+        if (!localGit.remoteBranchExists(remoteName, pullRequest.baseRefName)) {
+            throw GitJasprException(
+                "Base ref '${pullRequest.baseRefName}' must be an existing branch on the remote."
+            )
+        }
+        return seedPullRequest(pullRequest)
+    }
+
+    /**
+     * Adds [pullRequest] to the stub's store with a freshly assigned id and number, without the
+     * base-ref validation [createPullRequest] performs. Used by the test harness to seed
+     * pre-existing PRs (including ones whose base branch has since been deleted, which GitHub would
+     * have accepted when they were originally created).
+     */
+    fun seedPullRequest(pullRequest: PullRequest): PullRequest {
         val commitId = getCommitIdFromRemoteRef(pullRequest.headRefName, remoteBranchPrefix)
         return pullRequest
             .copy(
@@ -64,7 +83,7 @@ class GitHubStubClient(
                 commitId = pullRequest.commitId ?: commitId,
             )
             .also { pullRequestToAdd ->
-                logger.trace("createPullRequest {}", pullRequestToAdd)
+                logger.trace("seedPullRequest {}", pullRequestToAdd)
                 synchronized(prs) { prs.add(PullRequestAndState(pullRequestToAdd, open = true)) }
             }
     }
