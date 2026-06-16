@@ -1526,9 +1526,11 @@ class NavCancel :
             }
         }
         if (orphanedShas.isNotEmpty()) {
+            val shortMessages = appWiring.gitClient.getShortMessages(orphanedShas)
             renderer.warn { "The following commits are now orphaned (not on any branch):" }
             for (sha in orphanedShas) {
-                renderer.warn { "  ${entity(sha.take(7))}" }
+                val message = shortMessages[sha]?.let { " ${theme.commitSubject(it)}" }.orEmpty()
+                renderer.warn { "  ${entity(sha.take(7))}$message" }
             }
             renderer.warn {
                 "To recover them, use ${command("git checkout <sha>")} before they are garbage collected."
