@@ -444,7 +444,11 @@ class JGitClient(
         )
     }
 
-    override fun stashPush(message: String, includeUntracked: Boolean): String? {
+    override fun stashPush(
+        refName: String,
+        message: String,
+        includeUntracked: Boolean,
+    ): String? {
         // JGit has StashCreateCommand but uses ResolveMerger internally, which is the same class
         // of working-tree-sensitive bug we work around in cherryPick. Production wiring routes
         // stash operations through CliGitClient via OptimizedCliGitClient.

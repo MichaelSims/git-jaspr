@@ -82,8 +82,8 @@ private constructor(private val cliGitClient: CliGitClient, private val jGitClie
     ): CherryPickResult =
         cliGitClient.tryCherryPick(commit, committer, author, useTheirs, reflogMessage)
 
-    override fun stashPush(message: String, includeUntracked: Boolean): String? =
-        cliGitClient.stashPush(message, includeUntracked)
+    override fun stashPush(refName: String, message: String, includeUntracked: Boolean): String? =
+        cliGitClient.stashPush(refName, message, includeUntracked)
 
     // Always route HEAD-moving ops through CliGitClient so that GIT_REFLOG_ACTION reaches git.
     // JGit's API doesn't expose reflog-message setters for reset / checkout / branch, so a

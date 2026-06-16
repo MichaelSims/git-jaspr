@@ -62,14 +62,15 @@ sealed interface UnsplitOutcome {
      * Replay mode auto-resolved content conflicts using `-X theirs`. [conflictingPaths] lists each
      * file whose content was resolved this way (one entry per path, regardless of how many stages
      * contributed). [backupRef] points at HEAD's value before unsplit ran, suitable for `git reset
-     * --hard <ref>` recovery. [stashSha] is the SHA of the stash entry created from a dirty working
-     * tree, or null when the working tree was clean.
+     * --hard <ref>` recovery. [stashRef] is the `refs/jaspr-backup/` ref under which the dirty
+     * working tree was stashed (recoverable via `git stash apply <ref>`), or null when the working
+     * tree was clean.
      */
     data class RestoredWithAutoResolvedConflicts(
         val restoredCommit: Commit,
         val conflictingPaths: List<String>,
         val backupRef: String,
-        val stashSha: String?,
+        val stashRef: String?,
     ) : UnsplitOutcome
 
     /**
@@ -78,13 +79,14 @@ sealed interface UnsplitOutcome {
      * the working tree contains conflict markers. Split state is intentionally NOT cleared so
      * `jaspr nav cancel` can find the in-flight session and abort cleanly.
      *
-     * [backupRef] points at HEAD's value before unsplit ran. [stashSha] is the SHA of the stash
-     * entry created from a dirty working tree, or null when the working tree was clean.
+     * [backupRef] points at HEAD's value before unsplit ran. [stashRef] is the `refs/jaspr-backup/`
+     * ref under which the dirty working tree was stashed (recoverable via `git stash apply <ref>`),
+     * or null when the working tree was clean.
      */
     data class LeftInProgress(
         val originalCommit: Commit,
         val backupRef: String,
-        val stashSha: String?,
+        val stashRef: String?,
     ) : UnsplitOutcome
 }
 
@@ -3403,7 +3405,10 @@ class GitJaspr(
         val backupRef = "refs/jaspr-backup/pre-unsplit-$timestamp"
         gitClient.updateRef(backupRef, headSha)
 
-        val stashSha = gitClient.stashPush(message = "jaspr unsplit pre-state $timestamp")
+        val stashRef = "refs/jaspr-backup/pre-unsplit-stash-$timestamp"
+        val stashSha =
+            gitClient.stashPush(refName = stashRef, message = "jaspr unsplit pre-state $timestamp")
+        val recoveredStashRef = if (stashSha != null) stashRef else null
 
         val reflogMessage = "jaspr unsplit (replay): ${originalCommit.shortMessage}"
         return when (
@@ -3437,7 +3442,7 @@ class GitJaspr(
                         restoredCommit = attempt.commit,
                         conflictingPaths = conflictingPaths,
                         backupRef = backupRef,
-                        stashSha = stashSha,
+                        stashRef = recoveredStashRef,
                     )
                 }
             }
@@ -3445,7 +3450,7 @@ class GitJaspr(
                 UnsplitOutcome.LeftInProgress(
                     originalCommit = originalCommit,
                     backupRef = backupRef,
-                    stashSha = stashSha,
+                    stashRef = recoveredStashRef,
                 )
         }
     }

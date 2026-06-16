@@ -1,5 +1,6 @@
 package sims.michael.gitjaspr
 
+import java.io.File
 import java.util.MissingFormatArgumentException
 import kotlin.test.assertContains
 import kotlin.test.assertEquals
@@ -13,6 +14,7 @@ import kotlinx.coroutines.delay
 import org.junit.jupiter.api.*
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.slf4j.Logger
+import org.zeroturnaround.exec.ProcessExecutor
 import sims.michael.gitjaspr.GitJaspr.CleanPlan
 import sims.michael.gitjaspr.RemoteRefEncoding.DEFAULT_REMOTE_NAMED_STACK_BRANCH_PREFIX
 import sims.michael.gitjaspr.RemoteRefEncoding.RemoteNamedStackRef
@@ -35,6 +37,17 @@ import sims.michael.gitjaspr.testing.Push
 import sims.michael.gitjaspr.testing.Stack
 import sims.michael.gitjaspr.testing.Status
 import sims.michael.gitjaspr.testing.Sync
+
+/** Runs a raw git command in [repo] and returns its trimmed stdout. For test-only inspection. */
+private fun runGit(repo: File, vararg args: String): String =
+    ProcessExecutor()
+        .directory(repo)
+        .command(listOf("git", *args))
+        .readOutput(true)
+        .execute()
+        .output
+        .string
+        .trim()
 
 interface GitJasprTest {
 
@@ -1698,7 +1711,7 @@ interface GitJasprTest {
 
             // Working tree was clean before unsplit (the precursor staged and committed
             // everything), so replay didn't create a stash.
-            assertNull(outcome.stashSha)
+            assertNull(outcome.stashRef)
 
             // Theirs won: b.txt now has B's content, not "conflicting content".
             assertEquals("Title: B\n", localRepo.resolve("b.txt").readText())
@@ -1835,10 +1848,21 @@ interface GitJasprTest {
             assertEquals(intermediate.hash, localGit.log(GitClient.HEAD, 2)[1].hash)
             assertEquals(head.hash, outcome.restoredCommit.hash)
 
-            // The dirty pre-replay working tree should have been stashed for recovery.
-            assertTrue(
+            // The dirty pre-replay working tree was stashed for recovery, but the stash was
+            // relocated off the stash stack into refs/jaspr-backup/, so refs/stash stays clean
+            // (operators who watch git stash list see nothing).
+            assertFalse(
                 localGit.refExists("refs/stash"),
-                "expected a stash entry preserving the pre-replay working tree",
+                "refs/stash should be empty; the stash belongs under refs/jaspr-backup/",
+            )
+            val relocatedStashRefs =
+                runGit(localRepo, "for-each-ref", "--format=%(refname)", "refs/jaspr-backup/")
+                    .lines()
+                    .filter { it.contains("pre-unsplit-stash-") }
+            assertEquals(
+                1,
+                relocatedStashRefs.size,
+                "expected exactly one relocated pre-unsplit stash ref, got: $relocatedStashRefs",
             )
 
             // b.txt must be tracked in HEAD's tree (cherry-pick added it as part of B's
@@ -1847,6 +1871,68 @@ interface GitJasprTest {
             localGit.cleanUntracked()
             assertTrue(localRepo.resolve("b.txt").exists(), "b.txt must be tracked in HEAD")
             assertTrue(localRepo.resolve("refactor.txt").exists())
+        }
+    }
+
+    @Nav
+    @Test
+    fun `unsplit replay stash is recoverable from the backup namespace`() {
+        // The disaster-recovery contract (ADR-0005): after a replay that stashed a dirty
+        // working tree, the operator rewinds to the pre-unsplit HEAD backup ref and applies
+        // the relocated stash ref. Both refs live under refs/jaspr-backup/ and share the
+        // <ts> suffix. git stash apply works on the relocated commit even though it's no
+        // longer on the stash stack.
+        withTestSetup(useFakeRemote) {
+            createCommitsFrom(
+                testCase {
+                    repository {
+                        commit { title = "A" }
+                        commit { title = "B" }
+                        commit {
+                            title = "C"
+                            localRefs += "development"
+                        }
+                    }
+                    checkout = "development"
+                }
+            )
+
+            // Nav down 1: HEAD at B.
+            gitJaspr.navigateDown(DEFAULT_TARGET_REF, 1)
+
+            // Split B: HEAD at A, b.txt (B's content) sitting in the workdir.
+            gitJaspr.split()
+
+            // Commit a precursor touching a different file, then leave an extra untracked
+            // file behind so replay has identifiable dirty content to stash.
+            localRepo.resolve("refactor.txt").writeText("refactor\n")
+            localGit.add("refactor.txt")
+            localGit.commit(
+                message = "precursor",
+                footerLines = mapOf("commit-id" to "precursor"),
+            )
+            localRepo.resolve("scratch.txt").writeText("scratch content\n")
+
+            assertIs<UnsplitOutcome.Restored>(gitJaspr.unsplit())
+
+            // The stash was relocated off the stash stack; scratch.txt is gone from the
+            // working tree (it went into the stash, not into B's cherry-picked tree).
+            assertFalse(localGit.refExists("refs/stash"))
+            assertFalse(localRepo.resolve("scratch.txt").exists())
+
+            // Discover the paired backup refs created by the replay.
+            val backupRefs =
+                runGit(localRepo, "for-each-ref", "--format=%(refname)", "refs/jaspr-backup/")
+                    .lines()
+            val stashRef = backupRefs.single { it.contains("pre-unsplit-stash-") }
+            val headRef = backupRefs.single { it.contains("pre-unsplit-") && "stash" !in it }
+
+            // Recover: rewind to the pre-unsplit HEAD, then apply the relocated stash.
+            localGit.reset(headRef)
+            runGit(localRepo, "stash", "apply", stashRef)
+
+            // The stashed dirty content is restored.
+            assertEquals("scratch content\n", localRepo.resolve("scratch.txt").readText())
         }
     }
 

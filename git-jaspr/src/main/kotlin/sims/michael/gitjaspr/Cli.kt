@@ -1621,13 +1621,13 @@ class Unsplit :
                         appendLine()
                         appendLine("To undo:")
                         appendLine(command("git reset --hard ${outcome.backupRef}"))
-                        if (outcome.stashSha != null) {
+                        if (outcome.stashRef != null) {
                             appendLine()
                             appendLine(
-                                "Your pre-unsplit working tree was stashed. " +
-                                    "Find it in ${command("git stash list")} " +
-                                    "(message prefix: jaspr unsplit pre-state)."
+                                "Your pre-unsplit working tree was saved at " +
+                                    "${entity(outcome.stashRef)}. Apply it with:"
                             )
+                            appendLine(command("git stash apply ${outcome.stashRef}"))
                         }
                     }
                 }
@@ -1658,12 +1658,12 @@ class Unsplit :
                         appendLine(
                             "Your pre-unsplit HEAD is saved at ${entity(outcome.backupRef)}."
                         )
-                        if (outcome.stashSha != null) {
+                        if (outcome.stashRef != null) {
                             appendLine(
-                                "Your pre-unsplit working tree was stashed. " +
-                                    "Find it in ${command("git stash list")} " +
-                                    "(message prefix: jaspr unsplit pre-state)."
+                                "Your pre-unsplit working tree was saved at " +
+                                    "${entity(outcome.stashRef)}. Apply it with:"
                             )
+                            appendLine(command("git stash apply ${outcome.stashRef}"))
                         }
                     }
                 }

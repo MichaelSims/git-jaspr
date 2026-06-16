@@ -117,9 +117,16 @@ producing a fresh one.
 
 1. Save current HEAD as
    `refs/jaspr-backup/pre-unsplit-<unix-timestamp>`.
-2. If the working tree is dirty,
-   `git stash push --include-untracked -m "jaspr unsplit pre-state <ts>"`.
-   The stash exists for the operator's recovery and is not auto-popped.
+2. If the working tree is dirty, stash it and relocate the stash off
+   the stash stack: `git stash push --include-untracked`, then
+   `git update-ref refs/jaspr-backup/pre-unsplit-stash-<ts> <sha>`
+   followed by `git stash drop`. The stash-shaped commit lives under
+   the `refs/jaspr-backup/` namespace, not `refs/stash`, so it does
+   not clutter `git stash list` for operators who treat a non-empty
+   stash list as a TODO signal. It exists for the operator's recovery
+   and is not auto-applied. (`update-ref` runs before `drop` so a
+   crash between them leaves a recoverable duplicate rather than
+   losing the stash.)
 3. `git cherry-pick -X theirs <unsplitSha>` onto current HEAD. The
    `-X theirs` strategy resolves any content conflict in favor of the
    original commit. The resulting commit reuses the original's message
@@ -162,12 +169,16 @@ pre-unsplit HEAD. Operators recover via:
   pre-unsplit state.
 - **Replay mode rollback**:
   `git reset --hard refs/jaspr-backup/pre-unsplit-<ts>` to rewind HEAD
-  and the working tree. If a stash entry was created (the working tree
-  was dirty before replay), follow with `git stash pop` to restore the
-  dirty working-tree content. The stash is identified by its message
-  prefix `jaspr unsplit pre-state`.
+  and the working tree. If a stash was created (the working tree was
+  dirty before replay), follow with
+  `git stash apply refs/jaspr-backup/pre-unsplit-stash-<ts>` to restore
+  the dirty working-tree content. `git stash apply` works on any
+  stash-shaped commit, not just entries on the stash stack. The paired
+  refs share the `<ts>` suffix, so the pre-unsplit-stash ref sits next
+  to its pre-unsplit HEAD ref under `git for-each-ref
+  refs/jaspr-backup/`.
 
-Recovery is operator-initiated. `unsplit` never auto-pops the stash,
+Recovery is operator-initiated. `unsplit` never auto-applies the stash,
 never auto-rewinds, and never reads the backup ref programmatically.
 The point of the contract is that the operator looking at the result
 and saying "that's not what I wanted" has a documented one-or-two
@@ -189,7 +200,8 @@ Literal text is implementation detail.
 - **Replay mode with auto-resolved conflicts**: a multi-line warning
   that includes the count and list of files whose content conflicts
   were resolved by taking the original's content, the backup-ref name,
-  and a pointer to `git stash list` if a stash was created.
+  and (if a stash was created) the pre-unsplit-stash ref name plus the
+  `git stash apply <ref>` command to restore it.
 - **Replay mode with path-level conflicts**: the standard "cherry-pick
   is in progress, resolve and continue or run `jaspr nav cancel`"
   message. This is the only outcome that leaves an in-progress
@@ -246,12 +258,12 @@ Picking the operator's side (the precursor) on conflict. Rejected:
 contrary to the operator's stated intent. The original commit is what
 they meant to land; the precursor is scaffolding around it.
 
-### Auto-pop the stash in replay mode
+### Auto-apply the stash in replay mode
 
-After a successful replay, automatically `git stash pop` the captured
+After a successful replay, automatically `git stash apply` the captured
 pre-state. Rejected: the working tree after a successful replay matches
 the original commit's tree, which is already what the operator wants.
-Auto-popping the stash would reintroduce the pre-replay dirty content
+Auto-applying the stash would reintroduce the pre-replay dirty content
 on top of that tree, producing a workspace that holds two overlapping
 snapshots of the original's content with no clear merge. Leaving the
 stash for manual recovery preserves the operator's control.
@@ -269,11 +281,13 @@ surprising than a backup having vanished. Retention is open across the
 - `unsplit`'s contract widens: it now supports both the review-and-
   amend workflow (fold) and the extract-a-precursor workflow (replay),
   with the mode chosen non-interactively from HEAD position.
-- `refs/jaspr-backup/` accrues `pre-unsplit-*` entries alongside
-  `pre-pull-*`. No retention policy in either case.
-- Replay mode adds a stash entry when the working tree is dirty. The
-  entry uses a recognizable message prefix so the operator can identify
-  it in `git stash list`.
+- `refs/jaspr-backup/` accrues `pre-unsplit-*` entries (and, when the
+  working tree was dirty, paired `pre-unsplit-stash-*` entries)
+  alongside `pre-pull-*`. No retention policy in any case.
+- Replay mode captures a stash-shaped commit under
+  `refs/jaspr-backup/pre-unsplit-stash-<ts>` when the working tree is
+  dirty, keeping it off `refs/stash` so it never appears in
+  `git stash list`.
 - `jaspr nav cancel` gains a small in-progress-cherry-pick cleanup
   step; its visible behavior is unchanged for callers who don't have a
   cherry-pick in flight.

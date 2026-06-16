@@ -123,15 +123,18 @@ interface GitClient {
     ): CherryPickResult
 
     /**
-     * Pushes the current working tree (modified tracked files and, when [includeUntracked] is true,
-     * untracked files) onto the stash stack with [message] as the stash entry's message. Returns
-     * the stash commit's SHA when a stash was created, or null when there was nothing to stash.
+     * Captures the current working tree (modified tracked files and, when [includeUntracked] is
+     * true, untracked files) as a stash-shaped commit, stores it under [refName] in the ref
+     * namespace, removes it from the stash stack, and returns the commit's SHA. Returns null
+     * (without creating [refName]) when there is nothing to stash.
      *
      * Used by `jaspr unsplit`'s replay path to set aside leftover working-tree content before
      * cherry-picking the restored commit. The stash is for the operator's manual recovery and is
-     * not auto-popped.
+     * not auto-popped. Storing it outside `refs/stash` keeps `git stash list` clean (operators who
+     * watch the stash stack don't see jaspr's bookkeeping); recovery via `git stash apply <ref>`
+     * still works on any stash-shaped commit.
      */
-    fun stashPush(message: String, includeUntracked: Boolean = true): String?
+    fun stashPush(refName: String, message: String, includeUntracked: Boolean = true): String?
 
     fun push(refSpecs: List<RefSpec>, remoteName: String = DEFAULT_REMOTE_NAME)
 

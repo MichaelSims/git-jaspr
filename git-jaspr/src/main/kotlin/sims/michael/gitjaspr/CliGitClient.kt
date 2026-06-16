@@ -796,8 +796,17 @@ class CliGitClient(
         }
     }
 
-    override fun stashPush(message: String, includeUntracked: Boolean): String? {
-        logger.trace("stashPush message={} includeUntracked={}", message, includeUntracked)
+    override fun stashPush(
+        refName: String,
+        message: String,
+        includeUntracked: Boolean,
+    ): String? {
+        logger.trace(
+            "stashPush refName={} message={} includeUntracked={}",
+            refName,
+            message,
+            includeUntracked,
+        )
         val command = buildList {
             add("git")
             add("stash")
@@ -813,7 +822,13 @@ class CliGitClient(
         // stash stack to avoid races with concurrent stash use.
         val output = result.output.string
         if ("No local changes to save" in output) return null
-        return executeCommand(listOf("git", "rev-parse", "stash@{0}")).output.string.trim()
+        val sha = executeCommand(listOf("git", "rev-parse", "stash@{0}")).output.string.trim()
+        // Relocate the stash-shaped commit off the stash stack and into the caller's namespace.
+        // update-ref runs before drop so a crash between the two leaves a recoverable duplicate
+        // (the operator sees the entry in both places) rather than losing the commit entirely.
+        executeCommand(listOf("git", "update-ref", refName, sha))
+        executeCommand(listOf("git", "stash", "drop"))
+        return sha
     }
 
     override fun getTree(ref: String): String {
