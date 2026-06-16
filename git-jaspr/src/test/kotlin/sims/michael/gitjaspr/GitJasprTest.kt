@@ -2862,6 +2862,81 @@ interface GitJasprTest {
 
     @Push
     @Test
+    fun `push rolls back and leaves nothing when the target is gone from the remote`() {
+        withTestSetup(useFakeRemote) {
+            createCommitsFrom(
+                testCase {
+                    repository {
+                        commit { title = "A" }
+                        commit {
+                            title = "B"
+                            localRefs += "development"
+                        }
+                    }
+                    checkout = "development"
+                }
+            )
+
+            // Fabricate a stale remote-tracking ref for a branch that does not exist on the
+            // live remote, pointed at main so the stack (everything above it) is non-empty.
+            // This is the state git leaves behind when a PR base branch is merged and deleted
+            // but the local clone hasn't pruned: origin/<target> resolves locally, yet
+            // ls-remote shows the branch is gone. The push proceeds (no pre-flight gate),
+            // PR creation fails because the base is missing, and the catch-probe rolls the
+            // pushed refs back.
+            runGit(
+                localRepo,
+                "update-ref",
+                "refs/remotes/$remoteName/feature-target",
+                "$remoteName/main",
+            )
+            assertTrue(
+                localGit.refExists("$remoteName/feature-target"),
+                "fixture: the stale local tracking ref should be present",
+            )
+
+            val refsBefore = runGit(localRepo, "ls-remote", remoteName)
+
+            val exception =
+                assertFailsWith<GitJasprException> {
+                    gitJaspr.push(
+                        refSpec = RefSpec(DEFAULT_LOCAL_OBJECT, "feature-target"),
+                        stackName = "test-stack",
+                    )
+                }
+            assertContains(exception.message.orEmpty(), "feature-target")
+
+            // The push was rolled back: the remote's ref list is byte-for-byte unchanged.
+            assertEquals(refsBefore, runGit(localRepo, "ls-remote", remoteName))
+        }
+    }
+
+    @Test
+    fun `getCommitStack surfaces a clean error for a missing target ref`() {
+        withTestSetup(useFakeRemote) {
+            createCommitsFrom(
+                testCase {
+                    repository {
+                        commit {
+                            title = "A"
+                            localRefs += "development"
+                        }
+                    }
+                    checkout = "development"
+                }
+            )
+
+            // A target with no remote-tracking ref must surface a GitJasprException (clean,
+            // expected error) rather than a raw IllegalArgumentException, which the CLI would
+            // render as the "you've likely encountered a bug" banner.
+            assertFailsWith<GitJasprException> {
+                localGit.getCommitStack(remoteName, GitClient.HEAD, "no-such-target")
+            }
+        }
+    }
+
+    @Push
+    @Test
     fun `push succeeds with untracked files in working directory`() {
         withTestSetup(useFakeRemote) {
             createCommitsFrom(

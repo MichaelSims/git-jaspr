@@ -165,9 +165,12 @@ class JGitClient(
         return useGit { git ->
             val r = git.repository
             val trackingBranch =
-                requireNotNull(r.resolve("$remoteName/$targetRefName")) {
-                    "$targetRefName does not exist in the remote"
-                }
+                r.resolve("$remoteName/$targetRefName")
+                    ?: throw GitJasprException(
+                        "Target branch '$targetRefName' was not found at " +
+                            "'$remoteName/$targetRefName'. It may have been merged and deleted; " +
+                            "run `git fetch --prune` to update your local view."
+                    )
             val revCommits =
                 git.log().addRange(trackingBranch, r.resolve(localObjectName)).call().toList()
             val mergeCommits = revCommits.filter { it.parentCount > 1 }

@@ -1159,6 +1159,10 @@ class GitJaspr(
             outOfDateBranches.map(RefSpec::forcePush) +
                 outOfDateNamedStackBranch.map(RefSpec::forcePush) +
                 revisionHistoryRefs
+        // Snapshot the pre-push remote values of the refs we're about to write, so we can undo
+        // this push if PR creation turns out to be impossible (see the catch around the
+        // PR-creation loop below).
+        val priorRemoteShaByName = remoteBranches.associate { it.name to it.commit.hash }
         gitClient.push(refSpecs, config.remoteName)
         renderer.info {
             "Pushed %s commit %s, %s named stack %s, and %s history %s"
@@ -1210,14 +1214,29 @@ class GitJaspr(
                 .updateDescriptionsWithStackInfo(stack)
                 .filter { pr -> existingPrsByCommitId[pr.commitId] != pr }
 
-        for (pr in prsToMutate) {
-            if (pr.id == null) {
-                // create the pull request
-                ghClient.createPullRequest(pr)
-            } else {
-                // update the pull request
-                ghClient.updatePullRequest(pr)
+        try {
+            for (pr in prsToMutate) {
+                if (pr.id == null) {
+                    // create the pull request
+                    ghClient.createPullRequest(pr)
+                } else {
+                    // update the pull request
+                    ghClient.updatePullRequest(pr)
+                }
             }
+        } catch (e: GitJasprException) {
+            // PR creation/update failed. If the target branch is gone from the live remote, the
+            // refs we just pushed cannot anchor a pull request (the first commit's PR is based on
+            // the target, so this fails before any PR is created). Undo this push so the failed
+            // attempt leaves nothing behind, and surface a clean, actionable error. Any other
+            // failure is rethrown untouched: the pushed refs are valid and a re-run reconciles.
+            if (gitClient.remoteBranchExists(config.remoteName, targetRef)) throw e
+            rollBackPush(refSpecs, priorRemoteShaByName)
+            throw GitJasprException(
+                "Target branch '$targetRef' does not exist on remote '${config.remoteName}'. " +
+                    "It may have been merged and deleted. Rolled back the refs this push " +
+                    "created; push to an existing target (for example the default branch)."
+            )
         }
         renderer.info { "Updated ${prsToMutate.size} pull ${requestOrRequests(prsToMutate.size)}" }
 
@@ -1237,6 +1256,23 @@ class GitJaspr(
         }
 
         print(getStatusString(refSpec, remoteBranchesAfterPush, theme))
+    }
+
+    /**
+     * Undo a push by restoring each pushed ref to the value it had on the remote beforehand: refs
+     * that existed are reset to their prior SHA, and refs this push created are deleted.
+     * [priorRemoteShaByName] is the pre-push snapshot keyed by remote ref name.
+     */
+    private fun rollBackPush(
+        pushedRefSpecs: List<RefSpec>,
+        priorRemoteShaByName: Map<String, String>,
+    ) {
+        val rollbackRefSpecs =
+            pushedRefSpecs.map(RefSpec::remoteRef).distinct().map { name ->
+                priorRemoteShaByName[name]?.let { sha -> RefSpec(sha, name).forcePush() }
+                    ?: RefSpec(FORCE_PUSH_PREFIX, name)
+            }
+        gitClient.push(rollbackRefSpecs, config.remoteName)
     }
 
     suspend fun merge(refSpec: RefSpec, count: Int? = null) {
