@@ -1,6 +1,7 @@
 package sims.michael.gitjaspr
 
 import java.io.File
+import java.util.concurrent.TimeUnit
 import org.eclipse.jgit.lib.Constants
 import org.slf4j.LoggerFactory
 import org.zeroturnaround.exec.ProcessExecutor
@@ -441,6 +442,9 @@ class CliGitClient(
                         forceWithLeaseArgs +
                         filteredRefSpecs.map(RefSpec::toString)
                 )
+            } catch (e: GitJasprException) {
+                // Auth failures bubble up as GitJasprExceptions so let's just rethrow those
+                throw e
             } catch (e: Exception) {
                 throw PushFailedException("Push with lease failed: ${e.message}", e)
             }
@@ -936,24 +940,125 @@ class CliGitClient(
         command: List<String>,
         environment: Map<String, String> = emptyMap(),
     ): ProcessResult {
-        return ProcessExecutor()
-            .directory(workingDirectory)
-            .environment(environment)
-            .command(command)
-            .destroyOnExit()
-            .readOutput(true)
-            .apply { if (showStderr) redirectError(System.err) }
-            .execute()
-            .also(ProcessResult::requireZeroExitValue)
+        val result =
+            ProcessExecutor()
+                .directory(workingDirectory)
+                // GIT_TERMINAL_PROMPT=0 makes git fail fast with a parseable error instead of
+                // dropping the user into an interactive Username/Password prompt mid-command. jaspr
+                // isn't an interactive git shell, and a half-rendered credential prompt is worse
+                // than an immediate failure we can explain.
+                .environment(environment + ("GIT_TERMINAL_PROMPT" to "0"))
+                .command(command)
+                .destroyOnExit()
+                .readOutput(true)
+                .apply { if (showStderr) redirectError(System.err) }
+                .execute()
+        val exitValue = result.exitValue
+        if (exitValue != 0) {
+            val output = result.output.string
+            val authFailureMessage = gitAuthFailureMessageOrNull(output, ::isGhAuthenticated)
+            if (authFailureMessage != null) {
+                // Surface the authentication failure as a GitJasprException for proper handling
+                throw GitJasprException(authFailureMessage)
+            } else {
+                throw IllegalArgumentException("Command returned $exitValue: $output")
+            }
+        }
+        return result
     }
+
+    /**
+     * Probes whether the GitHub CLI (`gh`) is installed and logged in, so HTTPS auth-failure
+     * guidance can recommend `gh auth setup-git` specifically. Returns false (quietly) when `gh` is
+     * missing or not authenticated; this runs only on the rare auth-failure path.
+     */
+    private fun isGhAuthenticated(): Boolean =
+        try {
+            ProcessExecutor()
+                .directory(workingDirectory)
+                .command("gh", "auth", "status")
+                .destroyOnExit()
+                .readOutput(true)
+                .timeout(GH_PROBE_TIMEOUT_SECONDS, TimeUnit.SECONDS)
+                .execute()
+                .exitValue == 0
+        } catch (e: Exception) {
+            logger.debug("gh auth status probe failed; omitting gh-specific guidance", e)
+            false
+        }
 
     companion object {
         const val GIT_FORMAT_SEPARATOR = "»¦«"
         const val GIT_LOG_TRAILER_SEPARATOR = "{^}"
+        private const val GH_PROBE_TIMEOUT_SECONDS = 5L
     }
 }
 
-private fun ProcessResult.requireZeroExitValue() {
-    val exitValue = exitValue
-    require(exitValue == 0) { "Command returned $exitValue: ${output.string}" }
+private val AUTH_FAILURE_SIGNATURES =
+    listOf(
+        "Authentication failed",
+        "Invalid username or token",
+        "Password authentication is not supported",
+        "could not read Username",
+        "could not read Password",
+        "terminal prompts disabled",
+        "Permission denied (publickey)",
+    )
+
+private val SSH_REMOTE_SIGNATURES = listOf("git@", "ssh://", "Permission denied (publickey)")
+
+/**
+ * If [gitOutput] indicates the git CLI failed to authenticate to a remote, returns an actionable
+ * error message explaining how to fix it; otherwise returns null so the caller can fall back to its
+ * generic failure handling.
+ *
+ * git-jaspr shells out to the git CLI, so pushes and fetches authenticate with the user's git
+ * transport credentials, not the GitHub API token in `~/.jaspr.properties`. A new user who has set
+ * up git via GitHub Desktop or a browser often has no credential helper configured, so git falls
+ * back to the (unsupported by GitHub) username/password prompt and fails. We want to explain that
+ * rather than render the generic "you've likely encountered a bug" banner.
+ *
+ * @param ghIsAuthenticated probe for whether the GitHub CLI is installed and logged in; when it
+ *   returns true the HTTPS guidance recommends `gh auth setup-git` directly.
+ */
+fun gitAuthFailureMessageOrNull(
+    gitOutput: String,
+    ghIsAuthenticated: () -> Boolean = { false },
+): String? {
+    val isAuthFailure = AUTH_FAILURE_SIGNATURES.any { signature ->
+        gitOutput.contains(signature, ignoreCase = true)
+    }
+    if (!isAuthFailure) return null
+
+    val isSsh = SSH_REMOTE_SIGNATURES.any { signature ->
+        gitOutput.contains(signature, ignoreCase = true)
+    }
+
+    return buildList {
+            add("Authentication to the git remote failed.")
+            add("")
+            add(
+                "jaspr runs the git CLI under the hood, so pushes and fetches use your git " +
+                    "credentials, not the GitHub token in ~/$CONFIG_FILE_NAME (that token is only " +
+                    "used for GitHub's API). If `git push` fails the same way, fixing git fixes jaspr."
+            )
+            add("")
+            if (isSsh) {
+                add("Your SSH key isn't authorized for this remote. Add a key to your GitHub")
+                add("account, load it into ssh-agent, then retry:")
+                add("  https://docs.github.com/authentication/connecting-to-github-with-ssh")
+            } else {
+                add("Your git CLI isn't set up to authenticate over HTTPS. Fix it with one of:")
+                if (ghIsAuthenticated()) {
+                    add("  • You're logged in to the GitHub CLI; point git at those credentials:")
+                    add("      gh auth setup-git")
+                } else {
+                    add("  • Log in with the GitHub CLI and use it as your credential helper:")
+                    add("      gh auth login && gh auth setup-git")
+                }
+                add("  • Or switch the remote to SSH:")
+                add("      git remote set-url <remote> git@github.com:<owner>/<repo>.git")
+            }
+        }
+        .joinToString("\n")
 }
