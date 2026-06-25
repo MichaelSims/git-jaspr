@@ -500,13 +500,13 @@ interface GitClientTest {
             // always begins with the abbreviated one, so we compare via prefix matching.
             val abcMergeBase = git.mergeBase(a.hash, c.hash)
             assertNotNull(abcMergeBase)
-            assertTrue(abcMergeBase!!.startsWith(a.hash))
+            assertTrue(abcMergeBase.startsWith(a.hash))
             val cabMergeBase = git.mergeBase(c.hash, a.hash)
             assertNotNull(cabMergeBase)
-            assertTrue(cabMergeBase!!.startsWith(a.hash))
+            assertTrue(cabMergeBase.startsWith(a.hash))
             val ccMergeBase = git.mergeBase(c.hash, c.hash)
             assertNotNull(ccMergeBase)
-            assertTrue(ccMergeBase!!.startsWith(c.hash))
+            assertTrue(ccMergeBase.startsWith(c.hash))
         }
     }
 
