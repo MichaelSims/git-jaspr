@@ -134,7 +134,7 @@ class DivergenceClassifier(jasprDir: File, private val gitClient: GitClient) : A
     private fun simulateCherryPick(aSha: String, bSha: String): Result {
         acquireLock()
         ensureWorktree()
-        val worktreeClient = OptimizedCliGitClient(worktreeDir)
+        val worktreeClient = DefaultGitClient(worktreeDir)
         try {
             worktreeClient.reset("$aSha^")
         } catch (e: Exception) {

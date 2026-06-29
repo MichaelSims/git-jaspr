@@ -1442,7 +1442,7 @@ class GitJaspr(
 
         val worktreeDir = getAutoMergeWorktreeDir()
         val lockFile = acquireAutoMergeLock()
-        val worktreeGit = OptimizedCliGitClient(worktreeDir, config.remoteBranchPrefix)
+        val worktreeGit = DefaultGitClient(worktreeDir, config.remoteBranchPrefix)
 
         try {
             createAutoMergeWorktree(worktreeDir, currentRef)
@@ -3685,7 +3685,7 @@ class GitJaspr(
                 // Create detached worktree
                 worktreeDir.deleteRecursively()
                 gitClient.addWorktree(worktreeDir, detached = true)
-                val worktreeClient = OptimizedCliGitClient(worktreeDir, config.remoteBranchPrefix)
+                val worktreeClient = DefaultGitClient(worktreeDir, config.remoteBranchPrefix)
 
                 for ((branch, commits) in otherBranches) {
                     // Check if any of this branch's commits are in a skipped set

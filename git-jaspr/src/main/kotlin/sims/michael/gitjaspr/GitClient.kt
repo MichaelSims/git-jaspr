@@ -35,8 +35,7 @@ interface GitClient {
      *
      * Behaviorally equivalent to `refs.associateWith { logRange(target, it).mapNotNull(Commit::id)
      * }`, but allows implementations to share repo state across the N walks and skip per-commit
-     * work beyond trailer extraction. The default implementation delegates to [logRange];
-     * [JGitClient] overrides for performance.
+     * work beyond trailer extraction.
      */
     fun getCommitIdsInRange(target: String, refs: List<String>): Map<String, List<String>> =
         refs.associateWith { ref ->
@@ -222,8 +221,7 @@ interface GitClient {
      * Use this to probe whether a merge / cherry-pick can be applied cleanly before attempting it
      * for real.
      *
-     * Requires git 2.38+. Not implemented for [JGitClient]; production wiring routes this through
-     * [CliGitClient].
+     * Requires git 2.38+.
      */
     fun mergeTreeWriteTree(
         base: String,
@@ -257,16 +255,12 @@ interface GitClient {
      * Adds a linked worktree at [path]. Equivalent to `git worktree add [--detach] <path> [<ref>]`.
      * When [ref] is null, the worktree points at the current HEAD. When [detached] is true
      * (default), the worktree is in detached-HEAD state; otherwise a new branch is created.
-     *
-     * Not implemented for [JGitClient]; production wiring routes this through [CliGitClient].
      */
     fun addWorktree(path: File, ref: String? = null, detached: Boolean = true)
 
     /**
      * Removes the linked worktree at [path]. Equivalent to `git worktree remove [--force] <path>`.
      * Throws on failure (e.g., the worktree has uncommitted changes and [force] is false).
-     *
-     * Not implemented for [JGitClient]; production wiring routes this through [CliGitClient].
      */
     fun removeWorktree(path: File, force: Boolean = false)
 
@@ -292,8 +286,6 @@ interface GitClient {
      * or null if a patch-id can't be computed (e.g., the commit doesn't exist, the diff is empty,
      * or the underlying tool fails). Two commits with the same patch-id have equivalent diffs
      * ignoring line numbers and whitespace; useful for detecting cherry-picks and rebases.
-     *
-     * Not implemented for [JGitClient]; production wiring routes this through [CliGitClient].
      */
     fun patchId(sha: String): String?
 

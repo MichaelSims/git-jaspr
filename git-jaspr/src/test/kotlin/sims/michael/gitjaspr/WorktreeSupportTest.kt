@@ -229,46 +229,6 @@ class WorktreeSupportTest {
     }
 
     @Test
-    fun `JGitClient handles branch operations in worktree`() {
-        val tempDir = createTempDir()
-        try {
-            // Create the main repository
-            val mainRepoDir = tempDir.resolve("main-repo")
-            val mainGit = JGitClient(mainRepoDir).init()
-            mainRepoDir.resolve("README.txt").writeText("Test repo")
-            mainGit.add("README.txt").commit("Initial commit", committer = DEFAULT_COMMITTER)
-
-            // Create a worktree
-            val worktreeDir = tempDir.resolve("worktree")
-            ProcessExecutor()
-                .directory(mainRepoDir)
-                .command(
-                    listOf(
-                        "git",
-                        "worktree",
-                        "add",
-                        worktreeDir.absolutePath,
-                        "-b",
-                        "worktree-branch",
-                    )
-                )
-                .destroyOnExit()
-                .execute()
-
-            val worktreeGit = JGitClient(worktreeDir)
-
-            // Create a new branch from the worktree
-            worktreeGit.branch("feature-branch")
-            assertTrue(worktreeGit.getBranchNames().contains("feature-branch"))
-
-            // Branch is visible from the main repo (shared repository)
-            assertTrue(mainGit.getBranchNames().contains("feature-branch"))
-        } finally {
-            tempDir.deleteRecursively()
-        }
-    }
-
-    @Test
     fun `JGitClient refExists works in worktree`() {
         val tempDir = createTempDir()
         try {

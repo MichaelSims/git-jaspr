@@ -225,8 +225,8 @@ class NativeImageMetadataTest {
 
     @Test
     fun `exercise cherry-pick`() {
-        // Drives cherry-pick through OptimizedCliGitClient, which routes to CliGitClient
-        // (CLI git rather than JGit; see OptimizedCliGitClient.cherryPick for the
+        // Drives cherry-pick through DefaultGitClient, which routes to CliGitClient
+        // (CLI git rather than JGit; see DefaultGitClient.cherryPick for the
         // rationale). Captures the native-image reflection metadata for the subprocess
         // path. JGit's CommitConfig$CleanupMode entry in reflect-config.json is retained
         // defensively in case other JGit operations (commit, merge) load CommitConfig.
@@ -293,7 +293,7 @@ class NativeImageMetadataTest {
         // Constructing the command tree exercises Clikt option/subcommand registration.
         // Parsing --help exercises Mordant help formatting without needing a real AppWiring.
         val tempDir = Files.createTempDirectory("cli-metadata-test").toFile()
-        JGitClient(tempDir).init()
+        DefaultGitClient(tempDir).init()
         System.setProperty(WORKING_DIR_PROPERTY_NAME, tempDir.absolutePath)
 
         try {
@@ -364,7 +364,7 @@ class NativeImageMetadataTest {
         val config = Config(tempDir, "origin", GitHubInfo("example.com", "TestOwner", "TestRepo"))
         return GitHubClientImpl(
             apolloClient,
-            JGitClient(tempDir),
+            DefaultGitClient(tempDir),
             config,
             DEFAULT_REMOTE_BRANCH_PREFIX,
         )

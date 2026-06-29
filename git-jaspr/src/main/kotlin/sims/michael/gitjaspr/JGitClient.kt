@@ -7,7 +7,6 @@ import com.jcraft.jsch.SSHAgentConnector
 import java.io.File
 import java.time.ZoneId
 import java.time.ZonedDateTime.ofInstant
-import org.eclipse.jgit.api.CheckoutResult
 import org.eclipse.jgit.api.CommitCommand
 import org.eclipse.jgit.api.Git
 import org.eclipse.jgit.api.ListBranchCommand
@@ -34,37 +33,30 @@ import org.slf4j.LoggerFactory
 import sims.michael.gitjaspr.RemoteRefEncoding.RemoteRef
 import sims.michael.gitjaspr.RetryWithBackoff.retryWithBackoff
 
+/**
+ * In-process accessor for a local `git` repository, backed by JGit. Despite the name, this is
+ * intentionally not a [GitClient]: it is the read-heavy and local-mutation accelerator that
+ * [DefaultGitClient] delegates to, running those methods in-process instead of forking a `git`
+ * process per call.
+ */
 class JGitClient(
-    override val workingDirectory: File,
-    override val remoteBranchPrefix: String = RemoteRefEncoding.DEFAULT_REMOTE_BRANCH_PREFIX,
-) : GitClient {
+    val workingDirectory: File,
+    val remoteBranchPrefix: String = RemoteRefEncoding.DEFAULT_REMOTE_BRANCH_PREFIX,
+) {
     private val logger = LoggerFactory.getLogger(JGitClient::class.java)
 
-    override fun init(): GitClient {
+    fun init(): JGitClient {
         logger.trace("init")
         return apply {
             Git.init().setDirectory(workingDirectory).setInitialBranch("main").call().close()
         }
     }
 
-    override fun checkout(refName: String, reflogMessage: String?) = apply {
-        // reflogMessage is intentionally ignored: JGit's CheckoutCommand has no setter for the
-        // reflog message, and production routes through CliGitClient via OptimizedCliGitClient
-        // whenever annotations are desired. Standalone JGitClient callers get JGit's default.
-        logger.trace("checkout {}", refName)
-        useGit { git ->
-            val refExists = refExists(refName)
-            require(refExists) { "$refName does not exist" }
-            git.checkout().setName(refName).run {
-                call()
-                check(result.status == CheckoutResult.Status.OK) {
-                    "Checkout result was ${result.status}"
-                }
-            }
-        }
-    }
-
-    override fun clone(uri: String, remoteName: String, bare: Boolean): GitClient {
+    fun clone(
+        uri: String,
+        remoteName: String = DEFAULT_REMOTE_NAME,
+        bare: Boolean = false,
+    ): JGitClient {
         logger.trace("clone {}", uri)
         return apply {
             Git.cloneRepository()
@@ -77,7 +69,7 @@ class JGitClient(
         }
     }
 
-    override fun fetch(remoteName: String, prune: Boolean) {
+    fun fetch(remoteName: String, prune: Boolean) {
         logger.trace("fetch {}{}", remoteName, if (prune) " (with prune)" else "")
         try {
             useGit { git -> git.fetch().setRemote(remoteName).setRemoveDeletedRefs(prune).call() }
@@ -89,12 +81,12 @@ class JGitClient(
         }
     }
 
-    override fun log(): List<Commit> {
+    fun log(): List<Commit> {
         logger.trace("log")
         return useGit { git -> git.log().call().map { it.toCommit(git) }.reversed() }
     }
 
-    override fun log(revision: String, maxCount: Int): List<Commit> = useGit { git ->
+    fun log(revision: String, maxCount: Int = -1): List<Commit> = useGit { git ->
         logger.trace("log {} {}", revision, maxCount)
         git.log().add(git.repository.resolve(revision)).setMaxCount(maxCount).call().toList().map {
             revCommit ->
@@ -102,12 +94,12 @@ class JGitClient(
         }
     }
 
-    override fun logAll(): List<Commit> {
+    fun logAll(): List<Commit> {
         logger.trace("logAll")
         return useGit { git -> git.log().all().call().map { it.toCommit(git) }.reversed() }
     }
 
-    override fun getParents(commit: Commit): List<Commit> = useGit { git ->
+    fun getParents(commit: Commit): List<Commit> = useGit { git ->
         logger.trace("getParents {}", commit)
         git.log()
             .add(git.repository.resolve(commit.hash))
@@ -118,7 +110,7 @@ class JGitClient(
             .map { it.toCommit(git) }
     }
 
-    override fun logRange(since: String, until: String): List<Commit> = useGit { git ->
+    fun logRange(since: String, until: String): List<Commit> = useGit { git ->
         logger.trace("logRange {}..{}", since, until)
         val r = git.repository
         val sinceObjectId =
@@ -129,7 +121,7 @@ class JGitClient(
         commits.map { revCommit -> revCommit.toCommit(git) }.reversed()
     }
 
-    override fun getCommitIdsInRange(
+    fun getCommitIdsInRange(
         target: String,
         refs: List<String>,
     ): Map<String, List<String>> = useGit { git ->
@@ -148,7 +140,7 @@ class JGitClient(
         }
     }
 
-    override fun hasUncommittedChangesToTrackedFiles(): Boolean {
+    fun hasUncommittedChangesToTrackedFiles(): Boolean {
         logger.trace("hasUncommittedChangesToTrackedFiles")
         return useGit { git ->
             val call = git.status().call()
@@ -156,7 +148,7 @@ class JGitClient(
         }
     }
 
-    override fun getCommitStack(
+    fun getCommitStack(
         remoteName: String,
         localObjectName: String,
         targetRefName: String,
@@ -182,12 +174,12 @@ class JGitClient(
         }
     }
 
-    override fun refExists(ref: String): Boolean {
+    fun refExists(ref: String): Boolean {
         logger.trace("refExists {}", ref)
         return useGit { git -> git.repository.resolve(ref) != null }
     }
 
-    override fun getBranchNames(): List<String> {
+    fun getBranchNames(): List<String> {
         logger.trace("getBranchNames")
         return useGit { git ->
             git.branchList().setListMode(ListBranchCommand.ListMode.ALL).call().map {
@@ -196,17 +188,7 @@ class JGitClient(
         }
     }
 
-    override fun remoteBranchExists(remoteName: String, branchName: String): Boolean {
-        // Like other transport operations (fetch, push, cherryPick), this routes through
-        // CliGitClient in production via OptimizedCliGitClient. JGit's lsRemote would hit the
-        // same SSH-agent transport issues that motivated the CLI routing in the first place.
-        throw UnsupportedOperationException(
-            "remoteBranchExists is not implemented in JGitClient; use CliGitClient or " +
-                "OptimizedCliGitClient instead"
-        )
-    }
-
-    override fun getRemoteBranches(remoteName: String): List<RemoteBranch> {
+    fun getRemoteBranches(remoteName: String = DEFAULT_REMOTE_NAME): List<RemoteBranch> {
         logger.trace("getRemoteBranches")
         return useGit { git ->
             git.branchList()
@@ -227,7 +209,7 @@ class JGitClient(
         }
     }
 
-    override fun getRemoteBranchesById(remoteName: String): Map<String, RemoteBranch> {
+    fun getRemoteBranchesById(remoteName: String = DEFAULT_REMOTE_NAME): Map<String, RemoteBranch> {
         logger.trace("getRemoteBranchesById")
         return getRemoteBranches(remoteName)
             .mapNotNull { branch ->
@@ -238,72 +220,24 @@ class JGitClient(
             .toMap()
     }
 
-    override fun reset(refName: String, reflogMessage: String?) = apply {
-        // reflogMessage ignored; see [checkout] for rationale.
-        logger.trace("reset {}", refName)
-        useGit { git ->
-            git.reset()
-                .setRef(git.repository.resolve(refName).name)
-                .setMode(ResetCommand.ResetType.HARD)
-                .call()
-        }
-    }
-
-    override fun resetMixed(refName: String, reflogMessage: String?) = apply {
-        // reflogMessage ignored; see [checkout] for rationale.
-        logger.trace("resetMixed {}", refName)
-        useGit { git ->
-            git.reset()
-                .setRef(git.repository.resolve(refName).name)
-                .setMode(ResetCommand.ResetType.MIXED)
-                .call()
-        }
-    }
-
-    override fun resetSoft(refName: String, reflogMessage: String?) = apply {
-        // reflogMessage ignored; see [checkout] for rationale.
-        logger.trace("resetSoft {}", refName)
-        useGit { git ->
-            git.reset()
-                .setRef(git.repository.resolve(refName).name)
-                .setMode(ResetCommand.ResetType.SOFT)
-                .call()
-        }
-    }
-
-    override fun cleanUntracked() = apply {
+    fun cleanUntracked() = apply {
         logger.trace("cleanUntracked")
         useGit { git -> git.clean().setCleanDirectories(true).setForce(true).call() }
     }
 
-    override fun branch(
-        name: String,
-        startPoint: String,
-        force: Boolean,
-        reflogMessage: String?,
-    ): Commit? {
-        // reflogMessage ignored; see [checkout] for rationale.
-        logger.trace("branch {} start {} force {}", name, startPoint, force)
-        val old = if (refExists(name)) log(name, maxCount = 1).single() else null
-        useGit { git ->
-            git.branchCreate().setName(name).setForce(force).setStartPoint(startPoint).call()
-        }
-        return old
-    }
-
-    override fun deleteBranches(names: List<String>, force: Boolean): List<String> {
+    fun deleteBranches(names: List<String>, force: Boolean = false): List<String> {
         logger.trace("deleteBranches {} {}", names, force)
         return useGit { git ->
             git.branchDelete().setBranchNames(*names.toTypedArray()).setForce(force).call()
         }
     }
 
-    override fun add(filePattern: String): GitClient {
+    fun add(filePattern: String): JGitClient {
         logger.trace("add {}", filePattern)
         return apply { useGit { git -> git.add().addFilepattern(filePattern).call() } }
     }
 
-    override fun setCommitId(commitId: String, committer: Ident?, author: Ident?) {
+    fun setCommitId(commitId: String, committer: Ident? = null, author: Ident? = null) {
         logger.trace("setCommitId {} {} {}", commitId, committer, author)
         useGit { git ->
             val r = git.repository
@@ -330,13 +264,13 @@ class JGitClient(
         }
     }
 
-    override fun commit(
-        message: String?,
-        footerLines: Map<String, String>?,
-        committer: Ident?,
-        author: Ident?,
-        amend: Boolean,
-        reflogMessage: String?,
+    fun commit(
+        message: String? = null,
+        footerLines: Map<String, String>? = null,
+        committer: Ident? = null,
+        author: Ident? = null,
+        amend: Boolean = false,
+        reflogMessage: String? = null,
     ): Commit {
         logger.trace("commit {} {} {} {} {}", message, footerLines, committer, author, amend)
 
@@ -402,76 +336,7 @@ class JGitClient(
         }
     }
 
-    override fun cherryPick(
-        commit: Commit,
-        committer: Ident?,
-        author: Ident?,
-        useTheirs: Boolean,
-        reflogMessage: String?,
-    ): Commit {
-        // Not implemented. JGit's CherryPickCommand has two practical bugs that make it
-        // unsuitable for jaspr's cherry-pick paths:
-        //
-        // 1. CherryPickResult's status (OK / CONFLICTING / FAILED) is the only reliable
-        //    signal of what happened, but the natural implementation tends to use "HEAD
-        //    didn't move" as a proxy. That proxy mis-classifies CONFLICTING and "merge
-        //    no-op vs HEAD" as "empty source commit". The corresponding empty-commit
-        //    fallback then writes a commit carrying the source's message but only the
-        //    current index's content. Net effect: a commit with the right subject and the
-        //    wrong tree, silently.
-        //
-        // 2. JGit's ResolveMerger reads the working tree as merge state. Cherry-picking
-        //    onto a HEAD whose workdir has unstaged content matching the cherry-pick's
-        //    target (the standard jaspr-unsplit workflow: `jaspr split`, then `git add -p`
-        //    a precursor commit, then `jaspr unsplit` with the remainder still unstaged)
-        //    makes the merger see the merge as already-resolved. HEAD doesn't move and
-        //    bug (1) fires, dropping the cherry-pick's intended content from the new
-        //    commit while preserving its subject.
-        //
-        // OptimizedCliGitClient routes cherry-pick exclusively through CliGitClient to
-        // avoid both traps. Direct JGitClient callers should switch to CliGitClient (or
-        // OptimizedCliGitClient) for cherry-pick. Fixing the bugs above inside JGit's
-        // CherryPickCommand or building a CLI-equivalent via ResolveMerger directly was
-        // considered and rejected: the right behavior is well-defined and well-tested in
-        // CLI git already, the fork cost (~50-100ms) is invisible on the interactive
-        // paths that cherry-pick, and the alternative reimplements substantive parts of
-        // git's cherry-pick semantics.
-        throw UnsupportedOperationException(
-            "cherryPick is not implemented in JGitClient; use CliGitClient or " +
-                "OptimizedCliGitClient instead"
-        )
-    }
-
-    override fun tryCherryPick(
-        commit: Commit,
-        committer: Ident?,
-        author: Ident?,
-        useTheirs: Boolean,
-        reflogMessage: String?,
-    ): CherryPickResult {
-        // Same justification as cherryPick: JGit's CherryPickCommand has bugs that affect jaspr's
-        // use cases. Production wiring routes this through CliGitClient via OptimizedCliGitClient.
-        throw UnsupportedOperationException(
-            "tryCherryPick is not implemented in JGitClient; use CliGitClient or " +
-                "OptimizedCliGitClient instead"
-        )
-    }
-
-    override fun stashPush(
-        refName: String,
-        message: String,
-        includeUntracked: Boolean,
-    ): String? {
-        // JGit has StashCreateCommand but uses ResolveMerger internally, which is the same class
-        // of working-tree-sensitive bug we work around in cherryPick. Production wiring routes
-        // stash operations through CliGitClient via OptimizedCliGitClient.
-        throw UnsupportedOperationException(
-            "stashPush is not implemented in JGitClient; use CliGitClient or " +
-                "OptimizedCliGitClient instead"
-        )
-    }
-
-    override fun push(refSpecs: List<RefSpec>, remoteName: String) {
+    fun push(refSpecs: List<RefSpec>, remoteName: String = DEFAULT_REMOTE_NAME) {
         logger.trace("push {}", refSpecs)
         if (refSpecs.isNotEmpty()) {
             useGit { git ->
@@ -485,10 +350,10 @@ class JGitClient(
         }
     }
 
-    override fun pushWithLease(
+    fun pushWithLease(
         refSpecs: List<RefSpec>,
-        remoteName: String,
-        forceWithLeaseRefs: Map<String, String?>,
+        remoteName: String = DEFAULT_REMOTE_NAME,
+        forceWithLeaseRefs: Map<String, String?> = emptyMap(),
     ) {
         logger.trace("pushWithLease {} with lease refs {}", refSpecs, forceWithLeaseRefs)
         if (refSpecs.isNotEmpty()) {
@@ -541,7 +406,7 @@ class JGitClient(
         check(pushErrors.isEmpty()) { "A git push operation failed, please check the logs" }
     }
 
-    override fun getRemoteUriOrNull(remoteName: String): String? {
+    fun getRemoteUriOrNull(remoteName: String): String? {
         // Intentionally avoiding trace logging here. See comment in CliGitClient.getRemoteUriOrNull
         return useGit { git ->
             git.remoteList()
@@ -553,12 +418,12 @@ class JGitClient(
         }
     }
 
-    override fun addRemote(remoteName: String, remoteUri: String) {
+    fun addRemote(remoteName: String, remoteUri: String) {
         logger.trace("addRemote {} {}", remoteName, remoteUri)
         useGit { git -> git.remoteAdd().setName(remoteName).setUri(URIish(remoteUri)).call() }
     }
 
-    override fun getConfigValue(key: String): String? {
+    fun getConfigValue(key: String): String? {
         logger.trace("getConfigValue {}", key)
         return useGit { git ->
             git.repository.config.getString(
@@ -569,7 +434,7 @@ class JGitClient(
         }
     }
 
-    override fun setConfigValue(key: String, value: String) {
+    fun setConfigValue(key: String, value: String) {
         logger.trace("setConfigValue {} {}", key, value)
         useGit { git ->
             val config = git.repository.config
@@ -579,7 +444,7 @@ class JGitClient(
         }
     }
 
-    override fun getUpstreamBranch(remoteName: String): RemoteBranch? = useGit { git ->
+    fun getUpstreamBranch(remoteName: String): RemoteBranch? = useGit { git ->
         val prefix = "${Constants.R_REMOTES}$remoteName/"
         val repository = git.repository
         BranchConfig(repository.config, repository.branch)
@@ -593,7 +458,7 @@ class JGitClient(
             }
     }
 
-    override fun setUpstreamBranch(remoteName: String, branchName: String) {
+    fun setUpstreamBranch(remoteName: String, branchName: String) {
         logger.trace("setUpstreamBranch {} {}", remoteName, branchName)
         check(!isHeadDetached()) { "Cannot set upstream branch when in detached HEAD" }
         require(getRemoteBranches(remoteName).map(RemoteBranch::name).contains(branchName)) {
@@ -616,7 +481,7 @@ class JGitClient(
         }
     }
 
-    override fun getUpstreamBranchName(localBranch: String, remoteName: String): String? {
+    fun getUpstreamBranchName(localBranch: String, remoteName: String): String? {
         logger.trace("getUpstreamBranchName {} {}", localBranch, remoteName)
         return useGit { git ->
             val config = git.repository.config
@@ -630,7 +495,7 @@ class JGitClient(
         }
     }
 
-    override fun setUpstreamBranchForLocalBranch(
+    fun setUpstreamBranchForLocalBranch(
         localBranch: String,
         remoteName: String,
         remoteBranchName: String?,
@@ -659,7 +524,7 @@ class JGitClient(
         }
     }
 
-    override fun reflog(): List<Commit> {
+    fun reflog(): List<Commit> {
         logger.trace("reflog")
         return useGit { git ->
             val reader = git.repository.newObjectReader()
@@ -667,17 +532,17 @@ class JGitClient(
         }
     }
 
-    override fun getCurrentBranchName(): String {
+    fun getCurrentBranchName(): String {
         logger.trace("getCurrentBranchName")
         return useGit { git -> git.repository.branch }
     }
 
-    override fun isHeadDetached(): Boolean {
+    fun isHeadDetached(): Boolean {
         logger.trace("isHeadDetached")
         return useGit { git -> !git.repository.exactRef(Constants.HEAD).isSymbolic }
     }
 
-    override fun getShortMessages(refs: List<String>): Map<String, String?> {
+    fun getShortMessages(refs: List<String>): Map<String, String?> {
         logger.trace("getShortMessages {}", refs)
         return useGit { git ->
             val repo = git.repository
@@ -687,7 +552,7 @@ class JGitClient(
         }
     }
 
-    override fun getCommits(refs: List<String>): Map<String, Commit?> {
+    fun getCommits(refs: List<String>): Map<String, Commit?> {
         logger.trace("getCommits {}", refs)
         return useGit { git ->
             val repo = git.repository
@@ -697,7 +562,7 @@ class JGitClient(
         }
     }
 
-    override fun mergeBase(a: String, b: String): String? {
+    fun mergeBase(a: String, b: String): String? {
         logger.trace("mergeBase {} {}", a, b)
         return useGit { git ->
             val repo = git.repository
@@ -712,7 +577,7 @@ class JGitClient(
         }
     }
 
-    override fun isAncestor(ancestor: String, descendant: String): Boolean {
+    fun isAncestor(ancestor: String, descendant: String): Boolean {
         logger.trace("isAncestor {} {}", ancestor, descendant)
         return useGit { git ->
             val repo = git.repository
@@ -724,29 +589,13 @@ class JGitClient(
         }
     }
 
-    override fun gitDir(): File = useGit { git -> git.repository.directory.canonicalFile }
+    fun gitDir(): File = useGit { git -> git.repository.directory.canonicalFile }
 
-    override fun gitCommonDir(): File = useGit { git ->
+    fun gitCommonDir(): File = useGit { git ->
         git.repository.commonDirectory.canonicalFile
     }
 
-    override fun addWorktree(path: File, ref: String?, detached: Boolean) {
-        // JGit's worktree support is limited; production wiring routes this through CliGitClient
-        // via OptimizedCliGitClient. JGitClient is not used directly in production.
-        throw UnsupportedOperationException(
-            "addWorktree is not implemented in JGitClient; use CliGitClient or " +
-                "OptimizedCliGitClient instead"
-        )
-    }
-
-    override fun removeWorktree(path: File, force: Boolean) {
-        throw UnsupportedOperationException(
-            "removeWorktree is not implemented in JGitClient; use CliGitClient or " +
-                "OptimizedCliGitClient instead"
-        )
-    }
-
-    override fun cherryPickAbort() {
+    fun cherryPickAbort() {
         logger.trace("cherryPickAbort")
         useGit { git ->
             val r = git.repository
@@ -756,17 +605,7 @@ class JGitClient(
         }
     }
 
-    override fun patchId(sha: String): String? {
-        // JGit has no built-in patch-id computation; reproducing `git patch-id --stable` would
-        // mean implementing the patch-id algorithm in Kotlin. Production wiring routes this
-        // through CliGitClient via OptimizedCliGitClient.
-        throw UnsupportedOperationException(
-            "patchId is not implemented in JGitClient; use CliGitClient or " +
-                "OptimizedCliGitClient instead"
-        )
-    }
-
-    override fun getTree(ref: String): String {
+    fun getTree(ref: String): String {
         logger.trace("getTree {}", ref)
         return useGit { git ->
             val objectId =
@@ -777,7 +616,7 @@ class JGitClient(
         }
     }
 
-    override fun updateRef(refName: String, sha: String) {
+    fun updateRef(refName: String, sha: String) {
         logger.trace("updateRef {} {}", refName, sha)
         useGit { git ->
             val repo = git.repository
@@ -791,23 +630,6 @@ class JGitClient(
                 "Failed to update $refName to $sha: $result"
             }
         }
-    }
-
-    override fun mergeTreeWriteTree(
-        base: String,
-        ours: String,
-        theirs: String,
-        useTheirs: Boolean,
-    ): MergeTreeResult {
-        // JGit has merge primitives (ResolveMerger, RecursiveMerger) but the API surface needed to
-        // reproduce `git merge-tree --write-tree` semantics (purely in-memory, no working tree
-        // touched, returns result tree SHA on clean merge or list of conflicting paths otherwise)
-        // is non-trivial. Production wiring routes this method through CliGitClient via
-        // OptimizedCliGitClient; JGitClient is not used directly in production.
-        throw UnsupportedOperationException(
-            "mergeTreeWriteTree is not implemented in JGitClient; use CliGitClient or " +
-                "OptimizedCliGitClient instead"
-        )
     }
 
     private inline fun <T> useGit(block: (Git) -> T): T = Git.open(workingDirectory).use(block)
@@ -830,7 +652,7 @@ class JGitClient(
 
         init {
             // Enable support for an SSH agent for those who use passphrases for their keys
-            // Note that this doesn't work on OS X. This is why OptimizedCliGitClient exists.
+            // Note that this doesn't work on OS X. This is why DefaultGitClient exists.
             SshSessionFactory.setInstance(
                 object : JschConfigSessionFactory() {
                     override fun configureJSch(jsch: JSch) {

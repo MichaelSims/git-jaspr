@@ -508,24 +508,23 @@ class CliGitClientTest : GitClientTest {
 
     @Test
     fun `compare setUpstreamBranch`() {
-        fun setAndGetUpstream(createGitClient: (File) -> GitClient): String {
-            val harness = withTestSetup {
-                with(createGitClient(localGit.workingDirectory)) {
-                    val branchName = "new-branch"
-                    branch(branchName)
-                    push(listOf(RefSpec(branchName, branchName)), remoteName)
-                    setUpstreamBranch(remoteName, branchName)
+        val branchName = "new-branch"
+        fun upstreamAfter(harness: GitHubTestHarness): String =
+            checkNotNull(harness.localGit.getUpstreamBranch(harness.remoteName)) {
+                    "No upstream branch found for remote ${harness.remoteName}"
                 }
-            }
-            val git = harness.localGit
-            val remoteName = harness.remoteName
-            val remoteBranch =
-                checkNotNull(git.getUpstreamBranch(remoteName)) {
-                    "No upstream branch found for remote $remoteName"
-                }
-            return remoteBranch.name
+                .name
+        val viaCli = withTestSetup {
+            localGit.branch(branchName)
+            localGit.push(listOf(RefSpec(branchName, branchName)), remoteName)
+            CliGitClient(localGit.workingDirectory).setUpstreamBranch(remoteName, branchName)
         }
-        assertEquals(setAndGetUpstream(::CliGitClient), setAndGetUpstream(::JGitClient))
+        val viaJgit = withTestSetup {
+            localGit.branch(branchName)
+            localGit.push(listOf(RefSpec(branchName, branchName)), remoteName)
+            JGitClient(localGit.workingDirectory).setUpstreamBranch(remoteName, branchName)
+        }
+        assertEquals(upstreamAfter(viaCli), upstreamAfter(viaJgit))
     }
 
     @Test
@@ -1168,16 +1167,6 @@ class CliGitClientTest : GitClientTest {
     }
 
     @Test
-    fun `JGitClient addWorktree throws UnsupportedOperationException`() {
-        withTestSetup {
-            val jGit = JGitClient(localGit.workingDirectory)
-            assertThrows<UnsupportedOperationException> {
-                jGit.addWorktree(scratchDir.resolve("never-created"))
-            }
-        }
-    }
-
-    @Test
     fun `compare getTree`() {
         withTestSetup {
             createCommitsFrom(
@@ -1252,14 +1241,6 @@ class CliGitClientTest : GitClientTest {
     }
 
     @Test
-    fun `JGitClient patchId throws UnsupportedOperationException`() {
-        withTestSetup {
-            val jGit = JGitClient(localGit.workingDirectory)
-            assertThrows<UnsupportedOperationException> { jGit.patchId("HEAD") }
-        }
-    }
-
-    @Test
     fun `compare cherryPickAbort recovers from a conflicting pick`() {
         // Tests both clients against the same kind of conflict: each gets a fresh repo, attempts
         // a cherry-pick that conflicts, then aborts. Both should leave the working tree clean and
@@ -1303,17 +1284,6 @@ class CliGitClientTest : GitClientTest {
             }
         }
         runOne(::CliGitClient)
-        runOne(::JGitClient)
-    }
-
-    @Test
-    fun `JGitClient removeWorktree throws UnsupportedOperationException`() {
-        withTestSetup {
-            val jGit = JGitClient(localGit.workingDirectory)
-            assertThrows<UnsupportedOperationException> {
-                jGit.removeWorktree(scratchDir.resolve("never-created"))
-            }
-        }
     }
 
     @Test

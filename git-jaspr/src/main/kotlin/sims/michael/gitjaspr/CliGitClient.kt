@@ -15,9 +15,6 @@ class CliGitClient(
 
     private val logger = LoggerFactory.getLogger(CliGitClient::class.java)
 
-    /** When true, git commands write their stderr (e.g. progress) directly to the terminal. */
-    var showStderr = false
-
     override fun init(): GitClient {
         logger.trace("init")
         require(workingDirectory.exists() || workingDirectory.mkdir()) {
@@ -678,7 +675,6 @@ class CliGitClient(
                 .command(listOf("git", "merge-base", a, b))
                 .destroyOnExit()
                 .readOutput(true)
-                .apply { if (showStderr) redirectError(System.err) }
                 .execute()
         return when (result.exitValue) {
             0 -> result.output.string.trim().takeIf(String::isNotEmpty)
@@ -696,7 +692,6 @@ class CliGitClient(
                 .command(listOf("git", "merge-base", "--is-ancestor", ancestor, descendant))
                 .destroyOnExit()
                 .readOutput(true)
-                .apply { if (showStderr) redirectError(System.err) }
                 .execute()
         return when (result.exitValue) {
             0 -> true
@@ -774,7 +769,6 @@ class CliGitClient(
                 .command(command)
                 .destroyOnExit()
                 .readOutput(true)
-                .apply { if (showStderr) redirectError(System.err) }
                 .execute()
         return when {
             result.exitValue == 0 -> {
@@ -910,7 +904,6 @@ class CliGitClient(
                 .command(command)
                 .destroyOnExit()
                 .readOutput(true)
-                .apply { if (showStderr) redirectError(System.err) }
                 .execute()
         // `git merge-tree --write-tree` exits 0 on a clean merge (prints just the tree SHA),
         // exits 1 on a merge with conflicts (prints tree SHA, then one path per line for each
@@ -951,7 +944,6 @@ class CliGitClient(
                 .command(command)
                 .destroyOnExit()
                 .readOutput(true)
-                .apply { if (showStderr) redirectError(System.err) }
                 .execute()
         val exitValue = result.exitValue
         if (exitValue != 0) {

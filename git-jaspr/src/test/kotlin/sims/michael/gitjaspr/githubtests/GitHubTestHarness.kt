@@ -149,7 +149,7 @@ private constructor(
                 remoteUri
             } else {
                 val remoteSource = scratchDir.resolve("remote-source")
-                JGitClient(remoteSource).init().createInitialCommit()
+                DefaultGitClient(remoteSource).init().createInitialCommit()
                 remoteGit.clone(remoteSource.toURI().toString(), remoteName, bare = true)
                 remoteRepo.toURI().toString()
             }
@@ -590,7 +590,7 @@ private constructor(
         }
 
         private fun createDefaultGitClient(workingDirectory: File): GitClient =
-            OptimizedCliGitClient(workingDirectory)
+            DefaultGitClient(workingDirectory)
 
         private val logger = LoggerFactory.getLogger(GitHubTestHarness::class.java)
 

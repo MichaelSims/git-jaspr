@@ -262,7 +262,7 @@ applicable.
                     renderer.error { missingTokenMessage }
                     throw ProgramResult(1)
                 }
-        val gitClient = OptimizedCliGitClient(workingDirectory, remoteBranchPrefix)
+        val gitClient = DefaultGitClient(workingDirectory, remoteBranchPrefix)
         val githubInfo = determineGithubInfo(gitClient)
         val config =
             Config(
