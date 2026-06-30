@@ -964,7 +964,7 @@ class CliGitClientTest : GitClientTest {
     }
 
     @Test
-    fun `compare pushWithLease - ref must not exist`() {
+    fun `pushWithLease - ref must not exist`() {
         withTestSetup {
             createCommitsFrom(
                 testCase {
@@ -980,9 +980,8 @@ class CliGitClientTest : GitClientTest {
             )
 
             val cliGit = CliGitClient(localGit.workingDirectory)
-            val jGit = JGitClient(localGit.workingDirectory)
 
-            // Test 1: Push with lease should succeed when the ref doesn't exist
+            // Push with lease should succeed when the ref doesn't exist
             val commitC = cliGit.log("dev", 1).single()
             val commitB = cliGit.log("dev^", 1).single()
             cliGit.pushWithLease(
@@ -994,7 +993,7 @@ class CliGitClientTest : GitClientTest {
             // Verify the branch was created
             assertTrue(cliGit.getRemoteBranches(remoteName).any { it.name == "test-branch" })
 
-            // Test 2: Push with lease should fail when the ref already exists
+            // Push with lease should fail when the ref already exists
             // Try to push a different commit (commitB) to the same branch
             assertThrows<PushFailedException> {
                 cliGit.pushWithLease(
@@ -1003,32 +1002,11 @@ class CliGitClientTest : GitClientTest {
                     forceWithLeaseRefs = mapOf("test-branch" to null), // test-branch exists!
                 )
             }
-
-            // Test 3: Same test with JGitClient - push should succeed when the ref doesn't exist
-            val commitA = jGit.log("dev^^", 1).single()
-            jGit.pushWithLease(
-                listOf(RefSpec(commitC.hash, "jgit-test-branch")),
-                remoteName,
-                forceWithLeaseRefs = mapOf("jgit-test-branch" to null),
-            )
-
-            // Verify the branch was created
-            assertTrue(jGit.getRemoteBranches(remoteName).any { it.name == "jgit-test-branch" })
-
-            // Test 4: JGit push with lease should fail when the ref already exists
-            // Try to push a different commit (commitA) to the same branch
-            assertThrows<PushFailedException> {
-                jGit.pushWithLease(
-                    listOf(RefSpec(commitA.hash, "jgit-test-branch")),
-                    remoteName,
-                    forceWithLeaseRefs = mapOf("jgit-test-branch" to null), // exists!
-                )
-            }
         }
     }
 
     @Test
-    fun `compare pushWithLease - ref must have specific value`() {
+    fun `pushWithLease - ref must have specific value`() {
         withTestSetup {
             createCommitsFrom(
                 testCase {
@@ -1044,14 +1022,13 @@ class CliGitClientTest : GitClientTest {
             )
 
             val cliGit = CliGitClient(localGit.workingDirectory)
-            val jGit = JGitClient(localGit.workingDirectory)
 
             // Create a branch first
             val commitB = cliGit.log("dev^", 1).single()
             val commitC = cliGit.log("dev", 1).single()
             cliGit.push(listOf(RefSpec(commitB.hash, "test-branch")), remoteName)
 
-            // Test 1: Push with lease should succeed when ref has expected value
+            // Push with lease should succeed when ref has expected value
             cliGit.pushWithLease(
                 listOf(RefSpec(commitC.hash, "test-branch")),
                 remoteName,
@@ -1063,35 +1040,13 @@ class CliGitClientTest : GitClientTest {
                 cliGit.getRemoteBranches(remoteName).single { it.name == "test-branch" }
             assertEquals(commitC.hash, remoteBranch.commit.hash)
 
-            // Test 2: Push with lease should fail when ref has different value
+            // Push with lease should fail when ref has different value
             assertThrows<PushFailedException> {
                 cliGit.pushWithLease(
                     listOf(RefSpec(commitB.hash, "test-branch")),
                     remoteName,
                     forceWithLeaseRefs =
                         mapOf("test-branch" to commitB.hash), // Wrong! It's now commitC
-                )
-            }
-
-            // Test 3: Same test with JGitClient
-            jGit.push(listOf(RefSpec(commitB.hash, "jgit-test-branch")), remoteName)
-
-            jGit.pushWithLease(
-                listOf(RefSpec(commitC.hash, "jgit-test-branch")),
-                remoteName,
-                forceWithLeaseRefs = mapOf("jgit-test-branch" to commitB.hash),
-            )
-
-            val jgitRemoteBranch =
-                jGit.getRemoteBranches(remoteName).single { it.name == "jgit-test-branch" }
-            assertEquals(commitC.hash, jgitRemoteBranch.commit.hash)
-
-            // Test 4: JGit push with lease should fail when ref has different value
-            assertThrows<PushFailedException> {
-                jGit.pushWithLease(
-                    listOf(RefSpec(commitB.hash, "jgit-test-branch")),
-                    remoteName,
-                    forceWithLeaseRefs = mapOf("jgit-test-branch" to commitB.hash), // Wrong!
                 )
             }
         }

@@ -1,9 +1,5 @@
 package sims.michael.gitjaspr
 
-import com.jcraft.jsch.AgentIdentityRepository
-import com.jcraft.jsch.IdentityRepository
-import com.jcraft.jsch.JSch
-import com.jcraft.jsch.SSHAgentConnector
 import java.io.File
 import java.time.ZoneId
 import java.time.ZonedDateTime.ofInstant
@@ -11,7 +7,6 @@ import org.eclipse.jgit.api.CommitCommand
 import org.eclipse.jgit.api.Git
 import org.eclipse.jgit.api.ListBranchCommand
 import org.eclipse.jgit.api.ResetCommand
-import org.eclipse.jgit.api.errors.TransportException
 import org.eclipse.jgit.lib.BranchConfig
 import org.eclipse.jgit.lib.ConfigConstants.CONFIG_BRANCH_SECTION
 import org.eclipse.jgit.lib.ConfigConstants.CONFIG_KEY_MERGE
@@ -23,12 +18,7 @@ import org.eclipse.jgit.lib.RefUpdate.Result.NO_CHANGE
 import org.eclipse.jgit.revwalk.RevCommit
 import org.eclipse.jgit.revwalk.RevWalk
 import org.eclipse.jgit.revwalk.filter.RevFilter
-import org.eclipse.jgit.transport.PushResult
-import org.eclipse.jgit.transport.RefLeaseSpec
-import org.eclipse.jgit.transport.RemoteRefUpdate
-import org.eclipse.jgit.transport.SshSessionFactory
 import org.eclipse.jgit.transport.URIish
-import org.eclipse.jgit.transport.ssh.jsch.JschConfigSessionFactory
 import org.slf4j.LoggerFactory
 import sims.michael.gitjaspr.RemoteRefEncoding.RemoteRef
 import sims.michael.gitjaspr.RetryWithBackoff.retryWithBackoff
@@ -49,35 +39,6 @@ class JGitClient(
         logger.trace("init")
         return apply {
             Git.init().setDirectory(workingDirectory).setInitialBranch("main").call().close()
-        }
-    }
-
-    fun clone(
-        uri: String,
-        remoteName: String = DEFAULT_REMOTE_NAME,
-        bare: Boolean = false,
-    ): JGitClient {
-        logger.trace("clone {}", uri)
-        return apply {
-            Git.cloneRepository()
-                .setDirectory(workingDirectory)
-                .setURI(uri)
-                .setBare(bare)
-                .setRemote(remoteName)
-                .call()
-                .close()
-        }
-    }
-
-    fun fetch(remoteName: String, prune: Boolean) {
-        logger.trace("fetch {}{}", remoteName, if (prune) " (with prune)" else "")
-        try {
-            useGit { git -> git.fetch().setRemote(remoteName).setRemoveDeletedRefs(prune).call() }
-        } catch (e: TransportException) {
-            throw GitJasprException(
-                "Failed to fetch from $remoteName; consider enabling the CLI git client",
-                e,
-            )
         }
     }
 
@@ -336,76 +297,6 @@ class JGitClient(
         }
     }
 
-    fun push(refSpecs: List<RefSpec>, remoteName: String = DEFAULT_REMOTE_NAME) {
-        logger.trace("push {}", refSpecs)
-        if (refSpecs.isNotEmpty()) {
-            useGit { git ->
-                val specs = refSpecs.map { (localRef, remoteRef) ->
-                    org.eclipse.jgit.transport.RefSpec("$localRef:${GitClient.R_HEADS}$remoteRef")
-                }
-                checkNoPushErrors(
-                    git.push().setRemote(remoteName).setAtomic(true).setRefSpecs(specs).call()
-                )
-            }
-        }
-    }
-
-    fun pushWithLease(
-        refSpecs: List<RefSpec>,
-        remoteName: String = DEFAULT_REMOTE_NAME,
-        forceWithLeaseRefs: Map<String, String?> = emptyMap(),
-    ) {
-        logger.trace("pushWithLease {} with lease refs {}", refSpecs, forceWithLeaseRefs)
-        if (refSpecs.isNotEmpty()) {
-            useGit { git ->
-                val specs = refSpecs.map { (localRef, remoteRef) ->
-                    org.eclipse.jgit.transport.RefSpec("$localRef:${GitClient.R_HEADS}$remoteRef")
-                }
-
-                val leaseSpecs = forceWithLeaseRefs.map { (ref, expectedValue) ->
-                    val fullRef = "${GitClient.R_HEADS}$ref"
-                    if (expectedValue == null) {
-                        // Ref must not exist - use empty string to indicate non-existence
-                        RefLeaseSpec(fullRef, "")
-                    } else {
-                        // Ref must have specific value
-                        RefLeaseSpec(fullRef, expectedValue)
-                    }
-                }
-
-                try {
-                    checkNoPushErrors(
-                        git.push()
-                            .setRemote(remoteName)
-                            .setAtomic(true)
-                            .setRefSpecs(specs)
-                            .setRefLeaseSpecs(leaseSpecs)
-                            .call()
-                    )
-                } catch (e: Exception) {
-                    throw PushFailedException("Push with lease failed: ${e.message}", e)
-                }
-            }
-        }
-    }
-
-    private fun checkNoPushErrors(pushResults: Iterable<PushResult>) {
-        val pushErrors =
-            pushResults
-                .flatMap { result -> result.remoteUpdates }
-                .filterNot { it.status in SUCCESSFUL_PUSH_STATUSES }
-        for (e in pushErrors) {
-            logger.error(
-                "Push failed: {} -> {} ({}: {})",
-                e.srcRef,
-                e.remoteName,
-                e.message,
-                e.status,
-            )
-        }
-        check(pushErrors.isEmpty()) { "A git push operation failed, please check the logs" }
-    }
-
     fun getRemoteUriOrNull(remoteName: String): String? {
         // Intentionally avoiding trace logging here. See comment in CliGitClient.getRemoteUriOrNull
         return useGit { git ->
@@ -635,13 +526,6 @@ class JGitClient(
     private inline fun <T> useGit(block: (Git) -> T): T = Git.open(workingDirectory).use(block)
 
     companion object {
-        private val SUCCESSFUL_PUSH_STATUSES =
-            setOf(
-                RemoteRefUpdate.Status.OK,
-                RemoteRefUpdate.Status.UP_TO_DATE,
-                RemoteRefUpdate.Status.NON_EXISTING,
-            )
-
         private val REF_UPDATE_SUCCESS_RESULTS =
             setOf(
                 RefUpdate.Result.NEW,
@@ -649,21 +533,6 @@ class JGitClient(
                 RefUpdate.Result.FORCED,
                 NO_CHANGE,
             )
-
-        init {
-            // Enable support for an SSH agent for those who use passphrases for their keys
-            // Note that this doesn't work on OS X. This is why DefaultGitClient exists.
-            SshSessionFactory.setInstance(
-                object : JschConfigSessionFactory() {
-                    override fun configureJSch(jsch: JSch) {
-                        val agent = AgentIdentityRepository(SSHAgentConnector())
-                        if (agent.status == IdentityRepository.RUNNING) {
-                            jsch.identityRepository = agent
-                        }
-                    }
-                }
-            )
-        }
     }
 }
 

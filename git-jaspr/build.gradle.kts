@@ -139,7 +139,6 @@ dependencies {
     implementation(libs.slf4j.api)
     implementation(libs.logback.classic)
     implementation(libs.jgit)
-    implementation(libs.jgit.ssh)
     implementation(libs.zt.exec)
     implementation(libs.kotlinx.serialization.json)
     implementation(project(":data-class-fragment"))
@@ -150,14 +149,6 @@ dependencies {
     testImplementation(libs.jgit.junit)
     testImplementation(libs.ktor.server.core)
     testImplementation(libs.ktor.server.cio)
-}
-
-configurations.all {
-    resolutionStrategy.dependencySubstitution {
-        substitute(module("com.jcraft:jsch:0.1.55"))
-            .using(module("com.github.mwiede:jsch:0.2.13"))
-            .because("See https://github.com/mwiede/jsch#why-should-you-use-this-library")
-    }
 }
 
 application {
