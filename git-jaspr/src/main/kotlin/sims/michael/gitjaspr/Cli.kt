@@ -848,7 +848,24 @@ class Merge : GitJasprSubcommand(helpText = "Merge all mergeable commits") {
     }
 }
 
-class AutoMerge : GitJasprSubcommand(helpText = "Wait for checks then merge") {
+class AutoMerge : GitJasprSubcommand() {
+    // language=Markdown
+    override fun help(context: Context) =
+        """
+        Wait until every selected commit is mergeable, then merge them all at once.
+
+        Auto-merge is everything-or-nothing: it polls until *all* commits in the
+        selected slice are simultaneously mergeable (pushed and up to date with the
+        remote, checks passing, and approved), and only then merges the whole slice.
+        It will not merge the commits that are ready while the rest are still
+        verifying.
+
+        Choose the slice with `--count`; without it the entire stack is the slice.
+        Draft and dont-push commits are excluded from the slice rather than waited on.
+
+        """
+            .trimIndent()
+
     private val targetRef by TargetRefOptions()
 
     private val count by
