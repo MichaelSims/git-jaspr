@@ -3827,7 +3827,7 @@ class GitJaspr(
                     commit,
                     reflogMessage = "$reflogMessage: cherry-pick of ${commit.shortMessage}",
                 )
-            } catch (e: Exception) {
+            } catch (e: CherryPickConflictException) {
                 logger.debug("cherryPick failed during rebase of $branch", e)
                 // Abort the cherry-pick and bail
                 worktreeClient.cherryPickAbort()
@@ -3898,7 +3898,7 @@ class GitJaspr(
                     commit,
                     reflogMessage = "$reflogMessage: cherry-pick of ${commit.shortMessage}",
                 )
-            } catch (e: Exception) {
+            } catch (e: CherryPickConflictException) {
                 logger.debug("cherryPick failed during rebase of $branch", e)
                 gitClient.cherryPickAbort()
                 // Try to get back on the branch

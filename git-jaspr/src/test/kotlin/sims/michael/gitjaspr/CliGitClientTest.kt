@@ -1224,7 +1224,7 @@ class CliGitClientTest : GitClientTest {
                 git.add("shared.txt")
                 git.commit("b", footerLines = mapOf(COMMIT_ID_LABEL to "b"))
 
-                assertThrows<Exception> { git.cherryPick(commitA) }
+                assertThrows<CherryPickConflictException> { git.cherryPick(commitA) }
 
                 git.cherryPickAbort()
 

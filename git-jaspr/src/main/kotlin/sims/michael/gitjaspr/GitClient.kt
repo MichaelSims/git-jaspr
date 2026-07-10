@@ -334,3 +334,11 @@ sealed class CherryPickResult {
      */
     data object LeftInProgress : CherryPickResult()
 }
+
+/**
+ * Thrown by [GitClient.cherryPick] when the cherry-pick stops on a conflict. The cherry-pick is
+ * left in progress (`.git/CHERRY_PICK_HEAD` present); callers that catch this are responsible for
+ * aborting via [GitClient.cherryPickAbort]. Catching this rather than a broad `Exception` keeps
+ * unrelated failures (I/O errors, etc.) from being mistaken for merge conflicts.
+ */
+class CherryPickConflictException(message: String) : Exception(message)
