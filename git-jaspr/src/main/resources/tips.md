@@ -24,4 +24,4 @@ Lines beginning with `- ` are parsed as individual tips.
 - Curious how your local stack lines up with the remote? Run `jaspr compare` for a side-by-side view that flags reordered and content-diverged commits.
 - Maintaining several stacks at once? Run `jaspr sync` to rebase all of your local stacks onto the latest target branch in one pass, not just the one you have checked out.
 - Partway through a navigation session and want out? `jaspr nav finish` keeps the commits below your cursor, while `jaspr nav cancel` (alias `nav abort`) restores the branch you started on and aborts any half-finished cherry-pick.
-- Jaspr periodically checks whether a newer version is available. To turn it off, pass `--no-update-check`, set `JASPR_NO_UPDATE_CHECK=1`, or add `update-check.enabled=false` to `~/.jaspr.properties`.
+- Jaspr periodically checks whether a newer version is available. To turn it off, pass `--no-update-check`, set `JASPR_NO_UPDATE_CHECK=1`, or add `update-check-enabled=false` to `~/.jaspr.properties`.

@@ -91,6 +91,7 @@ class CliContext(
     val tipProvider: TipProvider?,
     val logFilePath: String?,
     val useFzf: Boolean,
+    val workingDirectory: File,
     appWiringFactory: () -> AppWiring,
 ) {
     val appWiring by lazy(appWiringFactory)
@@ -242,7 +243,7 @@ applicable.
     private val updateCheckEnabled by
         option().flag("--no-update-check", default = true).help {
             "Periodically check whether a newer jaspr is available and surface a one-line notice. " +
-                "Disable persistently by setting `update-check.enabled=false` in " +
+                "Disable persistently by setting `update-check-enabled=false` in " +
                 "~/$CONFIG_FILE_NAME, or for a single shell with " +
                 "$JASPR_NO_UPDATE_CHECK_ENV_VAR=1."
         }
@@ -287,7 +288,7 @@ applicable.
 
     /**
      * Predicate composing all reasons to skip the update check:
-     * - `--no-update-check` (or `update-check.enabled=false` in `~/$CONFIG_FILE_NAME` via the same
+     * - `--no-update-check` (or `update-check-enabled=false` in `~/$CONFIG_FILE_NAME` via the same
      *   Clikt value source as other flags).
      * - `$JASPR_NO_UPDATE_CHECK_ENV_VAR` env var set to any non-empty value.
      * - Running under CI (any of the well-known CI env vars set).
@@ -377,6 +378,7 @@ applicable.
                 tipProvider = if (showTips) TipProvider() else null,
                 logFilePath = logFilePath,
                 useFzf = useFzf,
+                workingDirectory = workingDirectory,
             ) {
                 try {
                     buildAppWiring(renderer)
@@ -2202,6 +2204,7 @@ fun buildCommand(): SuspendingCliktCommand =
             Nav().subcommands(NavCancel(), NavFinish()),
             // Configuration
             Init(),
+            ConfigCommand().subcommands(ConfigGet(), ConfigSet(), ConfigUnset(), ConfigList()),
             InstallHook(),
             PreviewTheme(),
             LogPath(),
@@ -2215,7 +2218,7 @@ const val DEFAULT_LOCAL_OBJECT = GitClient.HEAD
 const val DEFAULT_TARGET_REF = "main"
 const val DEFAULT_REMOTE_NAME = "origin"
 const val COMMIT_ID_LABEL = "commit-id"
-private const val GITHUB_TOKEN_ENV_VAR = "GIT_JASPR_TOKEN"
+const val GITHUB_TOKEN_ENV_VAR = "GIT_JASPR_TOKEN"
 const val JASPR_NO_UPDATE_CHECK_ENV_VAR = "JASPR_NO_UPDATE_CHECK"
 
 /**
