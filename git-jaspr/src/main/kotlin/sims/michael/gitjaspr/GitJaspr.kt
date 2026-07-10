@@ -1275,7 +1275,7 @@ class GitJaspr(
         gitClient.push(rollbackRefSpecs, config.remoteName)
     }
 
-    suspend fun merge(refSpec: RefSpec, count: Int? = null) {
+    suspend fun merge(refSpec: RefSpec, count: Int? = null, ref: String? = null) {
         logger.trace("merge {}", refSpec)
         val remoteName = config.remoteName
         gitClient.fetch(remoteName)
@@ -1292,9 +1292,10 @@ class GitJaspr(
         }
 
         val fullStack =
-            resolveCount(
+            resolveScope(
                 gitClient.getCommitStack(remoteName, refSpec.localRef, refSpec.remoteRef),
                 count,
+                ref,
             )
         if (fullStack.isEmpty()) {
             showStackIsEmptyWarning()
@@ -1369,6 +1370,31 @@ class GitJaspr(
     }
 
     /**
+     * Resolves the scope of a merge/auto-merge to a prefix slice of [stack] (bottom-first). At most
+     * one of [count] or [ref] may be given. [ref] is any git revision (hash, branch, tag, `HEAD~2`,
+     * etc.); it is resolved to a commit and scopes the slice from the base up to and including it.
+     */
+    private fun resolveScope(stack: List<Commit>, count: Int?, ref: String?): List<Commit> {
+        require(count == null || ref == null) {
+            "The --count option and the commit argument are mutually exclusive."
+        }
+        if (ref == null) return resolveCount(stack, count)
+        val resolvedHash =
+            try {
+                gitClient.log(ref, 1).single().hash
+            } catch (e: Exception) {
+                throw GitJasprException("Could not resolve '$ref' to a commit.")
+            }
+        val index = stack.indexOfFirst { commit -> commit.hash == resolvedHash }
+        if (index < 0) {
+            throw GitJasprException(
+                "Commit '$ref' (${resolvedHash.take(7)}) is not in the current stack."
+            )
+        }
+        return stack.subList(0, index + 1)
+    }
+
+    /**
      * Resolves a count parameter to a sublist of the stack. Positive values take that many commits
      * from the bottom of the stack. Negative values exclude that many commits from the top.
      */
@@ -1408,6 +1434,7 @@ class GitJaspr(
         pollingIntervalSeconds: Int = 10,
         maxAttempts: Int = Int.MAX_VALUE,
         count: Int? = null,
+        ref: String? = null,
         theme: Theme = MonoTheme,
     ) {
         logger.trace("autoMerge {} {}", refSpec, pollingIntervalSeconds)
@@ -1416,9 +1443,10 @@ class GitJaspr(
         val remoteName = config.remoteName
         gitClient.fetch(remoteName)
         val fullStack =
-            resolveCount(
+            resolveScope(
                 gitClient.getCommitStack(remoteName, refSpec.localRef, refSpec.remoteRef),
                 count,
+                ref,
             )
         val (filteredStack, excludedCommits) = filterStackByDontPushOrDraft(fullStack)
         showExcludedCommitsMessage(excludedCommits)

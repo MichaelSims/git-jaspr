@@ -149,7 +149,7 @@ class GitJasprFunctionalExternalProcessTest : GitJasprTest {
         )
     }
 
-    override suspend fun GitHubTestHarness.merge(refSpec: RefSpec, count: Int?) {
+    override suspend fun GitHubTestHarness.merge(refSpec: RefSpec, count: Int?, ref: String?) {
         executeCli(
             scratchDir = scratchDir,
             remoteUri = remoteUri,
@@ -166,7 +166,7 @@ class GitJasprFunctionalExternalProcessTest : GitJasprTest {
                     refSpec.remoteRef,
                     "--local",
                     refSpec.localRef,
-                ) + count.toCountArgs(),
+                ) + count.toCountArgs() + listOfNotNull(ref),
             invokeLocation = localRepo,
             javaOptions = javaOptions,
         )
@@ -176,6 +176,7 @@ class GitJasprFunctionalExternalProcessTest : GitJasprTest {
         refSpec: RefSpec,
         pollingIntervalSeconds: Int,
         count: Int?,
+        ref: String?,
     ) {
         executeCli(
             scratchDir = scratchDir,
@@ -195,7 +196,7 @@ class GitJasprFunctionalExternalProcessTest : GitJasprTest {
                     refSpec.localRef,
                     "--interval",
                     pollingIntervalSeconds.toString(),
-                ) + count.toCountArgs(),
+                ) + count.toCountArgs() + listOfNotNull(ref),
             invokeLocation = localRepo,
             javaOptions = javaOptions,
         )

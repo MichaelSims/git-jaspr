@@ -75,14 +75,25 @@ interface GitJasprTest {
         refSpec: RefSpec = RefSpec(DEFAULT_LOCAL_OBJECT, DEFAULT_TARGET_REF)
     ) = gitJaspr.graphRefs(refSpec)
 
-    suspend fun GitHubTestHarness.merge(refSpec: RefSpec, count: Int? = null) =
-        gitJaspr.merge(refSpec, count = count)
+    suspend fun GitHubTestHarness.merge(
+        refSpec: RefSpec,
+        count: Int? = null,
+        ref: String? = null,
+    ) = gitJaspr.merge(refSpec, count = count, ref = ref)
 
     suspend fun GitHubTestHarness.autoMerge(
         refSpec: RefSpec,
         pollingIntervalSeconds: Int = 10,
         count: Int? = null,
-    ) = gitJaspr.autoMerge(refSpec, pollingIntervalSeconds = 1, maxAttempts = 5, count = count)
+        ref: String? = null,
+    ) =
+        gitJaspr.autoMerge(
+            refSpec,
+            pollingIntervalSeconds = 1,
+            maxAttempts = 5,
+            count = count,
+            ref = ref,
+        )
 
     suspend fun GitHubTestHarness.getRemoteCommitStatuses(stack: List<Commit>) =
         gitJaspr.getRemoteCommitStatuses(stack)
@@ -6831,6 +6842,136 @@ interface GitJasprTest {
                 emptyList(),
                 localGit.getCommitStack(remoteName, "development", DEFAULT_TARGET_REF),
             )
+        }
+    }
+
+    @Merge
+    @Test
+    fun `merge scoped by commit ref merges the slice up to and including it`() {
+        withTestSetup(useFakeRemote) {
+            createCommitsFrom(
+                testCase {
+                    repository {
+                        commit {
+                            title = "one"
+                            willPassVerification = true
+                            remoteRefs += buildRemoteRef("one")
+                        }
+                        commit {
+                            title = "two"
+                            willPassVerification = true
+                            remoteRefs += buildRemoteRef("two")
+                        }
+                        commit {
+                            title = "three"
+                            willPassVerification = true
+                            remoteRefs += buildRemoteRef("three")
+                            localRefs += "development"
+                        }
+                    }
+                    pullRequest {
+                        headRef = buildRemoteRef("one")
+                        baseRef = "main"
+                        title = "one"
+                        willBeApprovedByUserKey = "michael"
+                    }
+                    pullRequest {
+                        headRef = buildRemoteRef("two")
+                        baseRef = buildRemoteRef("one")
+                        title = "two"
+                        willBeApprovedByUserKey = "michael"
+                    }
+                    pullRequest {
+                        headRef = buildRemoteRef("three")
+                        baseRef = buildRemoteRef("two")
+                        title = "three"
+                        willBeApprovedByUserKey = "michael"
+                    }
+                }
+            )
+
+            waitForChecksToConclude("one", "two", "three")
+            val two =
+                localGit.getCommitStack(remoteName, "development", DEFAULT_TARGET_REF).single {
+                    commit ->
+                    commit.shortMessage == "two"
+                }
+            merge(RefSpec("development", "main"), ref = two.hash)
+
+            // Only the commit above the named ref is left unmerged.
+            assertEquals(
+                listOf("three"),
+                localGit
+                    .getCommitStack(remoteName, "development", DEFAULT_TARGET_REF)
+                    .map(Commit::shortMessage),
+            )
+        }
+    }
+
+    @Merge
+    @Test
+    fun `merge with an unresolvable ref fails`() {
+        withTestSetup(useFakeRemote) {
+            createCommitsFrom(
+                testCase {
+                    repository {
+                        commit {
+                            title = "one"
+                            localRefs += "development"
+                        }
+                    }
+                }
+            )
+            val exception =
+                assertThrows<GitJasprException> {
+                    merge(RefSpec("development", "main"), ref = "no-such-ref")
+                }
+            assertContains(exception.message.orEmpty(), "Could not resolve")
+        }
+    }
+
+    @Merge
+    @Test
+    fun `merge with a ref outside the stack fails`() {
+        withTestSetup(useFakeRemote) {
+            createCommitsFrom(
+                testCase {
+                    repository {
+                        commit { title = "one" }
+                        commit {
+                            title = "two"
+                            localRefs += "development"
+                        }
+                    }
+                }
+            )
+            val belowStack =
+                "${localGit.getCommitStack(remoteName, "development", DEFAULT_TARGET_REF).first().hash}^"
+            val exception =
+                assertThrows<GitJasprException> {
+                    merge(RefSpec("development", "main"), ref = belowStack)
+                }
+            assertContains(exception.message.orEmpty(), "not in the current stack")
+        }
+    }
+
+    @Merge
+    @Test
+    fun `merge rejects both count and a commit ref`() {
+        withTestSetup(useFakeRemote) {
+            createCommitsFrom(
+                testCase {
+                    repository {
+                        commit {
+                            title = "one"
+                            localRefs += "development"
+                        }
+                    }
+                }
+            )
+            assertThrows<IllegalArgumentException> {
+                merge(RefSpec("development", "main"), count = 1, ref = "HEAD")
+            }
         }
     }
 

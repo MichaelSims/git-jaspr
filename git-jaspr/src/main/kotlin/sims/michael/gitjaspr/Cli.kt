@@ -22,6 +22,7 @@ import com.github.ajalt.clikt.core.terminal
 import com.github.ajalt.clikt.output.MordantHelpFormatter
 import com.github.ajalt.clikt.parameters.arguments.argument
 import com.github.ajalt.clikt.parameters.arguments.convert
+import com.github.ajalt.clikt.parameters.arguments.help
 import com.github.ajalt.clikt.parameters.arguments.multiple
 import com.github.ajalt.clikt.parameters.arguments.optional
 import com.github.ajalt.clikt.parameters.groups.OptionGroup
@@ -844,9 +845,20 @@ class Merge : GitJasprSubcommand(helpText = "Merge all mergeable commits") {
             "Limit commits from bottom of stack (negative excludes from top)"
         }
 
+    private val commit by
+        argument(name = "COMMIT")
+            .help(
+                "Merge the slice from the base up to and including this commit. Accepts any git " +
+                    "revision (hash, branch, tag, HEAD~2, ...). Alternative to --count."
+            )
+            .optional()
+
     override suspend fun doRun() {
         requireCountLocalExclusive(count, targetRef.local)
-        appWiring.gitJaspr.merge(targetRef.refSpec, count = count)
+        require(count == null || commit == null) {
+            "The --count option and the COMMIT argument are mutually exclusive."
+        }
+        appWiring.gitJaspr.merge(targetRef.refSpec, count = count, ref = commit)
     }
 }
 
@@ -862,7 +874,8 @@ class AutoMerge : GitJasprSubcommand() {
         It will not merge the commits that are ready while the rest are still
         verifying.
 
-        Choose the slice with `--count`; without it the entire stack is the slice.
+        Choose the slice with `--count`, or pass a `COMMIT` to include everything
+        up to and including it; without either, the entire stack is the slice.
         Draft and dont-push commits are excluded from the slice rather than waited on.
 
         """
@@ -875,12 +888,30 @@ class AutoMerge : GitJasprSubcommand() {
             "Limit commits from bottom of stack (negative excludes from top)"
         }
 
+    private val commit by
+        argument(name = "COMMIT")
+            .help(
+                "Wait for and merge the slice from the base up to and including this commit. " +
+                    "Accepts any git revision (hash, branch, tag, HEAD~2, ...). " +
+                    "Alternative to --count."
+            )
+            .optional()
+
     private val interval by
         option("--interval", "-i").int().default(10).help { "Polling interval in seconds" }
 
     override suspend fun doRun() {
         requireCountLocalExclusive(count, targetRef.local)
-        appWiring.gitJaspr.autoMerge(targetRef.refSpec, interval, count = count, theme = theme)
+        require(count == null || commit == null) {
+            "The --count option and the COMMIT argument are mutually exclusive."
+        }
+        appWiring.gitJaspr.autoMerge(
+            targetRef.refSpec,
+            interval,
+            count = count,
+            ref = commit,
+            theme = theme,
+        )
     }
 }
 
