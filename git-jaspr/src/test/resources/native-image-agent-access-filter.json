@@ -7,5 +7,9 @@
     {"excludeClasses": "io.ktor.server.**"},
     {"excludeClasses": "kotlin.test.**"},
     {"excludeClasses": "org.gradle.**"}
+  ],
+  "regexRules": [
+    {"excludeClasses": "^sims\\.michael\\.gitjaspr\\.[^.$]*Test(Kt)?(\\$.*)?$"},
+    {"excludeClasses": "^sims\\.michael\\.gitjaspr\\.(ExecuteCli|ComparableConfig)(\\$.*)?$"}
   ]
 }

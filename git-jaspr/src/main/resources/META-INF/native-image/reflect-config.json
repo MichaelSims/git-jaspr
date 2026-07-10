@@ -747,25 +747,17 @@
   "methods":[{"name":"values","parameterTypes":[] }]
 },
 {
+  "name":"sims.michael.gitjaspr.GitHubClient",
+  "allDeclaredClasses":true,
+  "queryAllPublicMethods":true
+},
+{
   "name":"sims.michael.gitjaspr.GitHubClientImpl$getPullRequestsByHeadRef$1",
   "fields":[{"name":"label"}]
 },
 {
   "name":"sims.michael.gitjaspr.GitJasprException",
   "allDeclaredFields":true
-},
-{
-  "name":"sims.michael.gitjaspr.NativeImageMetadataTest",
-  "allDeclaredFields":true,
-  "allDeclaredClasses":true,
-  "queryAllDeclaredMethods":true,
-  "queryAllPublicMethods":true,
-  "queryAllDeclaredConstructors":true,
-  "methods":[{"name":"<init>","parameterTypes":[] }, {"name":"exercise approvePullRequest","parameterTypes":[] }, {"name":"exercise cherry-pick","parameterTypes":[] }, {"name":"exercise cli command tree","parameterTypes":[] }, {"name":"exercise closePullRequest","parameterTypes":[] }, {"name":"exercise config serialization","parameterTypes":[] }, {"name":"exercise createPullRequest","parameterTypes":[] }, {"name":"exercise error mapping interceptor on 401","parameterTypes":[] }, {"name":"exercise getPullRequestsByHeadRef","parameterTypes":[] }, {"name":"exercise install commit id hook","parameterTypes":[] }, {"name":"exercise push status merge and clean","parameterTypes":[] }, {"name":"exercise rate limit retry interceptor","parameterTypes":[] }, {"name":"exercise stack checkout rename and delete","parameterTypes":[] }, {"name":"exercise suggest stack name","parameterTypes":[] }, {"name":"exercise updatePullRequest","parameterTypes":[] }, {"name":"startServer","parameterTypes":[] }, {"name":"stopServer","parameterTypes":[] }]
-},
-{
-  "name":"sims.michael.gitjaspr.NativeImageMetadataTest$exercise error mapping interceptor on 401$exception$1$1",
-  "fields":[{"name":"label"}]
 },
 {
   "name":"sims.michael.gitjaspr.generated.ClosePullRequest",
