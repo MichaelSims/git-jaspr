@@ -1326,6 +1326,11 @@ class GitJaspr(
         val prs = ghClient.getPullRequests().filterByMatchingTargetRef()
         val branchesToDelete = getBranchesToDeleteDuringMerge(stack, refSpec.remoteRef)
 
+        // Capture the named stack that owns these commits now; if the merge empties it we delete it
+        // afterwards (scoped to just this stack, never a broad sweep). Ambiguous (multi-stack) or
+        // unnamed pushes resolve to null and are left alone.
+        val ownedNamedStack = (getExistingStackName(stack) as? Found)?.name
+
         val lastStatus = statuses.last()
         val lastPr = checkNotNull(lastStatus.pullRequest)
         if (lastPr.baseRefName != refSpec.remoteRef) {
@@ -1367,6 +1372,50 @@ class GitJaspr(
         // closed instead. So we wait a bit before cleaning up.
         delay(2_000)
         cleanUpBranches(branchesToDelete)
+
+        if (ownedNamedStack != null) {
+            deleteNamedStackIfEmptied(ownedNamedStack)
+        }
+    }
+
+    /**
+     * Deletes [namedStackRef] (a full `jaspr-named/<target>/<name>` ref) if, after a merge, all of
+     * its commits are now in the target branch. A partially-merged stack still has commits above
+     * the merge point and is left intact. Best-effort: a merge has already succeeded, so cleanup
+     * failures are logged rather than propagated.
+     */
+    private fun deleteNamedStackIfEmptied(namedStackRef: String) {
+        val remoteName = config.remoteName
+        val parts =
+            RemoteNamedStackRef.parse(namedStackRef, config.remoteNamedStackBranchPrefix) ?: return
+        // Refresh remote-tracking refs so the target reflects the just-pushed merge before we test
+        // whether the named stack is now fully contained in it.
+        gitClient.fetch(remoteName)
+        val stillHasUnmergedCommits =
+            gitClient
+                .getCommitStack(remoteName, "$remoteName/$namedStackRef", parts.targetRef)
+                .isNotEmpty()
+        if (stillHasUnmergedCommits) return
+        try {
+            gitClient.push(listOf(RefSpec(FORCE_PUSH_PREFIX, namedStackRef)), remoteName)
+            val currentBranch = gitClient.getCurrentBranchName()
+            val localBranchesToDelete =
+                gitClient.getBranchNames().filter { branch ->
+                    branch != currentBranch &&
+                        gitClient.getUpstreamBranchName(branch, remoteName) == namedStackRef
+                }
+            if (localBranchesToDelete.isNotEmpty()) {
+                gitClient.deleteBranches(localBranchesToDelete, force = true)
+            }
+        } catch (e: Exception) {
+            logger.debug("Failed to delete emptied named stack {} after merge", namedStackRef, e)
+            return
+        }
+        renderer.info {
+            "Removed the fully-merged named stack ${entity(parts.stackName)}. " +
+                "To reuse this name on your next push: " +
+                command("jaspr push --name ${parts.stackName}")
+        }
     }
 
     /**

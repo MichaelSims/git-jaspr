@@ -95,6 +95,21 @@ interface GitJasprTest {
             ref = ref,
         )
 
+    /**
+     * Merges [refSpec], then recreates named stack [stackName] so it lingers as a fully-merged
+     * (empty) named stack. [merge] now deletes the named stack it merges, so this reproduces the
+     * way empty named stacks actually accumulate: a stack merged outside jaspr (a squash-merge on
+     * GitHub, a teammate's merge) that jaspr's own cleanup never touched.
+     */
+    suspend fun GitHubTestHarness.mergeLeavingEmptyNamedStack(refSpec: RefSpec, stackName: String) {
+        val namedStackRef =
+            RemoteNamedStackRef(stackName = stackName, targetRef = refSpec.remoteRef).name()
+        val tip = localGit.log(refSpec.localRef, 1).single().hash
+        merge(refSpec)
+        localGit.push(listOf(RefSpec(tip, namedStackRef)), remoteName)
+        localGit.fetch(remoteName)
+    }
+
     suspend fun GitHubTestHarness.getRemoteCommitStatuses(stack: List<Commit>) =
         gitJaspr.getRemoteCommitStatuses(stack)
 
@@ -6977,6 +6992,104 @@ interface GitJasprTest {
 
     @Merge
     @Test
+    fun `merge deletes the named stack it fully merges`() {
+        withTestSetup(useFakeRemote) {
+            createCommitsFrom(
+                testCase {
+                    repository {
+                        commit {
+                            title = "one"
+                            willPassVerification = true
+                            remoteRefs += buildRemoteRef("one")
+                        }
+                        commit {
+                            title = "two"
+                            willPassVerification = true
+                            remoteRefs += buildRemoteRef("two")
+                            localRefs += "dev"
+                        }
+                    }
+                    pullRequest {
+                        headRef = buildRemoteRef("one")
+                        baseRef = "main"
+                        title = "one"
+                        willBeApprovedByUserKey = "michael"
+                    }
+                    pullRequest {
+                        headRef = buildRemoteRef("two")
+                        baseRef = buildRemoteRef("one")
+                        title = "two"
+                        willBeApprovedByUserKey = "michael"
+                    }
+                }
+            )
+            gitJaspr.push(stackName = "doomed")
+            val doomedRef = RemoteNamedStackRef(stackName = "doomed").name()
+            assertTrue(
+                localGit.getRemoteBranches(remoteName).any { branch -> branch.name == doomedRef }
+            )
+
+            waitForChecksToConclude("one", "two")
+            merge(RefSpec("dev", "main"))
+
+            localGit.fetch(remoteName, prune = true)
+            assertFalse(
+                localGit.getRemoteBranches(remoteName).any { branch -> branch.name == doomedRef },
+                "the fully-merged named stack should have been deleted by merge",
+            )
+        }
+    }
+
+    @Merge
+    @Test
+    fun `merge keeps a partially-merged named stack`() {
+        withTestSetup(useFakeRemote) {
+            createCommitsFrom(
+                testCase {
+                    repository {
+                        commit {
+                            title = "one"
+                            willPassVerification = true
+                            remoteRefs += buildRemoteRef("one")
+                        }
+                        commit {
+                            title = "two"
+                            willPassVerification = true
+                            remoteRefs += buildRemoteRef("two")
+                            localRefs += "dev"
+                        }
+                    }
+                    pullRequest {
+                        headRef = buildRemoteRef("one")
+                        baseRef = "main"
+                        title = "one"
+                        willBeApprovedByUserKey = "michael"
+                    }
+                    pullRequest {
+                        headRef = buildRemoteRef("two")
+                        baseRef = buildRemoteRef("one")
+                        title = "two"
+                        willBeApprovedByUserKey = "michael"
+                    }
+                }
+            )
+            gitJaspr.push(stackName = "partial")
+            val partialRef = RemoteNamedStackRef(stackName = "partial").name()
+
+            waitForChecksToConclude("one", "two")
+            // Merge only the bottom commit; "two" is still above the merge point.
+            merge(RefSpec("dev", "main"), count = 1)
+
+            localGit.fetch(remoteName, prune = true)
+            assertTrue(
+                localGit.getRemoteBranches(remoteName).any { branch -> branch.name == partialRef },
+                "a partially-merged named stack should be kept",
+            )
+        }
+    }
+
+    @Merge
+    @Test
     fun `autoMerge happy path`() {
         withTestSetup(useFakeRemote) {
             createCommitsFrom(
@@ -8176,9 +8289,10 @@ interface GitJasprTest {
             )
             gitJaspr.push(stackName = "stack-two")
 
-            // Merge all commits into main to make both stacks empty
+            // Merge all commits into main. jaspr merge deletes the stack it owns (stack-two);
+            // recreate it here so both stacks linger as empty named stacks for clean to find.
             waitForChecksToConclude("one", "two", "three", "four")
-            merge(RefSpec("dev", "main"))
+            mergeLeavingEmptyNamedStack(RefSpec("dev", "main"), "stack-two")
 
             // Run clean with dry run
             gitJaspr.getCleanPlan(cleanAbandonedPrs = true, cleanAllCommits = false)
@@ -8309,9 +8423,10 @@ interface GitJasprTest {
             // Push a second named stack
             gitJaspr.push(stackName = "stack-two")
 
-            // Merge the first two stacks into the main branch (making them empty)
+            // Merge into main, making stack-one and stack-two empty. jaspr merge deletes the stack
+            // it owns (stack-two); recreate it so both empty stacks are present for clean.
             waitForChecksToConclude("one", "two", "three")
-            merge(RefSpec("dev", "main"))
+            mergeLeavingEmptyNamedStack(RefSpec("dev", "main"), "stack-two")
 
             // Create one more commit and push a third stack that is NOT empty
             createCommitsFrom(
@@ -8391,7 +8506,7 @@ interface GitJasprTest {
 
             gitJaspr.push(stackName = "empty_stack")
             waitForChecksToConclude("will_merge_a")
-            merge(RefSpec("dev", "main"))
+            mergeLeavingEmptyNamedStack(RefSpec("dev", "main"), "empty_stack")
 
             // Create an orphaned commit (no PR)
             createCommitsFrom(
@@ -8554,7 +8669,7 @@ interface GitJasprTest {
 
             gitJaspr.push(stackName = "empty_stack")
             waitForChecksToConclude("will_merge_a")
-            merge(RefSpec("dev", "main"))
+            mergeLeavingEmptyNamedStack(RefSpec("dev", "main"), "empty_stack")
 
             // Create an orphaned commit (no PR)
             createCommitsFrom(
@@ -8682,7 +8797,9 @@ interface GitJasprTest {
             )
 
             waitForChecksToConclude("A", "B", "C", "E")
-            merge(RefSpec("dev", "main"))
+            // Leave my-stack behind as an empty named stack so the clean below is what removes it
+            // (jaspr merge would otherwise delete it itself).
+            mergeLeavingEmptyNamedStack(RefSpec("dev", "main"), "my-stack")
 
             assertEquals(
                 listOf(RemoteNamedStackRef("my-stack").name(), "main").toSet(),
@@ -9877,8 +9994,9 @@ interface GitJasprTest {
 
             waitForChecksToConclude("one", "two")
 
-            // Merge to make the stack empty
-            merge(RefSpec("development", "main"))
+            // Merge to make the stack empty. jaspr merge deletes the merged stack, so recreate it
+            // as a lingering empty named stack for clean to consider.
+            mergeLeavingEmptyNamedStack(RefSpec("development", "main"), "my-stack")
 
             // Clean should succeed without errors
             // The PR with non-matching base ref should be ignored (not closed)
