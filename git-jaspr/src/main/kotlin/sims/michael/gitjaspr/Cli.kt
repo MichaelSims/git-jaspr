@@ -585,9 +585,17 @@ class Status : GitJasprSubcommand() {
     private val targetRef by TargetRefOptions()
 
     override suspend fun doRun() {
+        renderer.info { STATUS_PROGRESS_MESSAGE }
         print(appWiring.gitJaspr.getStatusString(targetRef.refSpec, theme))
     }
 }
+
+/**
+ * The immediate progress line `status` prints before its (potentially slow) fetch and GitHub API
+ * calls. Exposed so the external-process test can strip it when comparing against the core-level
+ * status output.
+ */
+const val STATUS_PROGRESS_MESSAGE = "Fetching stack status..."
 
 class Compare : GitJasprSubcommand() {
     // language=Markdown

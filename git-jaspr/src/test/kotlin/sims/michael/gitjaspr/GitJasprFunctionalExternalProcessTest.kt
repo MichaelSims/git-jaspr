@@ -77,26 +77,29 @@ class GitJasprFunctionalExternalProcessTest : GitJasprTest {
     }
 
     override suspend fun GitHubTestHarness.getAndPrintStatusString(refSpec: RefSpec): String {
+        // The CLI prints an upfront progress line that the core-level default variant omits.
+        // Strip it so both variants return the same status body for the shared assertions.
         return executeCli(
-            scratchDir = scratchDir,
-            remoteUri = remoteUri,
-            remoteName = remoteName,
-            extraCliArgs = emptyList(),
-            homeDirConfig = buildHomeDirConfig(),
-            repoDirConfig = emptyMap(),
-            strings =
-                listOf(
-                    "--remote-name",
-                    remoteName,
-                    "status",
-                    "--target",
-                    refSpec.remoteRef,
-                    "--local",
-                    refSpec.localRef,
-                ),
-            invokeLocation = localRepo,
-            javaOptions = javaOptions,
-        )
+                scratchDir = scratchDir,
+                remoteUri = remoteUri,
+                remoteName = remoteName,
+                extraCliArgs = emptyList(),
+                homeDirConfig = buildHomeDirConfig(),
+                repoDirConfig = emptyMap(),
+                strings =
+                    listOf(
+                        "--remote-name",
+                        remoteName,
+                        "status",
+                        "--target",
+                        refSpec.remoteRef,
+                        "--local",
+                        refSpec.localRef,
+                    ),
+                invokeLocation = localRepo,
+                javaOptions = javaOptions,
+            )
+            .removePrefix("$STATUS_PROGRESS_MESSAGE\n")
     }
 
     override suspend fun GitHubTestHarness.getAndPrintCompareString(refSpec: RefSpec): String {
