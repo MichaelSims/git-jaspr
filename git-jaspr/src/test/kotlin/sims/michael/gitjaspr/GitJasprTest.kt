@@ -408,6 +408,42 @@ interface GitJasprTest {
         }
     }
 
+    @Nav
+    @Test
+    fun `getNavPositionString marks the cursor with an arrow under any theme`() {
+        withTestSetup(useFakeRemote) {
+            createCommitsFrom(
+                testCase {
+                    repository {
+                        commit { title = "one" }
+                        commit { title = "two" }
+                        commit {
+                            title = "three"
+                            localRefs += "development"
+                        }
+                    }
+                    checkout = "development"
+                }
+            )
+            // Cursor at "two" (index 1 of [one, two, three]).
+            gitJaspr.navigateDown(DEFAULT_TARGET_REF, 1)
+            val state = assertNotNull(gitJaspr.readNavState())
+
+            // MonoTheme strips all styling, so the arrow is the only cursor signal -- exactly the
+            // case where jaspr status's bold-only marking disappears. This is what jaspr nav show
+            // surfaces on demand.
+            val output = gitJaspr.getNavPositionString(state, MonoTheme)
+
+            assertContains(output, "Navigating")
+            val cursorLines = output.lines().filter { line -> line.contains("→") }
+            assertEquals(1, cursorLines.size, "Expected exactly one cursor row; output:\n$output")
+            assertContains(cursorLines.single(), "two")
+            // The other commits are shown without the cursor marker.
+            assertTrue(output.lines().any { line -> line.contains("one") && !line.contains("→") })
+            assertTrue(output.lines().any { line -> line.contains("three") && !line.contains("→") })
+        }
+    }
+
     @Test
     fun `up checks out next existing commit when no amend has occurred`() {
         withTestSetup(useFakeRemote) {

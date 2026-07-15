@@ -1554,6 +1554,22 @@ class Nav : SuspendingCliktCommand(name = "nav") {
     override suspend fun run() = Unit
 }
 
+class NavShow :
+    GitJasprSubcommand(
+        name = "show",
+        helpText = "Show your position in the navigation stack without moving",
+    ) {
+    override suspend fun doRun() {
+        val jaspr = appWiring.gitJaspr
+        val state = jaspr.readNavState()?.takeIf { appWiring.gitClient.isHeadDetached() }
+        if (state == null) {
+            renderer.info { "No active navigation session." }
+            return
+        }
+        print(jaspr.getNavPositionString(state, theme))
+    }
+}
+
 class NavCancel :
     GitJasprSubcommand(
         name = "cancel",
@@ -2249,7 +2265,7 @@ fun buildCommand(): SuspendingCliktCommand =
             Top(),
             Goto(),
             Drop(),
-            Nav().subcommands(NavCancel(), NavFinish()),
+            Nav().subcommands(NavShow(), NavCancel(), NavFinish()),
             // Configuration
             Init(),
             ConfigCommand().subcommands(ConfigGet(), ConfigSet(), ConfigUnset(), ConfigList()),

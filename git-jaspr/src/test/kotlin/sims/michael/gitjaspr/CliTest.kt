@@ -186,6 +186,19 @@ class CliTest {
     }
 
     @Test
+    fun `nav show reports no active session when not navigating`() {
+        val scratchDir = createTempDir()
+        val output =
+            executeCli(
+                scratchDir,
+                "git@github.com:SomeOwner/some-repo-name.git",
+                DEFAULT_REMOTE_NAME,
+                strings = listOf("nav", "show"),
+            )
+        assertContains(output, "No active navigation session")
+    }
+
+    @Test
     fun `gitHubInfo can be partially explicit and partially implicit`() {
         val scratchDir = createTempDir()
         // This will come from the configuration, the rest will be inferred from the URI
