@@ -167,6 +167,32 @@ interface GitJasprTest {
 
     @Nav
     @Test
+    fun `nav state round-trips from a linked worktree`() {
+        withTestSetup(useFakeRemote) {
+            // In a linked worktree `.git` is a file, not a directory, so nav-state must be
+            // resolved against the worktree-specific git dir rather than `<worktree>/.git`.
+            val worktreeDir = scratchDir.resolve("linked-worktree")
+            localGit.addWorktree(worktreeDir)
+            val worktreeJaspr = gitJasprIn(worktreeDir)
+
+            val state =
+                NavState(
+                    headBeforeDetach = "my-feature",
+                    stack =
+                        listOf(
+                            StackEntry(sha = "abc123", commitId = "id-1"),
+                            StackEntry(sha = "def456", commitId = "id-2"),
+                        ),
+                    cursorIndex = 0,
+                    targetRef = DEFAULT_TARGET_REF,
+                )
+            worktreeJaspr.writeNavState(state)
+            assertEquals(state, worktreeJaspr.readNavState())
+        }
+    }
+
+    @Nav
+    @Test
     fun `readNavState returns null when no state file exists`() {
         withTestSetup(useFakeRemote) { assertNull(gitJaspr.readNavState()) }
     }

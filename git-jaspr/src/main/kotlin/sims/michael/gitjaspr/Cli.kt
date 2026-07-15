@@ -1842,7 +1842,7 @@ class Continue :
     GitJasprSubcommand(helpText = "Continue an in-progress operation (rebase or cherry-pick)") {
     override suspend fun doRun() {
         val workingDirectory = appWiring.gitClient.workingDirectory
-        val gitDir = workingDirectory.resolve(".git")
+        val gitDir = appWiring.gitClient.gitDir()
 
         // Prefer rebase over cherry-pick since rebase is the higher-level operation
         val command =

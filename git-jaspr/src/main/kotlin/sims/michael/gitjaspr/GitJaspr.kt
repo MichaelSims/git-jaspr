@@ -2781,8 +2781,24 @@ class GitJaspr(
             renderer,
         )
 
-    private fun getJasprDir(): File =
-        config.workingDirectory.resolve(".git/jaspr").also { it.mkdirs() }
+    /**
+     * Repo-wide jaspr state directory, shared across all worktrees. Lives under the common git dir
+     * (`git rev-parse --git-common-dir`), so it resolves to `<repo>/.git/jaspr` from both the main
+     * checkout and any linked worktree. Use this for state scoped to the repository as a whole: the
+     * divergence-probe cache and the auto-merge/sync scratch worktrees and locks. For per-checkout
+     * state that follows HEAD, use [getWorktreeJasprDir].
+     */
+    private fun getJasprDir(): File = gitClient.gitCommonDir().resolve("jaspr").also { it.mkdirs() }
+
+    /**
+     * Per-worktree jaspr state directory. Lives under the worktree-specific git dir (`git rev-parse
+     * --git-dir`), which is `<repo>/.git` in the main checkout and `<repo>/.git/worktrees/<name>`
+     * in a linked worktree. Use this for state coupled to this checkout's HEAD (navigation and
+     * split sessions), so each worktree keeps its own. The post-checkout hook resolves the
+     * nav-state path the same way (`git rev-parse --git-dir`), so the two must agree.
+     */
+    private fun getWorktreeJasprDir(): File =
+        gitClient.gitDir().resolve("jaspr").also { it.mkdirs() }
 
     private fun getAutoMergeWorktreeDir(): File = getJasprDir().resolve("automerge-worktree")
 
@@ -2837,7 +2853,7 @@ class GitJaspr(
     }
 
     private val navStateFile
-        get() = getJasprDir().resolve("nav-state.json")
+        get() = getWorktreeJasprDir().resolve("nav-state.json")
 
     fun readNavState(): NavState? {
         val file = navStateFile
@@ -2879,7 +2895,7 @@ class GitJaspr(
     fun isNavSessionActive(): Boolean = gitClient.isHeadDetached() && readNavState() != null
 
     private val splitStateFile
-        get() = getJasprDir().resolve("split-state.json")
+        get() = getWorktreeJasprDir().resolve("split-state.json")
 
     fun readSplitState(): SplitState? {
         val file = splitStateFile

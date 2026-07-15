@@ -143,6 +143,24 @@ private constructor(
             commitIdentOverride = DEFAULT_COMMITTER,
         )
 
+    /**
+     * Builds a [GitJaspr] rooted at [workingDirectory] instead of [localRepo]. Used to drive jaspr
+     * from a linked worktree, where the git dir resolves differently than in the main checkout.
+     */
+    fun gitJasprIn(workingDirectory: File): GitJaspr =
+        GitJaspr(
+            ghClient = gitHub,
+            DefaultGitClient(workingDirectory),
+            Config(
+                workingDirectory,
+                remoteName,
+                gitHubInfo,
+                remoteBranchPrefix = remoteBranchPrefix,
+            ),
+            ids::next,
+            commitIdentOverride = DEFAULT_COMMITTER,
+        )
+
     init {
         val uriToClone =
             if (!useFakeRemote) {
