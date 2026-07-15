@@ -1431,7 +1431,7 @@ class GitJaspr(
         val resolvedHash =
             try {
                 gitClient.log(ref, 1).single().hash
-            } catch (e: Exception) {
+            } catch (_: Exception) {
                 throw GitJasprException("Could not resolve '$ref' to a commit.")
             }
         val index = stack.indexOfFirst { commit -> commit.hash == resolvedHash }
