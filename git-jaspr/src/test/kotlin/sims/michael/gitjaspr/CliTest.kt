@@ -298,6 +298,43 @@ class CliTest {
         )
     }
 
+    // Backstop for the "user error must not look like a crash" contract: intentional user-facing
+    // failures reachable from a command should render GitJasprException's clean message, never the
+    // generic "you've likely encountered a bug" banner. Covers both a CLI-layer guard and a
+    // GitJaspr domain guard, so a mis-classified require/check in either layer is caught.
+    @Test
+    fun `user errors render cleanly without the bug banner`() {
+        fun assertCleanError(vararg cliArgs: String, expectedSubstring: String) {
+            val scratchDir = createTempDir()
+            val output =
+                assertThrows<IllegalStateException> {
+                        executeCli(
+                            scratchDir,
+                            "git@github.com:SomeOwner/some-repo-name.git",
+                            DEFAULT_REMOTE_NAME,
+                            strings = cliArgs.toList(),
+                        )
+                    }
+                    .message
+            assertNotNull(output)
+            assertContains(output, expectedSubstring)
+            assertTrue(!output.contains("you've likely encountered a bug")) {
+                "Expected a clean user error, but got the bug banner:\n$output"
+            }
+        }
+
+        // CLI-layer guard: mutually exclusive options.
+        assertCleanError(
+            "merge",
+            "--count",
+            "1",
+            "somecommit",
+            expectedSubstring = "mutually exclusive",
+        )
+        // GitJaspr domain guard: unsplit with no split in progress.
+        assertCleanError("unsplit", expectedSubstring = "No split in progress")
+    }
+
     @Test
     fun `fails if remoteBranchPrefix and remoteNamedStackBranchPrefix are the same`() {
         val scratchDir = createTempDir()

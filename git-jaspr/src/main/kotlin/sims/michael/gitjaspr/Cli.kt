@@ -550,7 +550,7 @@ abstract class GitJasprSubcommand(
     }
 
     protected fun requireCountLocalExclusive(count: Int?, local: String) {
-        require(count == null || local == DEFAULT_LOCAL_OBJECT) {
+        requireForUser(count == null || local == DEFAULT_LOCAL_OBJECT) {
             "The --count and --local options are mutually exclusive."
         }
     }
@@ -855,7 +855,7 @@ class Merge : GitJasprSubcommand(helpText = "Merge all mergeable commits") {
 
     override suspend fun doRun() {
         requireCountLocalExclusive(count, targetRef.local)
-        require(count == null || commit == null) {
+        requireForUser(count == null || commit == null) {
             "The --count option and the COMMIT argument are mutually exclusive."
         }
         appWiring.gitJaspr.merge(targetRef.refSpec, count = count, ref = commit)
@@ -902,7 +902,7 @@ class AutoMerge : GitJasprSubcommand() {
 
     override suspend fun doRun() {
         requireCountLocalExclusive(count, targetRef.local)
-        require(count == null || commit == null) {
+        requireForUser(count == null || commit == null) {
             "The --count option and the COMMIT argument are mutually exclusive."
         }
         appWiring.gitJaspr.autoMerge(
@@ -1420,7 +1420,7 @@ class InstallHook : GitJasprSubcommand(helpText = "Install the jaspr commit-msg 
 // region Navigation commands
 
 private fun requireNoActiveSplit(jaspr: GitJaspr) {
-    require(!jaspr.isSplitInProgress()) {
+    requireForUser(!jaspr.isSplitInProgress()) {
         "A split is in progress. Run jaspr unsplit to restore the original commit, " +
             "or commit your changes and run jaspr top to finish splitting."
     }

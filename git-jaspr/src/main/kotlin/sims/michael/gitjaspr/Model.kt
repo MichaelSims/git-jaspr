@@ -181,11 +181,38 @@ data class UpdateCheckState(
     val lastNotifiedVersion: String? = null,
 )
 
+/**
+ * A user-facing error carrying a clean, actionable [message]. The CLI's top-level handler renders
+ * these as a plain error line; every *other* exception type is treated as an unexpected bug and
+ * shown with the generic "you've likely encountered a bug" banner.
+ *
+ * So the rule for anything reachable from a command: throw this (or use [requireForUser] /
+ * [requireNotNullForUser]) for a failure the user can cause through ordinary use, such as a bad
+ * argument or the repo being in the wrong state. Reserve `require` / `check` / `checkNotNull`,
+ * which throw `IllegalArgumentException` / `IllegalStateException`, for genuine internal invariants
+ * where the bug banner is the right response. A plain `require` in a command or domain path that a
+ * user can trip is a smell: it surfaces an ordinary mistake as an apparent crash.
+ */
 class GitJasprException(override val message: String) : RuntimeException(message) {
     constructor(message: String, cause: Throwable) : this(message) {
         initCause(cause)
     }
 }
+
+/**
+ * Like [require], but throws [GitJasprException] instead of [IllegalArgumentException] so the CLI
+ * renders [lazyMessage] as a user-facing error rather treating it as an application bug
+ */
+inline fun requireForUser(condition: Boolean, lazyMessage: () -> String) {
+    if (!condition) throw GitJasprException(lazyMessage())
+}
+
+/**
+ * Like [requireNotNull], but throws [GitJasprException] (see [requireForUser]) when [value] is null
+ * and returns it otherwise.
+ */
+inline fun <T : Any> requireNotNullForUser(value: T?, lazyMessage: () -> String): T =
+    value ?: throw GitJasprException(lazyMessage())
 
 class PushFailedException(override val message: String) : RuntimeException(message) {
     constructor(message: String, cause: Throwable) : this(message) {

@@ -3480,7 +3480,7 @@ class GitJaspr(
      * [UnsplitOutcome.LeftInProgress] leaves the nav stack and split state unchanged.
      */
     fun unsplit(): UnsplitOutcome {
-        val splitState = readSplitState() ?: throw GitJasprException("No split in progress.")
+        val splitState = requireNotNullForUser(readSplitState()) { "No split in progress." }
         val originalCommit = gitClient.log(splitState.unsplitSha, 1).single()
         val originalParent = gitClient.log("${splitState.unsplitSha}^", 1).single().hash
         val headSha = gitClient.log(GitClient.HEAD, 1).single().hash
@@ -3670,10 +3670,9 @@ class GitJaspr(
      */
     private fun foldUp(): String {
         val navState =
-            readNavState()?.takeIf { gitClient.isHeadDetached() }
-                ?: throw GitJasprException(
-                    "Cannot fold up without an active navigation session — there is no commit above."
-                )
+            requireNotNullForUser(readNavState()?.takeIf { gitClient.isHeadDetached() }) {
+                "Cannot fold up without an active navigation session — there is no commit above."
+            }
         val aboveIndex = navState.cursorIndex + 1
         requireForUser(aboveIndex <= navState.stack.lastIndex) {
             "Cannot fold up — already at the top of the stack."
