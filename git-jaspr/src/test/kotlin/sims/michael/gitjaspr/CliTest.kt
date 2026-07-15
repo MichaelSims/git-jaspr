@@ -148,10 +148,41 @@ class CliTest {
                 }
                 .message
         assertNotNull(thrownMessage)
-        assertContains(
-            thrownMessage,
-            "java.lang.IllegalStateException: Can't find a git working dir",
-        )
+        // The working dir is resolved before any subcommand handler runs, but it must still render
+        // as a clean user error, not a raw stack trace or the bug banner.
+        assertContains(thrownMessage, "Can't find a git working dir")
+        assertTrue(!thrownMessage.contains("IllegalStateException")) {
+            "Expected a clean user error, but got a stack trace:\n$thrownMessage"
+        }
+        assertTrue(!thrownMessage.contains("you've likely encountered a bug")) {
+            "Expected a clean user error, but got the bug banner:\n$thrownMessage"
+        }
+    }
+
+    @Test
+    fun `invalid theme color renders cleanly without a stack trace`() {
+        val scratchDir = createTempDir()
+        // The theme is resolved in the root command's run(), before any subcommand handler; a bad
+        // custom color must still surface as a clean user error rather than a raw stack trace.
+        val thrownMessage =
+            assertThrows<IllegalStateException> {
+                    executeCli(
+                        scratchDir,
+                        "git@github.com:SomeOwner/some-repo-name.git",
+                        DEFAULT_REMOTE_NAME,
+                        homeDirConfig = mapOf("mytheme.error.color" to "notacolor"),
+                        strings = listOf("--theme", "mytheme", "status"),
+                    )
+                }
+                .message
+        assertNotNull(thrownMessage)
+        assertContains(thrownMessage, "Invalid color 'notacolor'")
+        assertTrue(!thrownMessage.contains("Exception")) {
+            "Expected a clean user error, but got a stack trace:\n$thrownMessage"
+        }
+        assertTrue(!thrownMessage.contains("you've likely encountered a bug")) {
+            "Expected a clean user error, but got the bug banner:\n$thrownMessage"
+        }
     }
 
     @Test

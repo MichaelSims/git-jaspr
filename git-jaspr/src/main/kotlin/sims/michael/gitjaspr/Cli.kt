@@ -39,6 +39,7 @@ import java.io.File
 import java.lang.reflect.Proxy
 import java.time.ZonedDateTime
 import java.util.Properties
+import kotlin.system.exitProcess
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withContext
@@ -110,8 +111,8 @@ class GitJasprRoot : SuspendingCliktCommand(name = "jaspr") {
             .findNearestGitDir()
             .canonicalFile
             .also { dir ->
-                require(dir.exists()) { "${dir.absolutePath} does not exist" }
-                require(dir.isDirectory) { "${dir.absolutePath} is not a directory" }
+                requireForUser(dir.exists()) { "${dir.absolutePath} does not exist" }
+                requireForUser(dir.isDirectory) { "${dir.absolutePath} is not a directory" }
             }
 
     init {
@@ -310,7 +311,7 @@ applicable.
             GitHubInfo(host, owner, name)
         } else {
             val remoteUri =
-                requireNotNull(gitClient.getRemoteUriOrNull(remoteName)) {
+                requireNotNullForUser(gitClient.getRemoteUriOrNull(remoteName)) {
                     buildString {
                         appendLine("Couldn't find remote $remoteName.")
                         if (remoteName == DEFAULT_REMOTE_NAME) {
@@ -323,7 +324,7 @@ applicable.
                     }
                 }
             val fromUri =
-                requireNotNull(extractGitHubInfoFromUri(remoteUri)) {
+                requireNotNullForUser(extractGitHubInfoFromUri(remoteUri)) {
                     "Couldn't infer github info from $remoteName URI: $remoteUri. \n" +
                         "You can specify the information I need manually with --github-host, --repo-owner, " +
                         "and --repo-name."
@@ -2184,7 +2185,9 @@ private fun migrateConfig(oldConfig: File): String {
 
 fun File.findNearestGitDir(): File {
     val parentFiles = generateSequence(canonicalFile) { it.parentFile }
-    return checkNotNull(parentFiles.firstOrNull { file -> file.resolve(".git").exists() }) {
+    return requireNotNullForUser(
+        parentFiles.firstOrNull { file -> file.resolve(".git").exists() }
+    ) {
         "Can't find a git working dir in $canonicalFile or any of its parent directories"
     }
 }
@@ -2194,7 +2197,21 @@ object Cli {
 
     @JvmStatic
     fun main(args: Array<out String>) {
-        runBlocking { buildCommand().main(args) }
+        runBlocking {
+            try {
+                buildCommand().main(args)
+            } catch (e: GitJasprException) {
+                // Failures that surface before a subcommand's own handler runs land here: an
+                // invalid --theme value while the root command builds its theme, or a bad working
+                // directory resolved at startup. Render the clean message with the default theme
+                // (the custom theme may be the very thing that failed) rather than letting it
+                // escape as a raw stack trace. See GitJasprException for the convention. Genuinely
+                // unexpected exceptions are intentionally not caught here: this runs before file
+                // logging is set up, and a stack trace is the right signal for a real bug.
+                ConsoleRenderer(DefaultTheme).error { e.message }
+                exitProcess(255)
+            }
+        }
     }
 }
 

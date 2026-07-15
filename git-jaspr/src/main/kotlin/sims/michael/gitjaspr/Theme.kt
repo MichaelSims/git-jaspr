@@ -197,8 +197,8 @@ private fun buildCustomTheme(scheme: String, properties: Properties): Theme {
 /**
  * Builds a styling function from an optional hex color and optional weight.
  *
- * @throws IllegalArgumentException if [colorHex] is not a valid hex color or [weight] is not `bold`
- *   or `dim`.
+ * @throws GitJasprException if [colorHex] is not a valid hex color or [weight] is not `bold` or
+ *   `dim`. The value comes from user config, so this surfaces as a clean CLI error.
  */
 private fun buildRoleStyle(
     colorHex: String?,
@@ -209,7 +209,7 @@ private fun buildRoleStyle(
     val colorFn: ((String) -> String)? = colorHex?.let { hex ->
         runCatching { TextColors.rgb(hex) }
             .getOrElse {
-                throw IllegalArgumentException(
+                throw GitJasprException(
                     "Invalid color '$hex' for $scheme.$role.color " +
                         "(expected hex like #FF5733 or FF5733)"
                 )
@@ -226,7 +226,7 @@ private fun buildRoleStyle(
             }
             null -> null
             else ->
-                throw IllegalArgumentException(
+                throw GitJasprException(
                     "Invalid weight '$weight' for $scheme.$role.weight (expected 'bold' or 'dim')"
                 )
         }
