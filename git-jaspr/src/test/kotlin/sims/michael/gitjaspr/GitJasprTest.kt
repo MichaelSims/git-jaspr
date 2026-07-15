@@ -312,7 +312,7 @@ interface GitJasprTest {
                     checkout = "development"
                 }
             )
-            assertThrows<IllegalArgumentException> { gitJaspr.navigateDown(DEFAULT_TARGET_REF, 3) }
+            assertThrows<GitJasprException> { gitJaspr.navigateDown(DEFAULT_TARGET_REF, 3) }
         }
     }
 
@@ -624,7 +624,7 @@ interface GitJasprTest {
                 }
             )
             val exception =
-                assertThrows<IllegalArgumentException> {
+                assertThrows<GitJasprException> {
                     gitJaspr.navigateTo(DEFAULT_TARGET_REF, 0)
                 }
             assertContains(exception.message.orEmpty(), "Position must not be zero")
@@ -647,8 +647,8 @@ interface GitJasprTest {
                     checkout = "development"
                 }
             )
-            assertThrows<IllegalArgumentException> { gitJaspr.navigateTo(DEFAULT_TARGET_REF, 3) }
-            assertThrows<IllegalArgumentException> { gitJaspr.navigateTo(DEFAULT_TARGET_REF, -3) }
+            assertThrows<GitJasprException> { gitJaspr.navigateTo(DEFAULT_TARGET_REF, 3) }
+            assertThrows<GitJasprException> { gitJaspr.navigateTo(DEFAULT_TARGET_REF, -3) }
         }
     }
 
@@ -669,7 +669,7 @@ interface GitJasprTest {
                 }
             )
             val exception =
-                assertThrows<IllegalArgumentException> {
+                assertThrows<GitJasprException> {
                     gitJaspr.navigateTo(DEFAULT_TARGET_REF, -1)
                 }
             assertContains(exception.message.orEmpty(), "Already at position -1")
@@ -1572,6 +1572,37 @@ interface GitJasprTest {
             // original B, not a freshly-amended replacement with a new SHA.
             assertEquals(originalB, restored.hash)
             assertNull(gitJaspr.readSplitState())
+        }
+    }
+
+    @Nav
+    @Test
+    fun `unsplit with no split in progress reports a clean error`() {
+        withTestSetup(useFakeRemote) {
+            // A GitJasprException surfaces as a clean message; anything else trips the
+            // "you've likely encountered a bug" banner for what is ordinary user error.
+            assertThrows<GitJasprException> { gitJaspr.unsplit() }
+        }
+    }
+
+    @Nav
+    @Test
+    fun `split with a split already in progress reports a clean error`() {
+        withTestSetup(useFakeRemote) {
+            createCommitsFrom(
+                testCase {
+                    repository {
+                        commit { title = "A" }
+                        commit {
+                            title = "B"
+                            localRefs += "development"
+                        }
+                    }
+                    checkout = "development"
+                }
+            )
+            gitJaspr.split()
+            assertThrows<GitJasprException> { gitJaspr.split() }
         }
     }
 
@@ -2499,7 +2530,7 @@ interface GitJasprTest {
 
             // Nav to bottom: HEAD at A
             gitJaspr.navigateToBottom(DEFAULT_TARGET_REF)
-            assertThrows<IllegalArgumentException> { gitJaspr.fold("down") }
+            assertThrows<GitJasprException> { gitJaspr.fold("down") }
         }
     }
 
@@ -2527,7 +2558,7 @@ interface GitJasprTest {
             gitJaspr.navigateUp(1, DEFAULT_TARGET_REF)
 
             // Fold up should fail since there's nothing above the cursor
-            assertThrows<IllegalArgumentException> { gitJaspr.fold("up") }
+            assertThrows<GitJasprException> { gitJaspr.fold("up") }
         }
     }
 
@@ -2549,7 +2580,7 @@ interface GitJasprTest {
             )
 
             // No nav session — fold up should fail
-            assertThrows<IllegalArgumentException> { gitJaspr.fold("up") }
+            assertThrows<GitJasprException> { gitJaspr.fold("up") }
         }
     }
 
@@ -7010,7 +7041,7 @@ interface GitJasprTest {
                     }
                 }
             )
-            assertThrows<IllegalArgumentException> {
+            assertThrows<GitJasprException> {
                 merge(RefSpec("development", "main"), count = 1, ref = "HEAD")
             }
         }
@@ -9880,7 +9911,7 @@ interface GitJasprTest {
                     }
                 }
             )
-            assertThrows<IllegalArgumentException> { push(count = 5) }
+            assertThrows<GitJasprException> { push(count = 5) }
         }
     }
 
@@ -9899,7 +9930,7 @@ interface GitJasprTest {
                     }
                 }
             )
-            assertThrows<IllegalArgumentException> { push(count = -2) }
+            assertThrows<GitJasprException> { push(count = -2) }
         }
     }
 
@@ -9918,7 +9949,7 @@ interface GitJasprTest {
                     }
                 }
             )
-            assertThrows<IllegalArgumentException> { push(count = 0) }
+            assertThrows<GitJasprException> { push(count = 0) }
         }
     }
 

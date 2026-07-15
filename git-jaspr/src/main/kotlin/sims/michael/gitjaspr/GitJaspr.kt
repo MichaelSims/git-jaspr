@@ -1419,12 +1419,23 @@ class GitJaspr(
     }
 
     /**
+     * Like [require], but throws [GitJasprException] instead of [IllegalArgumentException] so the
+     * CLI renders [lazyMessage] as a user-facing error rather than treating it as an application
+     * bug.
+     */
+    private inline fun requireForUser(condition: Boolean, lazyMessage: () -> String) {
+        if (!condition) {
+            throw GitJasprException(lazyMessage())
+        }
+    }
+
+    /**
      * Resolves the scope of a merge/auto-merge to a prefix slice of [stack] (bottom-first). At most
      * one of [count] or [ref] may be given. [ref] is any git revision (hash, branch, tag, `HEAD~2`,
      * etc.); it is resolved to a commit and scopes the slice from the base up to and including it.
      */
     private fun resolveScope(stack: List<Commit>, count: Int?, ref: String?): List<Commit> {
-        require(count == null || ref == null) {
+        requireForUser(count == null || ref == null) {
             "The --count option and the commit argument are mutually exclusive."
         }
         if (ref == null) return resolveCount(stack, count)
@@ -1449,14 +1460,16 @@ class GitJaspr(
      */
     private fun resolveCount(stack: List<Commit>, count: Int?): List<Commit> {
         if (count == null) return stack
-        require(count != 0) { "Count must not be zero." }
+        requireForUser(count != 0) { "Count must not be zero." }
         val effective =
             if (count > 0) {
-                require(count <= stack.size) { "Count $count exceeds stack size of ${stack.size}." }
+                requireForUser(count <= stack.size) {
+                    "Count $count exceeds stack size of ${stack.size}."
+                }
                 count
             } else {
                 val result = stack.size + count
-                require(result >= 1) {
+                requireForUser(result >= 1) {
                     "Count $count results in $result commits, which is less than 1."
                 }
                 result
@@ -2933,7 +2946,7 @@ class GitJaspr(
             }
 
         val targetIndex = state.cursorIndex - n
-        require(targetIndex >= 0) {
+        requireForUser(targetIndex >= 0) {
             "Cannot move down $n commit(s) — only ${state.cursorIndex} commit(s) below current position."
         }
 
@@ -2958,7 +2971,7 @@ class GitJaspr(
                 initNavState(targetRef)
             }
 
-        require(state.cursorIndex > 0) { "Already at the bottom of the stack." }
+        requireForUser(state.cursorIndex > 0) { "Already at the bottom of the stack." }
 
         val target = gitClient.log(state.stack.first().sha, 1).single()
         gitClient.checkout(
@@ -2979,8 +2992,8 @@ class GitJaspr(
         val state = activeNavSessionOrNull(targetRef) ?: return NavMoveResult.NoSession
 
         val aboveCount = state.stack.size - state.cursorIndex - 1
-        require(aboveCount > 0) { "Already at the top of the stack." }
-        require(n <= aboveCount) {
+        requireForUser(aboveCount > 0) { "Already at the top of the stack." }
+        requireForUser(n <= aboveCount) {
             "Cannot move up $n commit(s) — only $aboveCount commit(s) above current position."
         }
 
@@ -3014,7 +3027,7 @@ class GitJaspr(
         val state = activeNavSessionOrNull(targetRef) ?: return NavMoveResult.NoSession
 
         val aboveCount = state.stack.size - state.cursorIndex - 1
-        require(aboveCount > 0) { "Already at the top of the stack." }
+        requireForUser(aboveCount > 0) { "Already at the top of the stack." }
 
         val updatedStack =
             replayEntries(
@@ -3042,7 +3055,7 @@ class GitJaspr(
      * stack, ends the session and restores the source branch (mirroring [navigateToTop]).
      */
     fun navigateTo(targetRef: String, position: Int): NavMoveResult {
-        require(position != 0) {
+        requireForUser(position != 0) {
             "Position must not be zero. Use positive N (1 = bottom) or negative N (-1 = top)."
         }
 
@@ -3057,7 +3070,7 @@ class GitJaspr(
         val targetIndex = resolvePosition(position, state.stack.size)
         val cursor = state.cursorIndex
 
-        require(targetIndex != cursor) { "Already at position $position of the stack." }
+        requireForUser(targetIndex != cursor) { "Already at position $position of the stack." }
 
         if (targetIndex < cursor) {
             val target = gitClient.log(state.stack[targetIndex].sha, 1).single()
@@ -3098,7 +3111,7 @@ class GitJaspr(
 
     private fun resolvePosition(position: Int, stackSize: Int): Int {
         val index = if (position > 0) position - 1 else stackSize + position
-        require(index in 0 until stackSize) {
+        requireForUser(index in 0 until stackSize) {
             "Position $position is out of range for a stack of size $stackSize."
         }
         return index
@@ -3151,12 +3164,12 @@ class GitJaspr(
      */
     private fun initNavState(targetRef: String): NavState {
         val branchName = gitClient.getCurrentBranchName()
-        require(branchName.isNotEmpty()) { DETACHED_HEAD_NO_NAV_STATE }
+        requireForUser(branchName.isNotEmpty()) { DETACHED_HEAD_NO_NAV_STATE }
 
         val remoteName = config.remoteName
         gitClient.fetch(remoteName)
         val commits = gitClient.getCommitStack(remoteName, GitClient.HEAD, targetRef)
-        require(commits.isNotEmpty()) { "Stack is empty." }
+        requireForUser(commits.isNotEmpty()) { "Stack is empty." }
 
         val stack = commits.map { commit ->
             StackEntry(
@@ -3263,7 +3276,7 @@ class GitJaspr(
         reconcileStack: Boolean = true,
     ): NavState =
         activeNavSessionOrNull(targetRef, reconcileStack)
-            ?: throw IllegalArgumentException(
+            ?: throw GitJasprException(
                 "No navigation session in progress (already at the top of the stack)."
             )
 
@@ -3290,7 +3303,7 @@ class GitJaspr(
         return when {
             detached && state != null ->
                 if (reconcileStack) reconcile(state, targetRef ?: state.targetRef) else state
-            detached -> throw IllegalArgumentException(DETACHED_HEAD_NO_NAV_STATE)
+            detached -> throw GitJasprException(DETACHED_HEAD_NO_NAV_STATE)
             else -> {
                 if (state != null) clearNavState()
                 null
@@ -3386,12 +3399,12 @@ class GitJaspr(
      * HEAD~n`.
      */
     fun drop(n: Int, targetRef: String? = null) {
-        require(n > 0) { "Must drop at least 1 commit." }
+        requireForUser(n > 0) { "Must drop at least 1 commit." }
 
         val state = readNavState()
         if (state != null && gitClient.isHeadDetached()) {
             val reconciled = reconcile(state, targetRef ?: state.targetRef)
-            require(n <= reconciled.cursorIndex + 1) {
+            requireForUser(n <= reconciled.cursorIndex + 1) {
                 "Cannot drop $n commit(s) — only ${reconciled.cursorIndex + 1} commit(s) at or below current position."
             }
 
@@ -3425,7 +3438,7 @@ class GitJaspr(
      * @return the short message of the split commit (for display)
      */
     fun split(): String {
-        require(readSplitState() == null) {
+        requireForUser(readSplitState() == null) {
             "A split is already in progress. Run jaspr unsplit to finish or undo it."
         }
 
@@ -3467,7 +3480,7 @@ class GitJaspr(
      * [UnsplitOutcome.LeftInProgress] leaves the nav stack and split state unchanged.
      */
     fun unsplit(): UnsplitOutcome {
-        val splitState = requireNotNull(readSplitState()) { "No split in progress." }
+        val splitState = readSplitState() ?: throw GitJasprException("No split in progress.")
         val originalCommit = gitClient.log(splitState.unsplitSha, 1).single()
         val originalParent = gitClient.log("${splitState.unsplitSha}^", 1).single().hash
         val headSha = gitClient.log(GitClient.HEAD, 1).single().hash
@@ -3592,13 +3605,12 @@ class GitJaspr(
      * @return the short message of the surviving commit
      */
     fun fold(direction: String = "down"): String {
-        require(readSplitState() == null) { "Cannot fold while a split is in progress." }
+        requireForUser(readSplitState() == null) { "Cannot fold while a split is in progress." }
 
         return when (direction) {
             "down" -> foldDown()
             "up" -> foldUp()
-            else ->
-                throw IllegalArgumentException("Direction must be 'up' or 'down', got '$direction'")
+            else -> throw GitJasprException("Direction must be 'up' or 'down', got '$direction'")
         }
     }
 
@@ -3609,7 +3621,7 @@ class GitJaspr(
     private fun foldDown(): String {
         val navState = readNavState()
         if (navState != null && gitClient.isHeadDetached()) {
-            require(navState.cursorIndex > 0) {
+            requireForUser(navState.cursorIndex > 0) {
                 "Cannot fold down — already at the bottom of the stack."
             }
             val parent = gitClient.log("HEAD~1", 1).single()
@@ -3640,7 +3652,9 @@ class GitJaspr(
         } else {
             // Top of stack, no nav session — just soft reset and amend
             val stack = gitClient.log(GitClient.HEAD, 2)
-            require(stack.size >= 2) { "Cannot fold down — nothing below the current commit." }
+            requireForUser(stack.size >= 2) {
+                "Cannot fold down — nothing below the current commit."
+            }
             val parent = stack[1]
             val reflogMessage = "jaspr fold down into ${parent.shortMessage}"
             gitClient.resetSoft("HEAD~1", reflogMessage = reflogMessage)
@@ -3656,11 +3670,12 @@ class GitJaspr(
      */
     private fun foldUp(): String {
         val navState =
-            requireNotNull(readNavState()?.takeIf { gitClient.isHeadDetached() }) {
-                "Cannot fold up without an active navigation session — there is no commit above."
-            }
+            readNavState()?.takeIf { gitClient.isHeadDetached() }
+                ?: throw GitJasprException(
+                    "Cannot fold up without an active navigation session — there is no commit above."
+                )
         val aboveIndex = navState.cursorIndex + 1
-        require(aboveIndex <= navState.stack.lastIndex) {
+        requireForUser(aboveIndex <= navState.stack.lastIndex) {
             "Cannot fold up — already at the top of the stack."
         }
 
