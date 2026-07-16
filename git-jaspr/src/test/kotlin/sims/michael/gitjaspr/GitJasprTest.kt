@@ -646,6 +646,40 @@ interface GitJasprTest {
 
     @Nav
     @Test
+    fun `reaching the top yields a final position with the cursor at the top`() {
+        withTestSetup(useFakeRemote) {
+            createCommitsFrom(
+                testCase {
+                    repository {
+                        commit { title = "one" }
+                        commit { title = "two" }
+                        commit {
+                            title = "three"
+                            localRefs += "development"
+                        }
+                    }
+                    checkout = "development"
+                }
+            )
+            gitJaspr.navigateToBottom(DEFAULT_TARGET_REF)
+
+            val result =
+                assertIs<NavMoveResult.ReachedTop>(gitJaspr.navigateToTop(DEFAULT_TARGET_REF))
+            // The closing display pins the cursor at the top of the fully materialized stack, so
+            // the CLI can confirm where the user landed even though the session has ended.
+            assertEquals(3, result.finalState.stack.size)
+            assertEquals(result.finalState.stack.lastIndex, result.finalState.cursorIndex)
+
+            // Rendered under MonoTheme (no styling), the top commit is the marked cursor row.
+            val output = gitJaspr.getNavPositionString(result.finalState, MonoTheme)
+            val cursorLines = output.lines().filter { line -> line.contains("→") }
+            assertEquals(1, cursorLines.size, "Expected one cursor row; output:\n$output")
+            assertContains(cursorLines.single(), "three")
+        }
+    }
+
+    @Nav
+    @Test
     fun `goto zero is rejected`() {
         withTestSetup(useFakeRemote) {
             createCommitsFrom(

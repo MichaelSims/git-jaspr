@@ -37,9 +37,15 @@ sealed interface NavMoveResult {
     /**
      * Cursor reached the top of the stack and the session ended. [restoredName] is the resolved
      * named-stack name when known, falling back to the local branch name; it's the identifier to
-     * surface in user-facing "back on `X`" messaging.
+     * surface in user-facing "back on `X`" messaging. [finalState] is the fully materialized stack
+     * with the cursor pinned at the top, kept only so the caller can render a closing "here's where
+     * you landed" position display for a session that has otherwise ended.
      */
-    data class ReachedTop(val replayedCount: Int, val restoredName: String) : NavMoveResult
+    data class ReachedTop(
+        val replayedCount: Int,
+        val restoredName: String,
+        val finalState: NavState,
+    ) : NavMoveResult
 }
 
 /**
@@ -433,9 +439,17 @@ class GitJaspr(
      * This is a deliberate departure from [getStatusString], which uses [Theme.hash] to signal
      * "secondary info" -- the position display is a "where am I" view where per-zone consistency
      * matters more than the SHA-as-secondary convention.
+     *
+     * [banner] overrides the leading line. It defaults to the live "Navigating name [pos/total]"
+     * header; callers rendering the closing view after a session has ended (reached the top) pass a
+     * "back on `branch`" header instead, since "Navigating" would be misleading there.
      */
-    fun getNavPositionString(state: NavState, theme: Theme): String = buildString {
-        appendLine(navBanner(state, theme))
+    fun getNavPositionString(
+        state: NavState,
+        theme: Theme,
+        banner: String = navBanner(state, theme),
+    ): String = buildString {
+        appendLine(banner)
         for (originalIndex in state.stack.lastIndex downTo 0) {
             val entry = state.stack[originalIndex]
             val commit = gitClient.log(entry.sha, 1).single()
@@ -3011,10 +3025,7 @@ class GitJaspr(
                 state.copy(stack = updatedStack),
                 reflogMessage = "jaspr nav up to ${finalCommit.shortMessage}",
             )
-            NavMoveResult.ReachedTop(
-                replayedCount = n,
-                restoredName = state.stackName ?: state.headBeforeDetach,
-            )
+            reachedTop(state, updatedStack, replayedCount = n)
         } else {
             val newState = state.copy(stack = updatedStack, cursorIndex = newCursor)
             writeNavState(newState)
@@ -3041,10 +3052,7 @@ class GitJaspr(
             state.copy(stack = updatedStack),
             reflogMessage = "jaspr nav top to ${finalCommit.shortMessage}",
         )
-        return NavMoveResult.ReachedTop(
-            replayedCount = aboveCount,
-            restoredName = state.stackName ?: state.headBeforeDetach,
-        )
+        return reachedTop(state, updatedStack, replayedCount = aboveCount)
     }
 
     /**
@@ -3097,10 +3105,7 @@ class GitJaspr(
                 state.copy(stack = updatedStack),
                 reflogMessage = "jaspr nav to $position (${finalCommit.shortMessage})",
             )
-            NavMoveResult.ReachedTop(
-                replayedCount = replayedCount,
-                restoredName = state.stackName ?: state.headBeforeDetach,
-            )
+            reachedTop(state, updatedStack, replayedCount = replayedCount)
         } else {
             val newState = state.copy(stack = updatedStack, cursorIndex = targetIndex)
             writeNavState(newState)
@@ -3390,6 +3395,17 @@ class GitJaspr(
         gitClient.checkout(state.headBeforeDetach, reflogMessage = reflogMessage)
         clearNavState()
     }
+
+    private fun reachedTop(
+        state: NavState,
+        updatedStack: List<StackEntry>,
+        replayedCount: Int,
+    ): NavMoveResult.ReachedTop =
+        NavMoveResult.ReachedTop(
+            replayedCount = replayedCount,
+            restoredName = state.stackName ?: state.headBeforeDetach,
+            finalState = state.copy(stack = updatedStack, cursorIndex = updatedStack.lastIndex),
+        )
 
     /**
      * Drop [n] commits from the top of the current stack.

@@ -1474,8 +1474,7 @@ class Up : GitJasprSubcommand(helpText = "Move up in the stack (replay commits t
         when (val result = jaspr.navigateUp(n ?: 1, targetOpts.target)) {
             NavMoveResult.NoSession -> renderer.info { "Already at the top of the stack." }
             is NavMoveResult.MovedWithin -> print(jaspr.getNavPositionString(result.state, theme))
-            is NavMoveResult.ReachedTop ->
-                renderer.info { describeReachedTop(result.replayedCount, result.restoredName) }
+            is NavMoveResult.ReachedTop -> printReachedTop(jaspr, result)
         }
     }
 }
@@ -1490,8 +1489,7 @@ class Top :
         when (val result = jaspr.navigateToTop(targetOpts.target)) {
             NavMoveResult.NoSession -> renderer.info { "Already at the top of the stack." }
             is NavMoveResult.MovedWithin -> print(jaspr.getNavPositionString(result.state, theme))
-            is NavMoveResult.ReachedTop ->
-                renderer.info { describeReachedTop(result.replayedCount, result.restoredName) }
+            is NavMoveResult.ReachedTop -> printReachedTop(jaspr, result)
         }
     }
 }
@@ -1516,8 +1514,7 @@ class Goto :
         when (val result = jaspr.navigateTo(targetOpts.target, position)) {
             NavMoveResult.NoSession -> renderer.info { "Already at the top of the stack." }
             is NavMoveResult.MovedWithin -> print(jaspr.getNavPositionString(result.state, theme))
-            is NavMoveResult.ReachedTop ->
-                renderer.info { describeReachedTop(result.replayedCount, result.restoredName) }
+            is NavMoveResult.ReachedTop -> printReachedTop(jaspr, result)
         }
     }
 }
@@ -1542,6 +1539,20 @@ internal fun sortStacksByTipDate(
 private fun describeReachedTop(count: Int, restoredName: String): String {
     val noun = if (count == 1) "commit" else "commits"
     return "Replayed $count $noun, back on `$restoredName`."
+}
+
+/**
+ * Print the closing position display when a nav move ends the session by reaching the top. The
+ * session is over, so the banner reads "back on `branch`" rather than the live "Navigating" header.
+ */
+private fun GitJasprSubcommand.printReachedTop(jaspr: GitJaspr, result: NavMoveResult.ReachedTop) {
+    print(
+        jaspr.getNavPositionString(
+            result.finalState,
+            theme,
+            banner = theme.entity(describeReachedTop(result.replayedCount, result.restoredName)),
+        )
+    )
 }
 
 class Nav : SuspendingCliktCommand(name = "nav") {
