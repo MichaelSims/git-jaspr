@@ -724,6 +724,92 @@ interface GitJasprTest {
 
     @Nav
     @Test
+    fun `goto by abbreviated commit hash checks out that commit`() {
+        withTestSetup(useFakeRemote) {
+            createCommitsFrom(
+                testCase {
+                    repository {
+                        commit { title = "one" }
+                        commit { title = "two" }
+                        commit {
+                            title = "three"
+                            localRefs += "development"
+                        }
+                    }
+                    checkout = "development"
+                }
+            )
+            localGit.fetch(remoteName)
+            // Stack is bottom-to-top: [one, two, three].
+            val two = localGit.getCommitStack(remoteName, GitClient.HEAD, DEFAULT_TARGET_REF)[1]
+
+            val result =
+                assertIs<NavMoveResult.MovedWithin>(
+                    gitJaspr.navigateToDestination(DEFAULT_TARGET_REF, two.hash.take(7))
+                )
+
+            assertEquals(1, result.state.cursorIndex)
+            assertTrue(localGit.isHeadDetached())
+            assertEquals(two.hash, localGit.log(GitClient.HEAD, 1).single().hash)
+        }
+    }
+
+    @Nav
+    @Test
+    fun `goto by position still works through navigateToDestination`() {
+        withTestSetup(useFakeRemote) {
+            createCommitsFrom(
+                testCase {
+                    repository {
+                        commit { title = "one" }
+                        commit { title = "two" }
+                        commit {
+                            title = "three"
+                            localRefs += "development"
+                        }
+                    }
+                    checkout = "development"
+                }
+            )
+            // Position 1 is the bottom of the stack.
+            val result =
+                assertIs<NavMoveResult.MovedWithin>(
+                    gitJaspr.navigateToDestination(DEFAULT_TARGET_REF, "1")
+                )
+            assertEquals(0, result.state.cursorIndex)
+        }
+    }
+
+    @Nav
+    @Test
+    fun `goto with a commit not in the stack reports a clean error`() {
+        withTestSetup(useFakeRemote) {
+            createCommitsFrom(
+                testCase {
+                    repository {
+                        commit { title = "one" }
+                        commit {
+                            title = "two"
+                            localRefs += "development"
+                        }
+                    }
+                    checkout = "development"
+                }
+            )
+            localGit.fetch(remoteName)
+            // The base commit is resolvable but sits below the stack, so it isn't a member.
+            val base = localGit.log("$remoteName/$DEFAULT_TARGET_REF", 1).single().hash
+
+            val exception =
+                assertThrows<GitJasprException> {
+                    gitJaspr.navigateToDestination(DEFAULT_TARGET_REF, base.take(7))
+                }
+            assertContains(exception.message.orEmpty(), "not a commit in the current stack")
+        }
+    }
+
+    @Nav
+    @Test
     fun `goto current position is rejected`() {
         withTestSetup(useFakeRemote) {
             createCommitsFrom(

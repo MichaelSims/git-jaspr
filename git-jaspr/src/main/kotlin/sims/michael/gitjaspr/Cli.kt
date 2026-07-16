@@ -1496,10 +1496,16 @@ class Top :
 
 class Goto :
     GitJasprSubcommand(
-        helpText = "Move to position N in the stack (1 = bottom, -1 = top, -2 = second from top)"
+        helpText =
+            "Move to a stack position (1 = bottom, -1 = top, -2 = second from top) " +
+                "or a commit hash in the stack"
     ) {
     private val targetOpts by TargetOptions()
-    private val position by argument("n").int()
+    private val destination by
+        argument(
+            "commit-or-position",
+            help = "A commit hash in the stack, or a position (e.g. 2, -1)",
+        )
 
     override suspend fun doRun() {
         val jaspr = appWiring.gitJaspr
@@ -1511,7 +1517,7 @@ class Goto :
             }
             jaspr.clearNavState()
         }
-        when (val result = jaspr.navigateTo(targetOpts.target, position)) {
+        when (val result = jaspr.navigateToDestination(targetOpts.target, destination)) {
             NavMoveResult.NoSession -> renderer.info { "Already at the top of the stack." }
             is NavMoveResult.MovedWithin -> print(jaspr.getNavPositionString(result.state, theme))
             is NavMoveResult.ReachedTop -> printReachedTop(jaspr, result)

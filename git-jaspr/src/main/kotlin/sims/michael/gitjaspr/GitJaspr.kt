@@ -3062,29 +3062,85 @@ class GitJaspr(
      * above the current cursor; checks out directly when below. If the target is the top of the
      * stack, ends the session and restores the source branch (mirroring [navigateToTop]).
      */
-    fun navigateTo(targetRef: String, position: Int): NavMoveResult {
+    fun navigateTo(targetRef: String, position: Int): NavMoveResult =
+        navigateToPosition(reconciledOrInitNavState(targetRef), position)
+
+    /**
+     * Navigate to a stack [destination] given as either a position (see [navigateTo]) or a
+     * commit-ish (hash, abbreviated hash, etc.) that resolves to a commit in the stack. A valid
+     * in-range position is honored as a position; anything else is resolved as a commit, so an
+     * all-digit abbreviated hash still lands on the right commit rather than being read as a
+     * position. Errors cleanly when [destination] is neither.
+     */
+    fun navigateToDestination(targetRef: String, destination: String): NavMoveResult {
+        val state = reconciledOrInitNavState(targetRef)
+        val size = state.stack.size
+        val asInt = destination.toIntOrNull()
+        val inPositionRange = asInt != null && (asInt in 1..size || asInt in -size..-1)
+
+        // A commit match wins only when the argument isn't already a valid in-range position, so
+        // ordinary positions (including "-1") are never handed to git for resolution.
+        if (!inPositionRange) {
+            val commitIndex = tryResolveStackIndex(state.stack, destination)
+            if (commitIndex != null) {
+                val sha = state.stack[commitIndex].sha.take(7)
+                return navigateToTarget(state, commitIndex, sha, "You are already on commit $sha.")
+            }
+        }
+        return if (asInt != null) {
+            // Numeric but not a stack commit: position handling gives the range / zero error.
+            navigateToPosition(state, asInt)
+        } else {
+            throw GitJasprException("'$destination' is not a commit in the current stack.")
+        }
+    }
+
+    private fun reconciledOrInitNavState(targetRef: String): NavState {
+        val existingState = readNavState()
+        return if (existingState != null && gitClient.isHeadDetached()) {
+            reconcile(existingState, targetRef)
+        } else {
+            initNavState(targetRef)
+        }
+    }
+
+    /**
+     * Resolve [commitish] to the index of the matching entry in [stack], or null when it doesn't
+     * resolve to a commit that is present in the stack.
+     */
+    private fun tryResolveStackIndex(stack: List<StackEntry>, commitish: String): Int? {
+        val resolvedHash =
+            runCatching { gitClient.log(commitish, 1).single().hash }.getOrNull() ?: return null
+        return stack.indexOfFirst { entry -> entry.sha == resolvedHash }.takeIf { it >= 0 }
+    }
+
+    private fun navigateToPosition(state: NavState, position: Int): NavMoveResult {
         requireForUser(position != 0) {
             "Position must not be zero. Use positive N (1 = bottom) or negative N (-1 = top)."
         }
-
-        val existingState = readNavState()
-        val state =
-            if (existingState != null && gitClient.isHeadDetached()) {
-                reconcile(existingState, targetRef)
-            } else {
-                initNavState(targetRef)
-            }
-
         val targetIndex = resolvePosition(position, state.stack.size)
-        val cursor = state.cursorIndex
+        return navigateToTarget(
+            state,
+            targetIndex,
+            reflogLabel = "$position",
+            alreadyThereMessage = "Already at position $position of the stack.",
+        )
+    }
 
-        requireForUser(targetIndex != cursor) { "Already at position $position of the stack." }
+    private fun navigateToTarget(
+        state: NavState,
+        targetIndex: Int,
+        reflogLabel: String,
+        alreadyThereMessage: String,
+    ): NavMoveResult {
+        val cursor = state.cursorIndex
+        requireForUser(targetIndex != cursor) { alreadyThereMessage }
 
         if (targetIndex < cursor) {
             val target = gitClient.log(state.stack[targetIndex].sha, 1).single()
             gitClient.checkout(
                 state.stack[targetIndex].sha,
-                reflogMessage = "jaspr nav to $position (${target.shortMessage})",
+                reflogMessage = "jaspr nav to $reflogLabel (${target.shortMessage})",
             )
             val newState = state.copy(cursorIndex = targetIndex)
             writeNavState(newState)
@@ -3097,13 +3153,13 @@ class GitJaspr(
             replayEntries(
                 state.stack,
                 (cursor + 1)..targetIndex,
-                reflogCommand = "nav to $position",
+                reflogCommand = "nav to $reflogLabel",
             )
         return if (targetIndex == updatedStack.lastIndex) {
             val finalCommit = gitClient.log(GitClient.HEAD, 1).single()
             endNavSession(
                 state.copy(stack = updatedStack),
-                reflogMessage = "jaspr nav to $position (${finalCommit.shortMessage})",
+                reflogMessage = "jaspr nav to $reflogLabel (${finalCommit.shortMessage})",
             )
             reachedTop(state, updatedStack, replayedCount = replayedCount)
         } else {
