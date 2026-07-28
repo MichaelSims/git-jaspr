@@ -1068,7 +1068,6 @@ class GitJaspr(
         onAbandonedPrs: (List<PullRequest>) -> Boolean = { true },
     ) {
         logger.trace("push (plan) {}", plan.refSpec)
-        installCommitIdHook()
 
         val refSpec = plan.refSpec
         val remoteName = config.remoteName

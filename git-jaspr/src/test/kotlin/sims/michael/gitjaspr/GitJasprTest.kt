@@ -5148,7 +5148,7 @@ interface GitJasprTest {
     // region push tests
     @Push
     @Test
-    fun `push installs commit-id hook`() {
+    fun `push does not install commit-id hook`() {
         withTestSetup(useFakeRemote) {
             createCommitsFrom(
                 testCase {
@@ -5167,8 +5167,9 @@ interface GitJasprTest {
 
             push()
 
-            assertTrue(hook.exists())
-            assertTrue(hook.canExecute())
+            // Installing the hook is opt-in via `jaspr install-hook`. Users who keep it off want
+            // commit IDs added only by explicit jaspr operations, leaving non-jaspr branches clean.
+            assertFalse(hook.exists())
         }
     }
 
