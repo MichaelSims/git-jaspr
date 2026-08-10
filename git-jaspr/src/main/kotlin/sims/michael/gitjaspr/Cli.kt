@@ -96,7 +96,10 @@ class CliContext(
     val workingDirectory: File,
     appWiringFactory: () -> AppWiring,
 ) {
-    val appWiring by lazy(appWiringFactory)
+    private val lazyAppWiring = lazy(appWiringFactory)
+    val appWiring by lazyAppWiring
+    val isAppWiringInitialized
+        get() = lazyAppWiring.isInitialized()
 }
 
 /**
@@ -545,8 +548,10 @@ abstract class GitJasprSubcommand(
             }
             throw ProgramResult(255)
         } finally {
-            logger.trace("Closing appWiring")
-            withContext(Dispatchers.IO) { appWiring.close() }
+            if (cliContext.isAppWiringInitialized) {
+                logger.trace("Closing appWiring")
+                withContext(Dispatchers.IO) { appWiring.close() }
+            }
         }
     }
 
