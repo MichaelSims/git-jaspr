@@ -29,3 +29,8 @@ Lines beginning with `- ` are parsed as individual tips.
 - Only want to merge part of your stack? `jaspr merge <commit>` merges everything up to and including that commit (any revision: a hash, branch, or `HEAD~2`), while `jaspr merge -c 3` merges the bottom 3. The same scoping works with `jaspr auto-merge`.
 - Change a jaspr setting without hand-editing files: `jaspr config set <key> <value>` writes your user-wide config (add `--repo` to scope it to this repo), `jaspr config get <key>` shows the effective value and where it came from, and `jaspr config list` shows everything.
 - Jump straight to a commit in your stack: `jaspr goto <hash>` (paste the short hash from `jaspr status`) checks it out without counting rows. Positions still work too, e.g. `jaspr goto -1` for the top.
+- Want to reorder, squash, or drop commits? `jaspr edit` (alias `jaspr reorder`) opens an interactive rebase scoped to your stack, so you don't have to count commits for `git rebase -i` yourself.
+- Need to squash two adjacent commits together? Navigate to one of them and run `jaspr fold` to fold it into its neighbor.
+- Want to see how your local stack, the remote stack, and the target branch relate? `jaspr graph` runs `git log --graph` with the right refs resolved for you. Pass extra args after `--`, e.g. `jaspr graph -- --since='2 weeks ago'`.
+- `jaspr bottom` jumps to the first commit in your stack (the complement of `jaspr top`).
+- Managing named stacks: `jaspr stack list` shows all your stacks, `jaspr stack rename <old> <new>` renames one (updating remote refs and local tracking), and `jaspr stack delete <name>` removes it from the remote.
