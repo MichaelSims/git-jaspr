@@ -1,0 +1,65 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+# Tags and pushes a release. The latest beta release should always be a
+# superset of the latest stable release, so this script ensures that is
+# the case before tagging and pushing.
+#
+# Usage: ./release v2.3.0        (stable, auto-creates beta if needed)
+#        ./release v2.3.0-beta.1 (beta, pushed directly)
+
+tag="${1:?Usage: release <tag>}"
+# Prepend a "v" to the tag if it doesn't have one
+[[ "$tag" == v* ]] || tag="v$tag"
+
+# Pick up any tags pushed from other machines or CI
+git fetch origin --tags --quiet
+
+# Bail if the tag already exists locally or on the remote
+if git rev-parse "$tag" >/dev/null 2>&1; then
+  echo "Error: tag $tag already exists." >&2
+  exit 1
+fi
+
+# A hyphen in a semver tag means it's a prerelease (e.g. v2.3.0-beta.1).
+# Stable tags have no hyphen, and need the beta-first check.
+if [[ "$tag" != *-* ]]; then
+  # Strip the "v" prefix to get the bare version (e.g. "2.3.0")
+  base_version="${tag#v}"
+
+  # Check whether any existing beta tag is at HEAD or ahead of it.
+  # If so, beta users already have this code and we can skip creating one.
+  # "is-ancestor HEAD beta_tag" is true when HEAD <= beta_tag.
+  needs_beta=true
+  for beta_tag in $(git tag --list 'v*-*' --sort=-v:refname); do
+    if git merge-base --is-ancestor HEAD "$beta_tag" 2>/dev/null; then
+      echo "Beta $beta_tag already covers HEAD."
+      needs_beta=false
+      break
+    fi
+  done
+
+  if $needs_beta; then
+    # Find the highest existing beta number for this version so we don't
+    # collide (e.g. if beta.1 and beta.2 exist, we create beta.3).
+    latest_num=0
+    for t in $(git tag --list "v${base_version}-beta.*"); do
+      # Extract the number after "beta." (e.g. "v2.3.0-beta.2" -> "2")
+      num="${t##*beta.}"
+      if (( num > latest_num )); then
+        latest_num=$num
+      fi
+    done
+    next_num=$(( latest_num + 1 ))
+    auto_beta="v${base_version}-beta.${next_num}"
+    echo "No beta covers HEAD. Tagging $auto_beta first."
+    git tag "$auto_beta"
+    git push origin "$auto_beta"
+    echo "Pushed $auto_beta."
+  fi
+fi
+
+# Tag and push the requested release (stable or beta)
+git tag "$tag"
+git push origin "$tag"
+echo "Pushed $tag."
