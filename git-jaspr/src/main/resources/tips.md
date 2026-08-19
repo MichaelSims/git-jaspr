@@ -4,7 +4,7 @@ These tips are shown periodically after commands to help you get the most out of
 Lines beginning with `- ` are parsed as individual tips.
 
 - If you installed via Homebrew, you can tab complete jaspr commands and options. Try it!
-- Jaspr works best when you address PR feedback by amending the relevant commit. To fix one anywhere in your stack, run `jaspr goto N` (or `jaspr up`/`down`) to check it out, make your change, `git commit --amend`, then `jaspr top` to replay the rest, and `jaspr push`.
+- Jaspr works best when you address PR feedback by amending the relevant commit. To fix one anywhere in your stack, run `jaspr goto N` (or `jaspr down`/`jaspr up`) to check it out, make your change, `git commit --amend`, then `jaspr top` to replay the rest, and `jaspr push`.
 - Decided you no longer need a commit in your stack? Navigate to it with `jaspr goto N` (or just stay at the top) and run `jaspr drop`. Its PR is abandoned on your next `jaspr push`, and `jaspr clean` removes the leftover branch.
 - Jaspr requires a name for each stack you push. This is to aid in collaboration as well as enable detection of abandoned PRs. If you don't want to be prompted for a name, pass `--name my-name` as an option to `jaspr push`.
 - Jaspr supports custom themes! Check your config file (`~/.jaspr.properties`) for examples, or run `jaspr preview-theme --theme <name>` to test one out.
@@ -27,7 +27,7 @@ Lines beginning with `- ` are parsed as individual tips.
 - Lost track of where you are in a navigation session? Run `jaspr nav show` to reprint your stack and current position without moving — the same view you get after `jaspr up`/`down`.
 - Jaspr periodically checks whether a newer version is available. To turn it off, pass `--no-update-check`, set `JASPR_NO_UPDATE_CHECK=1`, or add `update-check-enabled=false` to `~/.jaspr.properties`.
 - Only want to merge part of your stack? `jaspr merge <commit>` merges everything up to and including that commit (any revision: a hash, branch, or `HEAD~2`), while `jaspr merge -c 3` merges the bottom 3. The same scoping works with `jaspr auto-merge`.
-- Change a jaspr setting without hand-editing files: `jaspr config set <key> <value>` writes your user-wide config (add `--repo` to scope it to this repo), `jaspr config get <key>` shows the effective value and where it came from, and `jaspr config list` shows everything.
+- Change a jaspr setting without hand-editing files: `jaspr config set <key> <value>` writes your user-wide config (add `--repo` to scope it to this repo), `jaspr config get <key>` shows the effective value and where it came from, `jaspr config unset <key>` removes it, and `jaspr config list` shows everything.
 - Jump straight to a commit in your stack: `jaspr goto <hash>` (paste the short hash from `jaspr status`) checks it out without counting rows. Positions still work too, e.g. `jaspr goto -1` for the top.
 - Want to reorder, squash, or drop commits? `jaspr edit` (alias `jaspr reorder`) opens an interactive rebase scoped to your stack, so you don't have to count commits for `git rebase -i` yourself.
 - Need to squash two adjacent commits together? Navigate to one of them and run `jaspr fold` to fold it into its neighbor.

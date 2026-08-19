@@ -568,6 +568,46 @@ class CliTest {
 
         assertEquals(listOf(newest, midA, midB, oldest, unknown), sorted)
     }
+
+    @Test
+    fun `every everyday command is mentioned in at least one tip`() {
+        val tipsText =
+            checkNotNull(CliTest::class.java.getResource("/tips.md")) { "tips.md not on classpath" }
+                .readText()
+
+        val excludedCommands =
+            setOf(
+                "install-hook",
+                "log-path",
+                "no-op",
+                "continue",
+                "preview-theme",
+                "generate-completion",
+            )
+
+        fun collectFullNames(
+            command: BaseCliktCommand<*>,
+            prefix: String,
+        ): List<String> = buildList {
+            val fullName = "$prefix ${command.commandName}"
+            add(fullName)
+            for (sub in command.registeredSubcommands()) {
+                addAll(collectFullNames(sub, fullName))
+            }
+        }
+
+        val root = buildCommand()
+        val allNames =
+            root.registeredSubcommands().flatMap { sub -> collectFullNames(sub, "jaspr") }
+        val everydayNames = allNames.filter { name ->
+            name.split(" ").last() !in excludedCommands
+        }
+
+        val missing = everydayNames.filter { fullName -> fullName !in tipsText }
+        assertTrue(missing.isEmpty()) {
+            "Commands with no tip in tips.md: $missing"
+        }
+    }
 }
 
 private fun getEffectiveConfigFromCli(
