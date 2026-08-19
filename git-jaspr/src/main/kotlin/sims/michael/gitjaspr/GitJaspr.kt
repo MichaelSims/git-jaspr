@@ -15,6 +15,7 @@ import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
 import org.slf4j.LoggerFactory
 import sims.michael.gitjaspr.CommitParsers.getSubjectAndBodyFromFullMessage
+import sims.michael.gitjaspr.GitJaspr.StatusBits.Status.COMMENT
 import sims.michael.gitjaspr.GitJaspr.StatusBits.Status.EMPTY
 import sims.michael.gitjaspr.GitJaspr.StatusBits.Status.FAIL
 import sims.michael.gitjaspr.GitJaspr.StatusBits.Status.PENDING
@@ -244,7 +245,8 @@ class GitJaspr(
             val lineContent = buildString {
                 append("[")
                 val flags = status.toStatusList(commitsWithDuplicateIds)
-                val statusList = flags + if (stackCheck) SUCCESS else EMPTY
+                val commentsFlag = status.toCommentsFlag()
+                val statusList = flags + commentsFlag + if (stackCheck) SUCCESS else EMPTY
                 // On the cursor row, skip styles that use ANSI intensity (dim) -- their inner
                 // resets fight the outer bold wrap and the result reads as visually uneven.
                 // Specifically: theme.muted on EMPTY and theme.hash on the SHA both use dim.
@@ -2084,6 +2086,14 @@ class GitJaspr(
             )
             .toList()
 
+    private fun RemoteCommitStatus.toCommentsFlag() =
+        when {
+            pullRequest == null -> EMPTY
+            unresolvedReviewThreadCount == null -> EMPTY
+            unresolvedReviewThreadCount > 0 -> COMMENT
+            else -> SUCCESS
+        }
+
     private fun List<PullRequest>.updateDescriptionsWithStackInfo(
         stack: List<Commit>,
         stackName: String? = null,
@@ -2226,13 +2236,15 @@ class GitJaspr(
                 emptyMap()
             }
         return stack.map { commit ->
+            val pr = prsById[commit.id]
             RemoteCommitStatus(
                 localCommit = commit,
                 remoteCommit = remoteBranchesById[commit.id]?.commit,
-                pullRequest = prsById[commit.id],
-                checksPass = prsById[commit.id]?.checksPass,
-                isDraft = prsById[commit.id]?.isDraft,
-                approved = prsById[commit.id]?.approved,
+                pullRequest = pr,
+                checksPass = pr?.checksPass,
+                isDraft = pr?.isDraft,
+                approved = pr?.approved,
+                unresolvedReviewThreadCount = pr?.unresolvedReviewThreadCount,
             )
         }
     }
@@ -2533,7 +2545,8 @@ class GitJaspr(
             PENDING("⌛"),
             UNKNOWN("❓"),
             EMPTY("ㄧ"),
-            WARNING("❗");
+            WARNING("❗"),
+            COMMENT("💬");
 
             fun styledEmoji(theme: Theme) =
                 when (this) {
@@ -2542,7 +2555,8 @@ class GitJaspr(
                     PENDING,
                     UNKNOWN -> theme.warning(emoji)
                     EMPTY -> theme.muted(emoji)
-                    WARNING -> theme.warning(emoji)
+                    WARNING,
+                    COMMENT -> theme.warning(emoji)
                 }
         }
     }
@@ -4104,13 +4118,14 @@ class GitJaspr(
 
         private val HEADER =
             """
-            | ┌─────────── commit pushed
-            | │ ┌─────────── exists       ┐
-            | │ │ ┌───────── checks pass  │ PR
-            | │ │ │ ┌─────── ready        │
-            | │ │ │ │ ┌───── approved     ┘
-            | │ │ │ │ │ ┌─ stack check
-            | │ │ │ │ │ │ 
+            | ┌───────────── commit pushed
+            | │ ┌───────────── exists         ┐
+            | │ │ ┌─────────── checks pass    │
+            | │ │ │ ┌───────── ready          │ PR
+            | │ │ │ │ ┌─────── approved       │
+            | │ │ │ │ │ ┌───── comments       ┘
+            | │ │ │ │ │ │ ┌─ stack check
+            | │ │ │ │ │ │ │
             |"""
                 .trimMargin()
         private const val COMMIT_MSG_HOOK = "commit-msg"

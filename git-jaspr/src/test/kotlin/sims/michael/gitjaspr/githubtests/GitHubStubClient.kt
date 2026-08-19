@@ -81,6 +81,7 @@ class GitHubStubClient(
                 id = generateUuid(8),
                 number = prNumberIterator.nextInt(),
                 commitId = pullRequest.commitId ?: commitId,
+                unresolvedReviewThreadCount = pullRequest.unresolvedReviewThreadCount ?: 0,
             )
             .also { pullRequestToAdd ->
                 logger.trace("seedPullRequest {}", pullRequestToAdd)
@@ -113,7 +114,15 @@ class GitHubStubClient(
             if (oldPr.baseRefName != pullRequest.baseRefName) {
                 validateHeadHasNewCommits(pullRequest)
             }
-            prs[i] = prs[i].copy(pullRequest = pullRequest)
+            prs[i] =
+                prs[i].copy(
+                    pullRequest =
+                        pullRequest.copy(
+                            unresolvedReviewThreadCount =
+                                pullRequest.unresolvedReviewThreadCount
+                                    ?: oldPr.unresolvedReviewThreadCount
+                        )
+                )
         }
     }
 

@@ -66,6 +66,7 @@ data class RemoteCommitStatus(
     val checksPass: Boolean?,
     val isDraft: Boolean?,
     val approved: Boolean?,
+    val unresolvedReviewThreadCount: Int? = null,
 ) {
     val isMergeable =
         localCommit.hash == remoteCommit?.hash &&
@@ -86,6 +87,7 @@ data class PullRequest(
     val approved: Boolean? = null,
     val permalink: String? = null,
     val isDraft: Boolean = false,
+    val unresolvedReviewThreadCount: Int? = null,
 ) {
     override fun toString(): String {
         val numberString = number?.let { "#$it" }.orEmpty()

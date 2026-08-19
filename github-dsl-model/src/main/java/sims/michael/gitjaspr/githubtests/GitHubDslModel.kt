@@ -51,4 +51,5 @@ interface PullRequest : DataClassFragment {
     val body: StringPropertyNotNull
     val userKey: StringPropertyNotNull
     val willBeApprovedByUserKey: StringProperty
+    val unresolvedReviewThreadCount: IntProperty
 }

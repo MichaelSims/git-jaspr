@@ -27,4 +27,9 @@ fragment PullRequest on PullRequest {
             }
         }
     }
+    reviewThreads(first: 50) {
+        nodes {
+            isResolved
+        }
+    }
 }

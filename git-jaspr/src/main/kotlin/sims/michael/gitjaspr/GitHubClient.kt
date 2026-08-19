@@ -246,6 +246,8 @@ class GitHubClientImpl(
                 },
             permalink = permalink,
             isDraft = isDraft,
+            unresolvedReviewThreadCount =
+                reviewThreads.nodes?.count { thread -> thread?.isResolved == false },
         )
     }
 }

@@ -328,6 +328,7 @@ private constructor(
                         approved = pr.willBeApprovedByUserKey?.isNotBlank(),
                         permalink = "http://example.com",
                         isDraft = isDraftRegex.matches(pr.title),
+                        unresolvedReviewThreadCount = pr.unresolvedReviewThreadCount ?: 0,
                     )
                 val existingPr = existingPrsByTitle[pr.title]
                 val createdOrUpdatedPr =

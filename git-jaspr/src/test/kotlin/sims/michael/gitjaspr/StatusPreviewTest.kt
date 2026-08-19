@@ -589,6 +589,48 @@ class StatusPreviewTest {
 
     @Test
     @Order(12)
+    fun `approved with unresolved comments`(testInfo: TestInfo) {
+        withTestSetup {
+            createCommitsFrom(
+                testCase {
+                    repository {
+                        commit {
+                            title = "one"
+                            willPassVerification = true
+                            remoteRefs += buildRemoteRef("one")
+                        }
+                        commit {
+                            title = "two"
+                            willPassVerification = true
+                            remoteRefs += buildRemoteRef("two")
+                        }
+                        commit {
+                            title = "three"
+                            willPassVerification = true
+                            localRefs += "development"
+                            remoteRefs += buildRemoteRef("three")
+                        }
+                    }
+                    checkout = "development"
+                }
+            )
+            gitJaspr.push(stackName = "preview-stack")
+            for (pr in gitHub.getPullRequestsById()) {
+                gitHub.updatePullRequest(
+                    pr.copy(
+                        checksPass = true,
+                        approved = true,
+                        unresolvedReviewThreadCount = if (pr.title == "two") 3 else 0,
+                    )
+                )
+            }
+
+            renderAndAppendStatus(testInfo)
+        }
+    }
+
+    @Test
+    @Order(13)
     fun `nav - status cursor mid-stack`(testInfo: TestInfo) {
         withTestSetup {
             createCommitsFrom(
@@ -637,7 +679,7 @@ class StatusPreviewTest {
     }
 
     @Test
-    @Order(13)
+    @Order(14)
     fun `nav - compare cursor mid-stack`(testInfo: TestInfo) {
         withTestSetup {
             createCommitsFrom(
@@ -683,7 +725,7 @@ class StatusPreviewTest {
     }
 
     @Test
-    @Order(14)
+    @Order(15)
     fun `compare - long subjects truncate with ellipsis`(testInfo: TestInfo) {
         withTestSetup {
             createCommitsFrom(
