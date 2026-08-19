@@ -10363,6 +10363,39 @@ interface GitJasprTest {
         }
     }
 
+    @Checkout
+    @Test
+    fun `checkout - dirty working tree gives user-facing error`() {
+        withTestSetup(useFakeRemote) {
+            createCommitsFrom(
+                testCase {
+                    repository {
+                        commit {
+                            title = "shared"
+                            localRefs += "main"
+                            branch {
+                                commit {
+                                    title = "only_on_stack"
+                                    localRefs += "development"
+                                }
+                            }
+                        }
+                    }
+                    checkout = "development"
+                }
+            )
+
+            gitJaspr.push(stackName = "my-stack")
+
+            localGit.checkout("main")
+            // Create an untracked file that conflicts with a file on the stack branch
+            File(localRepo, "only_on_stack.txt").writeText("dirty")
+
+            val exception = assertThrows<GitJasprException> { checkout("my-stack") }
+            assertTrue(exception.message.orEmpty().contains("commit or stash"))
+        }
+    }
+
     // endregion
 
     // region stack tests

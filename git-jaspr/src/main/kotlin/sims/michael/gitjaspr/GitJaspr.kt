@@ -2678,7 +2678,7 @@ class GitJaspr(
                 startPoint = remoteTrackingRef,
                 reflogMessage = reflogMessage,
             )
-            gitClient.checkout(localBranchName, reflogMessage = reflogMessage)
+            checkoutOrThrowUserFacing(localBranchName, reflogMessage)
             gitClient.setUpstreamBranch(remoteName, namedStackRef.name())
             renderer.info {
                 "Checked out named stack '${entity(localBranchName)}' on new local branch"
@@ -2686,7 +2686,7 @@ class GitJaspr(
         } else {
             // Branch exists - checkout and verify upstream matches
             val previousRef = gitClient.log(GitClient.HEAD, 1).single().hash
-            gitClient.checkout(localBranchName, reflogMessage = reflogMessage)
+            checkoutOrThrowUserFacing(localBranchName, reflogMessage)
             val upstream = gitClient.getUpstreamBranch(remoteName)
             if (upstream != null && upstream.name == namedStackRef.name()) {
                 renderer.info { "Switched to existing local branch '${entity(localBranchName)}'" }
@@ -2704,6 +2704,20 @@ class GitJaspr(
                         "Please rename or delete it first."
                 )
             }
+        }
+    }
+
+    private fun checkoutOrThrowUserFacing(refName: String, reflogMessage: String?) {
+        try {
+            gitClient.checkout(refName, reflogMessage = reflogMessage)
+        } catch (e: IllegalArgumentException) {
+            if (e.message.orEmpty().contains("would be overwritten")) {
+                throw GitJasprException(
+                    "Cannot check out '$refName' because you have local changes that would " +
+                        "be overwritten. Please commit or stash them first."
+                )
+            }
+            throw e
         }
     }
 
