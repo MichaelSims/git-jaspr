@@ -7189,6 +7189,88 @@ interface GitJasprTest {
 
     @Merge
     @Test
+    fun `merge updates remaining PR descriptions to exclude merged commits`() {
+        withTestSetup(useFakeRemote) {
+            createCommitsFrom(
+                testCase {
+                    repository {
+                        commit {
+                            title = "one"
+                            willPassVerification = true
+                            remoteRefs += buildRemoteRef("one")
+                        }
+                        commit {
+                            title = "two"
+                            willPassVerification = true
+                            remoteRefs += buildRemoteRef("two")
+                        }
+                        commit {
+                            title = "three"
+                            willPassVerification = true
+                            remoteRefs += buildRemoteRef("three")
+                        }
+                        commit {
+                            title = "four"
+                            willPassVerification = true
+                            remoteRefs += buildRemoteRef("four")
+                            localRefs += "development"
+                        }
+                    }
+                    pullRequest {
+                        headRef = buildRemoteRef("one")
+                        baseRef = "main"
+                        title = "one"
+                        willBeApprovedByUserKey = "michael"
+                    }
+                    pullRequest {
+                        headRef = buildRemoteRef("two")
+                        baseRef = buildRemoteRef("one")
+                        title = "two"
+                        willBeApprovedByUserKey = "michael"
+                    }
+                    pullRequest {
+                        headRef = buildRemoteRef("three")
+                        baseRef = buildRemoteRef("two")
+                        title = "three"
+                        willBeApprovedByUserKey = "michael"
+                    }
+                    pullRequest {
+                        headRef = buildRemoteRef("four")
+                        baseRef = buildRemoteRef("three")
+                        title = "four"
+                        willBeApprovedByUserKey = "michael"
+                    }
+                }
+            )
+
+            waitForChecksToConclude("one", "two", "three", "four")
+
+            // Merge just the bottom two (one, two), leaving three and four open.
+            val two =
+                localGit.getCommitStack(remoteName, "development", DEFAULT_TARGET_REF).single {
+                    commit ->
+                    commit.shortMessage == "two"
+                }
+            merge(RefSpec("development", "main"), ref = two.hash)
+
+            // The remaining PRs (three, four) should have descriptions listing only themselves.
+            val remainingPrs =
+                gitHub.getPullRequests().filter { it.title == "three" || it.title == "four" }
+            assertEquals(2, remainingPrs.size)
+            remainingPrs.forEach { pr ->
+                val stackLines =
+                    pr.body.lines().filter { line -> line.matches("^- #\\d+.*".toRegex()) }
+                assertEquals(
+                    2,
+                    stackLines.size,
+                    "PR '${pr.title}' should list 2 PRs in its stack, but had: $stackLines",
+                )
+            }
+        }
+    }
+
+    @Merge
+    @Test
     fun `merge with an unresolvable ref fails`() {
         withTestSetup(useFakeRemote) {
             createCommitsFrom(

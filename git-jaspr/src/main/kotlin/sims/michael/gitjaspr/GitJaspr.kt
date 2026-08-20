@@ -1374,6 +1374,26 @@ class GitJaspr(
             ghClient.updatePullRequest(pr)
         }
 
+        val remainingStack =
+            gitClient.getCommitStack(remoteName, refSpec.localRef, refSpec.remoteRef)
+        if (remainingStack.isNotEmpty()) {
+            val remainingPrs = ghClient.getPullRequests(remainingStack).filterByMatchingTargetRef()
+            if (remainingPrs.isNotEmpty()) {
+                val stackName = (getExistingStackName(remainingStack) as? Found)?.name
+                val prsWithUpdatedBodies =
+                    remainingPrs.updateDescriptionsWithStackInfo(remainingStack, stackName)
+                withContext(Dispatchers.IO) {
+                    for (pr in prsWithUpdatedBodies) {
+                        launch { ghClient.updatePullRequest(pr) }
+                    }
+                }
+                renderer.info {
+                    "Updated descriptions for ${remainingPrs.size} remaining " +
+                        "pull ${requestOrRequests(remainingPrs.size)}"
+                }
+            }
+        }
+
         // Call this for the benefit of the stub client in case we're running within tests. In
         // production, this does nothing as GitHub will "auto close" PRs that are merged
         ghClient.autoClosePrs()
