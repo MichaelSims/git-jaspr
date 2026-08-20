@@ -8,7 +8,27 @@ set -euo pipefail
 # Usage: ./release v2.3.0        (stable, auto-creates beta if needed)
 #        ./release v2.3.0-beta.1 (beta, pushed directly)
 
-tag="${1:?Usage: release <tag>}"
+usage() {
+  cat <<'EOF'
+Usage: release <tag>
+
+Tags and pushes a release. The "v" prefix is added automatically if omitted.
+
+  release 2.3.0          Stable release. Auto-creates a beta tag at HEAD
+                         first if no existing beta already covers it.
+  release 2.3.0-beta.1   Beta release. Pushed directly.
+
+The latest beta release should always be a superset of the latest stable
+release, so stable releases create a companion beta when needed.
+EOF
+}
+
+if [[ $# -eq 0 || "${1-}" == "-h" || "${1-}" == "--help" ]]; then
+  usage
+  exit 0
+fi
+
+tag="$1"
 # Prepend a "v" to the tag if it doesn't have one
 [[ "$tag" == v* ]] || tag="v$tag"
 
