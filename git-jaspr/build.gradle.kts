@@ -19,29 +19,29 @@ val generateVersionFile by tasks.registering {
     // Always execute but only write when content changes to preserve compileKotlin caching.
     outputs.upToDateWhen { false }
     doLast {
+        // CI sets JASPR_BUILD_VERSION to the exact tag being built (e.g. v2.4.0-beta.1) so
+        // the binary reports the right version even when a stable tag points at the
+        // same commit.
         val version =
-            try {
-                providers
-                    .exec {
-                        commandLine(
-                            "git",
-                            "describe",
-                            "--tags",
-                            // Restrict to SemVer-shaped tags so that when multiple tags point at
-                            // the same commit (e.g. v2.0-beta-8 and v2.0.0 are co-tagged), git
-                            // describe picks the SemVer one instead of falling back to ASCII
-                            // ordering, where `-` (0x2D) sorts before `.` (0x2E).
-                            "--match",
-                            "v[0-9]*.[0-9]*.[0-9]*",
-                        )
-                    }
-                    .standardOutput
-                    .asText
-                    .get()
-                    .trim()
-            } catch (_: Exception) {
-                "undefined"
-            }
+            System.getenv("JASPR_BUILD_VERSION")?.takeIf(String::isNotBlank)
+                ?: try {
+                    providers
+                        .exec {
+                            commandLine(
+                                "git",
+                                "describe",
+                                "--tags",
+                                "--match",
+                                "v[0-9]*.[0-9]*.[0-9]*",
+                            )
+                        }
+                        .standardOutput
+                        .asText
+                        .get()
+                        .trim()
+                } catch (_: Exception) {
+                    "undefined"
+                }
         val file = outputDir.get().asFile.resolve("sims/michael/gitjaspr/Version.kt")
         val content =
             """
