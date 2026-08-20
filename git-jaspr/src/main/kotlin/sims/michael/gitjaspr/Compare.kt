@@ -275,9 +275,6 @@ fun renderCompare(
  */
 const val DEFAULT_MAX_SUBJECT_LENGTH = 50
 
-private fun truncateSubject(subject: String, max: Int): String =
-    if (subject.length <= max) subject else subject.take(max - 1) + "…"
-
 private fun formatCell(
     row: CompareRow,
     isLocal: Boolean,

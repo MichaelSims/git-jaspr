@@ -75,13 +75,15 @@ class GitHubStubClient(
      */
     fun seedPullRequest(pullRequest: PullRequest): PullRequest {
         val commitId = getCommitIdFromRemoteRef(pullRequest.headRefName, remoteBranchPrefix)
+        val number = prNumberIterator.nextInt()
         return pullRequest
             .copy(
                 // Assign a unique id and the next PR number... simulates what GitHub would do
                 id = generateUuid(8),
-                number = prNumberIterator.nextInt(),
+                number = number,
                 commitId = pullRequest.commitId ?: commitId,
                 unresolvedReviewThreadCount = pullRequest.unresolvedReviewThreadCount ?: 0,
+                permalink = pullRequest.permalink ?: "http://example.com/pull/$number",
             )
             .also { pullRequestToAdd ->
                 logger.trace("seedPullRequest {}", pullRequestToAdd)

@@ -233,7 +233,9 @@ class GitJaspr(
             } else {
                 statuses.fold(emptyList()) { currentStack, status ->
                     val allFlagsAreSuccess =
-                        status.toStatusList(commitsWithDuplicateIds).all { it == SUCCESS }
+                        status.toStatusList(commitsWithDuplicateIds).all {
+                            it == SUCCESS || it == COMMENT
+                        }
                     val currentStackIsAllTrue = currentStack.all { it }
                     currentStack + (currentStackIsAllTrue && allFlagsAreSuccess)
                 }
@@ -245,8 +247,7 @@ class GitJaspr(
             val lineContent = buildString {
                 append("[")
                 val flags = status.toStatusList(commitsWithDuplicateIds)
-                val commentsFlag = status.toCommentsFlag()
-                val statusList = flags + commentsFlag + if (stackCheck) SUCCESS else EMPTY
+                val statusList = flags + if (stackCheck) SUCCESS else EMPTY
                 // On the cursor row, skip styles that use ANSI intensity (dim) -- their inner
                 // resets fight the outer bold wrap and the result reads as visually uneven.
                 // Specifically: theme.muted on EMPTY and theme.hash on the SHA both use dim.
@@ -265,7 +266,9 @@ class GitJaspr(
                     append(theme.url(status.pullRequest.permalink))
                     append(" : ")
                 }
-                append(theme.value(status.localCommit.shortMessage))
+                val subject = status.localCommit.shortMessage
+                val truncatedSubject = truncateSubject(subject, MAX_STATUS_SUBJECT_LENGTH)
+                append(theme.value(truncatedSubject))
             }
             appendLine(if (isCursor) theme.emphasis(lineContent) else lineContent)
         }
@@ -2100,19 +2103,12 @@ class GitJaspr(
                     when {
                         pullRequest == null -> EMPTY
                         approved == null -> EMPTY
+                        approved == true && (unresolvedReviewThreadCount ?: 0) > 0 -> COMMENT
                         approved -> SUCCESS
                         else -> FAIL
                     },
             )
             .toList()
-
-    private fun RemoteCommitStatus.toCommentsFlag() =
-        when {
-            pullRequest == null -> EMPTY
-            unresolvedReviewThreadCount == null -> EMPTY
-            unresolvedReviewThreadCount > 0 -> COMMENT
-            else -> SUCCESS
-        }
 
     private fun List<PullRequest>.updateDescriptionsWithStackInfo(
         stack: List<Commit>,
@@ -4152,16 +4148,16 @@ class GitJaspr(
 
         private val HEADER =
             """
-            | ┌───────────── commit pushed
-            | │ ┌───────────── exists         ┐
-            | │ │ ┌─────────── checks pass    │
-            | │ │ │ ┌───────── ready          │ PR
-            | │ │ │ │ ┌─────── approved       │
-            | │ │ │ │ │ ┌───── comments       ┘
-            | │ │ │ │ │ │ ┌─ stack check
-            | │ │ │ │ │ │ │
+            | ┌─────────── commit pushed
+            | │ ┌─────────── exists         ┐
+            | │ │ ┌───────── checks pass    │
+            | │ │ │ ┌─────── ready          │ PR
+            | │ │ │ │ ┌───── approved       ┘
+            | │ │ │ │ │ ┌─ stack check
+            | │ │ │ │ │ │
             |"""
                 .trimMargin()
+        private const val MAX_STATUS_SUBJECT_LENGTH = 72
         private const val COMMIT_MSG_HOOK = "commit-msg"
         private const val POST_CHECKOUT_HOOK = "post-checkout"
         private const val POST_CHECKOUT_HOOK_RESOURCE = "post-checkout-jaspr-section"
@@ -4186,3 +4182,6 @@ fun <T : Any> Iterable<T>.windowedPairs(): List<Pair<T?, T>> {
 
 /** Convert [ZonedDateTime] to the simplest representation as an offset from UTC. */
 fun ZonedDateTime.canonicalize(): ZonedDateTime = toOffsetDateTime().toZonedDateTime()
+
+fun truncateSubject(subject: String, max: Int): String =
+    if (subject.length <= max) subject else subject.take(max - 1) + "…"

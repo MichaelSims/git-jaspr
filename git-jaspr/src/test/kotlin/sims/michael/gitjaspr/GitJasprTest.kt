@@ -3262,9 +3262,9 @@ interface GitJasprTest {
             val actual = getAndPrintStatusString()
             assertEquals(
                 """
-                |[ㄧㄧㄧㄧㄧㄧㄧ] %s : three
-                |[ㄧㄧㄧㄧㄧㄧㄧ] %s : two
-                |[ㄧㄧㄧㄧㄧㄧㄧ] %s : one
+                |[ㄧㄧㄧㄧㄧㄧ] %s : three
+                |[ㄧㄧㄧㄧㄧㄧ] %s : two
+                |[ㄧㄧㄧㄧㄧㄧ] %s : one
                 """
                     .trimMargin()
                     .toStatusString(actual),
@@ -3296,9 +3296,9 @@ interface GitJasprTest {
             val actual = getAndPrintStatusString()
             assertEquals(
                 """
-                |[ㄧㄧㄧㄧㄧㄧㄧ] %s : three
-                |[ㄧㄧㄧㄧㄧㄧㄧ] %s : two
-                |[✅ㄧㄧㄧㄧㄧㄧ] %s : one
+                |[ㄧㄧㄧㄧㄧㄧ] %s : three
+                |[ㄧㄧㄧㄧㄧㄧ] %s : two
+                |[✅ㄧㄧㄧㄧㄧ] %s : one
                 """
                     .trimMargin()
                     .toStatusString(actual),
@@ -3335,9 +3335,9 @@ interface GitJasprTest {
             val actual = getAndPrintStatusString()
             assertEquals(
                 """
-                |[ㄧㄧㄧㄧㄧㄧㄧ] %s : three
-                |[ㄧㄧㄧㄧㄧㄧㄧ] %s : two
-                |[✅✅⌛✅ㄧ✅ㄧ] %s : %s : one
+                |[ㄧㄧㄧㄧㄧㄧ] %s : three
+                |[ㄧㄧㄧㄧㄧㄧ] %s : two
+                |[✅✅⌛✅ㄧㄧ] %s : %s : one
                 """
                     .trimMargin()
                     .toStatusString(actual),
@@ -3377,9 +3377,9 @@ interface GitJasprTest {
             val actual = getAndPrintStatusString()
             assertEquals(
                 """
-                |[ㄧㄧㄧㄧㄧㄧㄧ] %s : three
-                |[ㄧㄧㄧㄧㄧㄧㄧ] %s : two
-                |[✅✅✅✅ㄧ✅ㄧ] %s : %s : one
+                |[ㄧㄧㄧㄧㄧㄧ] %s : three
+                |[ㄧㄧㄧㄧㄧㄧ] %s : two
+                |[✅✅✅✅ㄧㄧ] %s : %s : one
                 """
                     .trimMargin()
                     .toStatusString(actual),
@@ -3436,9 +3436,9 @@ interface GitJasprTest {
             val actual = getAndPrintStatusString()
             assertEquals(
                 """
-                |[✅✅✅✅ㄧ✅ㄧ] %s : %s : three
-                |[✅✅✅✅ㄧ✅ㄧ] %s : %s : two
-                |[✅✅✅✅✅✅✅] %s : %s : one
+                |[✅✅✅✅ㄧㄧ] %s : %s : three
+                |[✅✅✅✅ㄧㄧ] %s : %s : two
+                |[✅✅✅✅✅✅] %s : %s : one
                 """
                     .trimMargin()
                     .toStatusString(actual),
@@ -3487,8 +3487,8 @@ interface GitJasprTest {
             val actual = getAndPrintStatusString()
             assertEquals(
                 """
-                |[✅✅✅✅✅💬✅] %s : %s : two
-                |[✅✅✅✅✅✅✅] %s : %s : one
+                |[✅✅✅✅💬✅] %s : %s : two
+                |[✅✅✅✅✅✅] %s : %s : one
                 """
                     .trimMargin()
                     .toStatusString(actual),
@@ -3556,9 +3556,9 @@ interface GitJasprTest {
             val actual = getAndPrintStatusString()
             assertEquals(
                 """
-                |[✅✅✅✅✅✅ㄧ] %s : %s : three
-                |[✅✅✅✅✅✅ㄧ] %s : %s : two
-                |[✅✅✅✅✅✅ㄧ] %s : %s : one
+                |[✅✅✅✅✅ㄧ] %s : %s : three
+                |[✅✅✅✅✅ㄧ] %s : %s : two
+                |[✅✅✅✅✅ㄧ] %s : %s : one
                 |
                 |Your stack is out-of-date with the base branch (1 commit behind main).
                 |You'll need to rebase it (`jaspr rebase`) before your stack will be mergeable.
@@ -3630,9 +3630,9 @@ interface GitJasprTest {
             val actual = getAndPrintStatusString()
             assertEquals(
                 """
-                |[✅✅✅✅✅✅ㄧ] %s : %s : three
-                |[✅✅✅✅✅✅ㄧ] %s : %s : two
-                |[✅✅✅✅✅✅ㄧ] %s : %s : one
+                |[✅✅✅✅✅ㄧ] %s : %s : three
+                |[✅✅✅✅✅ㄧ] %s : %s : two
+                |[✅✅✅✅✅ㄧ] %s : %s : one
                 |
                 |Your stack is out-of-date with the base branch (2 commits behind main).
                 |You'll need to rebase it (`jaspr rebase`) before your stack will be mergeable.
@@ -3694,9 +3694,9 @@ interface GitJasprTest {
             val actual = getAndPrintStatusString()
             assertEquals(
                 """
-                |[✅✅✅✅✅✅✅] %s : %s : three
-                |[✅✅✅✅✅✅✅] %s : %s : two
-                |[✅✅✅✅✅✅✅] %s : %s : one
+                |[✅✅✅✅✅✅] %s : %s : three
+                |[✅✅✅✅✅✅] %s : %s : two
+                |[✅✅✅✅✅✅] %s : %s : one
                 """
                     .trimMargin()
                     .toStatusString(actual),
@@ -3758,9 +3758,9 @@ interface GitJasprTest {
             val actual = getAndPrintStatusString()
             assertEquals(
                 """
-                |[✅✅✅ㄧ✅✅ㄧ] %s : %s : draft: three
-                |[✅✅✅✅✅✅✅] %s : %s : two
-                |[✅✅✅✅✅✅✅] %s : %s : one
+                |[✅✅✅ㄧ✅ㄧ] %s : %s : draft: three
+                |[✅✅✅✅✅✅] %s : %s : two
+                |[✅✅✅✅✅✅] %s : %s : one
                 """
                     .trimMargin()
                     .toStatusString(actual),
@@ -3820,9 +3820,9 @@ interface GitJasprTest {
             val actual = getAndPrintStatusString()
             assertEventuallyEquals(
                 """
-                |[✅✅✅✅ㄧ✅ㄧ] %s : %s : three
-                |[✅✅✅✅✅✅ㄧ] %s : %s : two
-                |[✅✅✅✅ㄧ✅ㄧ] %s : %s : one
+                |[✅✅✅✅ㄧㄧ] %s : %s : three
+                |[✅✅✅✅✅ㄧ] %s : %s : two
+                |[✅✅✅✅ㄧㄧ] %s : %s : one
                 """
                     .trimMargin()
                     .toStatusString(actual, NamedStackInfo(stackName, 0, 0, remoteName)),
@@ -3881,9 +3881,9 @@ interface GitJasprTest {
             val actual = getAndPrintStatusString()
             assertEquals(
                 """
-                |[✅✅✅✅ㄧ✅ㄧ] %s : %s : three
-                |[✅✅❌✅ㄧ✅ㄧ] %s : %s : two
-                |[✅✅✅✅ㄧ✅ㄧ] %s : %s : one
+                |[✅✅✅✅ㄧㄧ] %s : %s : three
+                |[✅✅❌✅ㄧㄧ] %s : %s : two
+                |[✅✅✅✅ㄧㄧ] %s : %s : one
                 """
                     .trimMargin()
                     .toStatusString(actual, NamedStackInfo(stackName, 0, 0, remoteName)),
@@ -3929,7 +3929,7 @@ interface GitJasprTest {
             val actual = getAndPrintStatusString(RefSpec("development", "development"))
             assertEquals(
                 """
-                |[✅✅✅✅✅✅✅] %s : %s : three
+                |[✅✅✅✅✅✅] %s : %s : three
                 """
                     .trimMargin()
                     .toStatusString(actual),
@@ -4019,9 +4019,9 @@ interface GitJasprTest {
             val actual = getAndPrintStatusString(RefSpec("development", "main"))
             assertEquals(
                 """
-                |[❗✅✅✅✅✅ㄧ] %s : %s : four
-                |[❗✅✅✅✅✅ㄧ] %s : %s : three
-                |[✅✅✅✅✅✅✅] %s : %s : one
+                |[❗✅✅✅✅ㄧ] %s : %s : four
+                |[❗✅✅✅✅ㄧ] %s : %s : three
+                |[✅✅✅✅✅✅] %s : %s : one
                 """
                     .trimMargin()
                     .toStatusString(actual),
@@ -4057,9 +4057,9 @@ interface GitJasprTest {
             val actual = getAndPrintStatusString()
             assertEquals(
                 """
-                |[ㄧㄧㄧㄧㄧㄧㄧ] %s : three
-                |[❗ㄧㄧㄧㄧㄧㄧ] %s : two
-                |[❗ㄧㄧㄧㄧㄧㄧ] %s : one
+                |[ㄧㄧㄧㄧㄧㄧ] %s : three
+                |[❗ㄧㄧㄧㄧㄧ] %s : two
+                |[❗ㄧㄧㄧㄧㄧ] %s : one
                 |
                 |Some commits in your local stack have duplicate IDs:
                 |- a: (one, two)
@@ -4146,8 +4146,8 @@ interface GitJasprTest {
 
             assertEquals(
                 """
-                |[✅✅✅✅✅✅✅] %s : %s : two
-                |[✅✅✅✅✅✅✅] %s : %s : one
+                |[✅✅✅✅✅✅] %s : %s : two
+                |[✅✅✅✅✅✅] %s : %s : one
                 """
                     .trimMargin()
                     .toStatusString(actual, NamedStackInfo(stackName, 0, 0, remoteName)),
@@ -4206,7 +4206,7 @@ interface GitJasprTest {
 
             assertEquals(
                 """
-                |[✅✅✅✅✅✅✅] %s : %s : one
+                |[✅✅✅✅✅✅] %s : %s : one
                 """
                     .trimMargin()
                     .toStatusString(
@@ -4281,8 +4281,8 @@ interface GitJasprTest {
 
             assertEquals(
                 """
-                |[✅ㄧㄧㄧㄧㄧㄧ] %s : two
-                |[✅✅✅✅✅✅✅] %s : %s : one
+                |[✅ㄧㄧㄧㄧㄧ] %s : two
+                |[✅✅✅✅✅✅] %s : %s : one
                 """
                     .trimMargin()
                     .toStatusString(
@@ -4368,8 +4368,8 @@ interface GitJasprTest {
 
             assertEquals(
                 """
-                |[✅ㄧㄧㄧㄧㄧㄧ] %s : three
-                |[✅✅✅✅✅✅✅] %s : %s : one
+                |[✅ㄧㄧㄧㄧㄧ] %s : three
+                |[✅✅✅✅✅✅] %s : %s : one
                 """
                     .trimMargin()
                     .toStatusString(
@@ -6050,9 +6050,9 @@ interface GitJasprTest {
             val actual = getAndPrintStatusString()
             assertEquals(
                 """
-                |[✅✅✅✅✅✅✅] %s : %s : three
-                |[✅✅✅✅✅✅✅] %s : %s : two
-                |[✅✅✅✅✅✅✅] %s : %s : one
+                |[✅✅✅✅✅✅] %s : %s : three
+                |[✅✅✅✅✅✅] %s : %s : two
+                |[✅✅✅✅✅✅] %s : %s : one
                 """
                     .trimMargin()
                     .toStatusString(actual, NamedStackInfo(secondStackName, 0, 0, remoteName)),
@@ -6066,8 +6066,8 @@ interface GitJasprTest {
             val detachedHeadActual = getAndPrintStatusString()
             assertEquals(
                 """
-                |[✅✅✅✅✅✅✅] %s : %s : two
-                |[✅✅✅✅✅✅✅] %s : %s : one
+                |[✅✅✅✅✅✅] %s : %s : two
+                |[✅✅✅✅✅✅] %s : %s : one
                 """
                     .trimMargin()
                     .toStatusString(
@@ -9442,7 +9442,7 @@ interface GitJasprTest {
         // Extract commit hashes and URLs from the actual string and put them into the expected. I
         // can't predict what they will be, so I only want to validate that they are present.
         val extracts =
-            "] (.*?) : (?:(http.*?) : )?.*?\n"
+            "] (.*?) : (?:(http\\S+) : )?.*?\n"
                 .toRegex()
                 .findAll(actual)
                 .flatMap { result -> result.groupValues.drop(1) }
@@ -9526,14 +9526,13 @@ interface GitJasprTest {
                 ?.let { "\n$it" }
                 .orEmpty()
         return """
-            | ┌───────────── commit pushed
-            | │ ┌───────────── exists         ┐
-            | │ │ ┌─────────── checks pass    │
-            | │ │ │ ┌───────── ready          │ PR
-            | │ │ │ │ ┌─────── approved       │
-            | │ │ │ │ │ ┌───── comments       ┘
-            | │ │ │ │ │ │ ┌─ stack check
-            | │ │ │ │ │ │ │
+            | ┌─────────── commit pushed
+            | │ ┌─────────── exists         ┐
+            | │ │ ┌───────── checks pass    │
+            | │ │ │ ┌─────── ready          │ PR
+            | │ │ │ │ ┌───── approved       ┘
+            | │ │ │ │ │ ┌─ stack check
+            | │ │ │ │ │ │
             |$formattedString
 
         """
@@ -10064,8 +10063,8 @@ interface GitJasprTest {
             val actual = getAndPrintStatusString()
             assertEquals(
                 """
-                |[✅✅✅✅✅✅✅] %s : %s : two
-                |[✅✅✅✅✅✅✅] %s : %s : one
+                |[✅✅✅✅✅✅] %s : %s : two
+                |[✅✅✅✅✅✅] %s : %s : one
                 """
                     .trimMargin()
                     .toStatusString(actual),
