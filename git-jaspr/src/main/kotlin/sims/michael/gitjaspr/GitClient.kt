@@ -341,4 +341,4 @@ sealed class CherryPickResult {
  * aborting via [GitClient.cherryPickAbort]. Catching this rather than a broad `Exception` keeps
  * unrelated failures (I/O errors, etc.) from being mistaken for merge conflicts.
  */
-class CherryPickConflictException(message: String) : Exception(message)
+class CherryPickConflictException(message: String) : GitJasprException(message)

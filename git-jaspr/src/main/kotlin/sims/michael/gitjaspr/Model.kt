@@ -195,7 +195,7 @@ data class UpdateCheckState(
  * where the bug banner is the right response. A plain `require` in a command or domain path that a
  * user can trip is a smell: it surfaces an ordinary mistake as an apparent crash.
  */
-class GitJasprException(override val message: String) : RuntimeException(message) {
+open class GitJasprException(override val message: String) : RuntimeException(message) {
     constructor(message: String, cause: Throwable) : this(message) {
         initCause(cause)
     }
