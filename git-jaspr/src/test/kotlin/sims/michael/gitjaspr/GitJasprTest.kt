@@ -1120,6 +1120,54 @@ interface GitJasprTest {
 
     @Nav
     @Test
+    fun `nav state cursor reflects partial progress when replay conflicts mid-way`() {
+        withTestSetup(useFakeRemote) {
+            createCommitsFrom(
+                testCase {
+                    repository {
+                        commit { title = "A" }
+                        commit { title = "B" }
+                        commit {
+                            title = "C"
+                            localRefs += "development"
+                        }
+                    }
+                    checkout = "development"
+                }
+            )
+
+            gitJaspr.navigateToBottom(DEFAULT_TARGET_REF)
+
+            // Amend A to write conflicting content for c.txt. B replays fine, C conflicts.
+            localRepo.resolve("c.txt").writeText("conflict\n")
+            localGit.add("c.txt")
+            localGit.commit("A", footerLines = mapOf(COMMIT_ID_LABEL to "A"), amend = true)
+
+            var thrown: Exception? = null
+            var navState: NavState? = null
+            try {
+                gitJaspr.navigateToTop(DEFAULT_TARGET_REF)
+            } catch (e: Exception) {
+                thrown = e
+                navState = gitJaspr.readNavState()
+            } finally {
+                gitJaspr.cancelNavSession()
+            }
+
+            assertIs<CherryPickConflictException>(thrown)
+            val state = assertNotNull(navState)
+            assertEquals(
+                "B",
+                state.stack[state.cursorIndex].let { entry ->
+                    localGit.log(entry.sha, 1).single().shortMessage
+                },
+                "Cursor should be at B (last successfully replayed), not A (pre-replay position)",
+            )
+        }
+    }
+
+    @Nav
+    @Test
     fun `drop during nav session removes commit from stack`() {
         withTestSetup(useFakeRemote) {
             // Stack: A -> B -> C -> D on "development"

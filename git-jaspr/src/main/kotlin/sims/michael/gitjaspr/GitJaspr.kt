@@ -3107,6 +3107,7 @@ class GitJaspr(
                 state.stack,
                 (state.cursorIndex + 1)..(state.cursorIndex + n),
                 reflogCommand = "nav up",
+                navState = state,
             )
 
         val newCursor = state.cursorIndex + n
@@ -3136,6 +3137,7 @@ class GitJaspr(
                 state.stack,
                 (state.cursorIndex + 1)..state.stack.lastIndex,
                 reflogCommand = "nav top",
+                navState = state,
             )
 
         val finalCommit = gitClient.log(GitClient.HEAD, 1).single()
@@ -3245,6 +3247,7 @@ class GitJaspr(
                 state.stack,
                 (cursor + 1)..targetIndex,
                 reflogCommand = "nav to $reflogLabel",
+                navState = state,
             )
         return if (targetIndex == updatedStack.lastIndex) {
             val finalCommit = gitClient.log(GitClient.HEAD, 1).single()
@@ -3279,16 +3282,23 @@ class GitJaspr(
      * returned list) matters once a cherry-pick has happened earlier in the replay: the previous
      * entry's SHA has been overwritten with the rewritten one, but the next entry (not yet touched)
      * still carries the original commit whose actual git parent is the unmodified previous SHA.
+     *
+     * When [navState] is provided, the nav state is written after each successful entry so the
+     * cursor reflects actual progress. If a cherry-pick fails mid-replay, the persisted state is
+     * correct up to the last successful entry, so `jaspr continue` followed by `jaspr top` picks up
+     * where the replay left off.
      */
     private fun replayEntries(
         stack: List<StackEntry>,
         range: IntRange,
         reflogCommand: String,
+        navState: NavState? = null,
     ): List<StackEntry> {
         val result = stack.toMutableList()
-        val indicesToRemove = mutableListOf<Int>()
+        var removedCount = 0
         for (i in range) {
-            val entry = result[i]
+            val adjustedIndex = i - removedCount
+            val entry = result[adjustedIndex]
             val entryCommit = gitClient.log(entry.sha, 1).single()
             val parentSha = gitClient.getParents(entryCommit).singleOrNull()?.hash
             val headSha = gitClient.log(GitClient.HEAD, 1).single().hash
@@ -3306,18 +3316,19 @@ class GitJaspr(
                             "jaspr $reflogCommand: cherry-pick of ${entryCommit.shortMessage}",
                     )
                 if (newCommit != null) {
-                    result[i] = entry.copy(sha = newCommit.hash)
+                    result[adjustedIndex] = entry.copy(sha = newCommit.hash)
                 } else {
                     logger.info(
                         "replayEntries: skipping {} (already applied)",
                         entryCommit.shortMessage,
                     )
-                    indicesToRemove += i
+                    result.removeAt(adjustedIndex)
+                    removedCount++
                 }
             }
-        }
-        for (i in indicesToRemove.sortedDescending()) {
-            result.removeAt(i)
+            if (navState != null) {
+                writeNavState(navState.copy(stack = result.toList(), cursorIndex = adjustedIndex))
+            }
         }
         return result
     }
