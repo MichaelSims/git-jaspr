@@ -1489,11 +1489,16 @@ class Top :
 
     override suspend fun doRun() {
         val jaspr = appWiring.gitJaspr
-        jaspr.clearSplitState()
         when (val result = jaspr.navigateToTop(targetOpts.target)) {
             NavMoveResult.NoSession -> renderer.info { "Already at the top of the stack." }
-            is NavMoveResult.MovedWithin -> print(jaspr.getNavPositionString(result.state, theme))
-            is NavMoveResult.ReachedTop -> printReachedTop(jaspr, result)
+            is NavMoveResult.MovedWithin ->
+                print(jaspr.getNavPositionString(result.state, theme)).also {
+                    jaspr.clearSplitState()
+                }
+            is NavMoveResult.ReachedTop ->
+                printReachedTop(jaspr, result).also {
+                    jaspr.clearSplitState()
+                }
         }
     }
 }
