@@ -94,7 +94,7 @@ class DivergenceClassifierTest {
 
     private fun commit(
         workDir: File,
-        fileName: String,
+        @Suppress("SameParameterValue") fileName: String,
         content: String,
         message: String,
         committerDate: String,

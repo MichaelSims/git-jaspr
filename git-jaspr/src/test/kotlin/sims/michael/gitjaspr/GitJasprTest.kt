@@ -10,6 +10,7 @@ import kotlin.test.assertIs
 import kotlin.test.assertNotEquals
 import kotlin.test.assertNotNull
 import kotlin.test.assertNull
+import kotlin.time.Duration.Companion.milliseconds
 import kotlinx.coroutines.delay
 import org.junit.jupiter.api.*
 import org.junit.jupiter.api.Assertions.assertTrue
@@ -697,7 +698,7 @@ interface GitJasprTest {
                 assertThrows<GitJasprException> {
                     gitJaspr.navigateTo(DEFAULT_TARGET_REF, 0)
                 }
-            assertContains(exception.message.orEmpty(), "Position must not be zero")
+            assertContains(exception.message, "Position must not be zero")
         }
     }
 
@@ -804,7 +805,7 @@ interface GitJasprTest {
                 assertThrows<GitJasprException> {
                     gitJaspr.navigateToDestination(DEFAULT_TARGET_REF, base.take(7))
                 }
-            assertContains(exception.message.orEmpty(), "not a commit in the current stack")
+            assertContains(exception.message, "not a commit in the current stack")
         }
     }
 
@@ -828,7 +829,7 @@ interface GitJasprTest {
                 assertThrows<GitJasprException> {
                     gitJaspr.navigateTo(DEFAULT_TARGET_REF, -1)
                 }
-            assertContains(exception.message.orEmpty(), "Already at position -1")
+            assertContains(exception.message, "Already at position -1")
         }
     }
 
@@ -3228,7 +3229,7 @@ interface GitJasprTest {
                         stackName = "test-stack",
                     )
                 }
-            assertContains(exception.message.orEmpty(), "feature-target")
+            assertContains(exception.message, "feature-target")
 
             // The push was rolled back: the remote's ref list is byte-for-byte unchanged.
             assertEquals(refsBefore, runGit(localRepo, "ls-remote", remoteName))
@@ -4619,7 +4620,7 @@ interface GitJasprTest {
             )
             push()
 
-            delay(1200)
+            delay(1200.milliseconds)
 
             createCommitsFrom(
                 testCase {
@@ -4666,7 +4667,7 @@ interface GitJasprTest {
             val thrown =
                 assertFailsWith<GitJasprException> { gitJaspr.getCompareString(theme = MonoTheme) }
             assertTrue(
-                thrown.message!!.contains("No remote stack to compare against"),
+                thrown.message.contains("No remote stack to compare against"),
                 "Expected 'no remote stack' message:\n${thrown.message}",
             )
         }
@@ -5005,7 +5006,7 @@ interface GitJasprTest {
 
             val thrown = assertFailsWith<GitJasprException> { pull() }
             assertTrue(
-                thrown.message!!.contains("cherry-pick is in progress"),
+                thrown.message.contains("cherry-pick is in progress"),
                 "Expected cherry-pick precondition message, got: ${thrown.message}",
             )
         }
@@ -5080,7 +5081,7 @@ interface GitJasprTest {
 
             val thrown = assertFailsWith<GitJasprException> { pull() }
             assertTrue(
-                thrown.message!!.contains("rebase is in progress"),
+                thrown.message.contains("rebase is in progress"),
                 "Expected rebase precondition message, got: ${thrown.message}",
             )
         }
@@ -7372,7 +7373,7 @@ interface GitJasprTest {
                 assertThrows<GitJasprException> {
                     merge(RefSpec("development", "main"), ref = "no-such-ref")
                 }
-            assertContains(exception.message.orEmpty(), "Could not resolve")
+            assertContains(exception.message, "Could not resolve")
         }
     }
 
@@ -7397,7 +7398,7 @@ interface GitJasprTest {
                 assertThrows<GitJasprException> {
                     merge(RefSpec("development", "main"), ref = belowStack)
                 }
-            assertContains(exception.message.orEmpty(), "not in the current stack")
+            assertContains(exception.message, "not in the current stack")
         }
     }
 
@@ -9604,7 +9605,7 @@ interface GitJasprTest {
         // we can't easily predict (hashes, dates). Tests that don't explicitly verify it should
         // still pass when it appears, so we extract it from `actual` and tack it onto expected.
         val remoteOnlyExtract =
-            "(?m)^Remote stack has \\d+ commits? not in your local stack[^\\n]*\\n(?:  ⬇️  [^\\n]*\\n)+"
+            "(?m)^Remote stack has \\d+ commits? not in your local stack[^\\n]*\\n(?: {2}⬇\uFE0F {2}[^\\n]*\\n)+"
                 .toRegex(RegexOption.MULTILINE)
                 .find(actual)
                 ?.value
@@ -10558,7 +10559,7 @@ interface GitJasprTest {
             File(localRepo, "only_on_stack.txt").writeText("dirty")
 
             val exception = assertThrows<GitJasprException> { checkout("my-stack") }
-            assertTrue(exception.message.orEmpty().contains("commit or stash"))
+            assertTrue(exception.message.contains("commit or stash"))
         }
     }
 

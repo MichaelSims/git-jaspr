@@ -804,7 +804,7 @@ class Push : GitJasprSubcommand(helpText = "Push commits and create/update PRs")
             "This push will abandon ${prs.size} open pull " +
                 "${if (prs.size == 1) "request" else "requests"}:"
         }
-        for (pr in prs) {
+        prs.forEach { pr ->
             renderer.info { "  ${url(pr.permalink.orEmpty())} : ${value(pr.title)}" }
         }
         echo()
@@ -1080,8 +1080,8 @@ class Checkout : GitJasprSubcommand(helpText = "Check out an existing named stac
                     if (otherStacks.isNotEmpty()) {
                         appendLine()
                         appendLine("Named stacks exist for other targets:")
-                        for (stack in otherStacks.take(5)) {
-                            appendLine("  [${entity(stack.targetRef)}] ${entity(stack.stackName)}")
+                        for ((stackName, targetRef) in otherStacks.take(5)) {
+                            appendLine("  [${entity(targetRef)}] ${entity(stackName)}")
                         }
                         if (otherStacks.size > 5) {
                             appendLine("  ... and ${otherStacks.size - 5} more")
@@ -1320,8 +1320,7 @@ private fun parseVersionParts(version: String) =
  */
 fun isGitVersionAtLeast(gitVersionOutput: String, minVersion: String): Boolean {
     val actual = parseVersionParts(gitVersionOutput.removePrefix("git version "))
-    if (actual.size < 3) return false
-    return versionNumber(actual) >= versionNumber(parseVersionParts(minVersion))
+    return actual.size >= 3 && versionNumber(actual) >= versionNumber(parseVersionParts(minVersion))
 }
 
 class Edit(name: String? = null) : GitJasprSubcommand(name = name) {
@@ -1649,8 +1648,8 @@ class NavFinish :
             val count = discarded.size
             val commits = if (count == 1) "commit" else "commits"
             renderer.warn { "Discarded $count $commits from the replay queue:" }
-            for (entry in discarded) {
-                renderer.warn { "  ${entity(entry.commitId)}" }
+            for ((_, commitId) in discarded) {
+                renderer.warn { "  ${entity(commitId)}" }
             }
         }
     }

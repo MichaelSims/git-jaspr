@@ -3,6 +3,7 @@ package sims.michael.gitjaspr
 import java.io.File
 import java.util.Properties
 import kotlin.test.assertEquals
+import kotlin.time.Duration.Companion.milliseconds
 import kotlinx.coroutines.async
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
@@ -241,7 +242,7 @@ class GitJasprFunctionalExternalProcessTest : GitJasprTest {
         timeout: Long,
         pollingDelay: Long,
     ) {
-        withTimeout(timeout) {
+        withTimeout(timeout.milliseconds) {
             launch {
                 while (true) {
                     val checksPass =
@@ -250,7 +251,7 @@ class GitJasprFunctionalExternalProcessTest : GitJasprTest {
                         }
                     logger.trace("Checks pass: {}", checksPass)
                     if (checksPass.values.all { it }) break
-                    delay(pollingDelay)
+                    delay(pollingDelay.milliseconds)
                 }
             }
         }
@@ -259,13 +260,13 @@ class GitJasprFunctionalExternalProcessTest : GitJasprTest {
     override suspend fun <T> assertEventuallyEquals(expected: T, getActual: suspend () -> T) {
         assertEquals(
             expected,
-            withTimeout(30_000L) {
+            withTimeout(30_000L.milliseconds) {
                     async {
                         var actual: T = getActual()
                         while (actual != expected) {
                             logger.trace("Actual {}", actual)
                             logger.trace("Expected {}", expected)
-                            delay(5_000L)
+                            delay(5_000L.milliseconds)
                             actual = getActual()
                         }
                         actual

@@ -19,6 +19,7 @@ interface Renderer {
  * telemetry. The dedicated logger (`sims.michael.gitjaspr.UserOutput`) should be configured with
  * `additivity = false` and only a FILE appender so that messages are not duplicated on the console.
  */
+@Suppress("KotlinPrintToLogpoint")
 class ConsoleRenderer(private val theme: Theme) : Renderer {
     private val fileLogger = LoggerFactory.getLogger(FILE_LOGGER_NAME)
 

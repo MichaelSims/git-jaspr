@@ -5,6 +5,7 @@ import java.io.RandomAccessFile
 import java.time.ZonedDateTime
 import java.util.SortedSet
 import kotlin.text.RegexOption.IGNORE_CASE
+import kotlin.time.Duration.Companion.milliseconds
 import kotlin.time.Duration.Companion.seconds
 import kotlin.time.measureTime
 import kotlinx.coroutines.Dispatchers
@@ -241,8 +242,7 @@ class GitJaspr(
                 }
             }
 
-        for (statusAndStackCheck in statuses.reversed().zip(stackChecks.reversed())) {
-            val (status, stackCheck) = statusAndStackCheck
+        for ((status, stackCheck) in statuses.reversed().zip(stackChecks.reversed())) {
             val isCursor = navState != null && status.localCommit.hash == cursorSha
             val lineContent = buildString {
                 append("[")
@@ -940,14 +940,14 @@ class GitJaspr(
      */
     private fun probeCherryPickQueue(commits: List<Commit>, startingTreeIsh: String) {
         var currentTreeIsh = startingTreeIsh
-        for (commit in commits) {
+        for ((hash, shortMessage) in commits) {
             val result =
-                gitClient.mergeTreeWriteTree("${commit.hash}^", currentTreeIsh, commit.hash)
+                gitClient.mergeTreeWriteTree("$hash^", currentTreeIsh, hash)
             when (result) {
                 is MergeTreeResult.Conflict ->
                     throw GitJasprException(
-                        "Pull would conflict applying commit ${commit.hash} " +
-                            "(${commit.shortMessage}). Resolve manually with " +
+                        "Pull would conflict applying commit $hash " +
+                            "($shortMessage). Resolve manually with " +
                             "`git cherry-pick` or `git rebase`, then re-run `jaspr pull`."
                     )
                 is MergeTreeResult.Clean -> currentTreeIsh = result.treeSha
@@ -1454,7 +1454,7 @@ class GitJaspr(
         // are in their target branch. We can delete the original branches, and GH will still show
         // the PRs as merged. However, if we delete the branches too quickly, GH will show them as
         // closed instead. So we wait a bit before cleaning up.
-        delay(2_000)
+        delay(2_000.milliseconds)
         cleanUpBranches(branchesToDelete)
 
         if (ownedNamedStack != null) {
@@ -1805,11 +1805,7 @@ class GitJaspr(
         logger.trace("getOrphanedBranches")
         return remoteBranches.map(RemoteBranch::name).filter { name ->
             val remoteRef = RemoteRef.parse(name, config.remoteBranchPrefix)
-            if (remoteRef != null) {
-                remoteRef.copy(revisionNum = null).name() !in pullRequestHeadRefs
-            } else {
-                false
-            }
+            remoteRef != null && remoteRef.copy(revisionNum = null).name() !in pullRequestHeadRefs
         }
     }
 
@@ -2149,7 +2145,7 @@ class GitJaspr(
                     when {
                         pullRequest == null -> EMPTY
                         approved == null -> EMPTY
-                        approved == true && (unresolvedReviewThreadCount ?: 0) > 0 -> COMMENT
+                        approved && (unresolvedReviewThreadCount ?: 0) > 0 -> COMMENT
                         approved -> SUCCESS
                         else -> FAIL
                     },
@@ -2363,7 +2359,7 @@ class GitJaspr(
                 logger.debug("Failed to delete branches (attempt $tries of $maxTries)", e)
                 if (tries < maxTries) {
                     logger.debug("Retrying in {} ms...", delayBetweenTries)
-                    delay(delayBetweenTries)
+                    delay(delayBetweenTries.milliseconds)
                 } else {
                     throw e
                 }
@@ -3407,9 +3403,9 @@ class GitJaspr(
 
         // Build a map of actual commits by Commit-Id
         val actualByCommitId = linkedMapOf<String, StackEntry>()
-        for (commit in actualBelow) {
-            val commitId = commit.id ?: continue
-            actualByCommitId[commitId] = StackEntry(sha = commit.hash, commitId = commitId)
+        for ((hash, _, _, id) in actualBelow) {
+            val commitId = id ?: continue
+            actualByCommitId[commitId] = StackEntry(sha = hash, commitId = commitId)
         }
 
         // Detect missing commits (were below cursor but no longer in git)

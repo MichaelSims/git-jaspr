@@ -5,6 +5,7 @@ import com.apollographql.apollo.api.ApolloResponse
 import com.apollographql.apollo.api.Operation
 import com.apollographql.apollo.interceptor.ApolloInterceptor
 import com.apollographql.apollo.interceptor.ApolloInterceptorChain
+import kotlin.time.Duration.Companion.milliseconds
 import kotlin.time.DurationUnit
 import kotlin.time.toDuration
 import kotlinx.coroutines.delay
@@ -35,7 +36,7 @@ class RateLimitRetryInterceptor(private val delays: List<Long> = DEFAULT_DELAYS)
                     "Delaying {} due to GitHub API throttling...",
                     delayMs.toDuration(DurationUnit.MILLISECONDS),
                 )
-                delay(delayMs)
+                delay(delayMs.milliseconds)
             }
             response = chain.proceed(request).single()
             attemptsMade++

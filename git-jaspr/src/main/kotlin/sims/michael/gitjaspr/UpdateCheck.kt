@@ -214,6 +214,7 @@ class KtorReleaseFetcher(
                     client.get(url) {
                         headers {
                             append("Accept", "application/vnd.github+json")
+                            @Suppress("UastIncorrectHttpHeaderInspection")
                             append("X-GitHub-Api-Version", "2022-11-28")
                             append("User-Agent", "git-jaspr-update-check")
                         }

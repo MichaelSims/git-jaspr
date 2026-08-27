@@ -105,7 +105,7 @@ private constructor(
     val gitHub by lazy {
         if (!useFakeRemote) {
             // TODO
-            // At some point I had intended to use the github client just for verifications. Since
+            // At some point I had intended to use the GitHub client just for verifications. Since
             // all of the GH clients here point to the same project, it shouldn't matter which
             // client I actually use, as long as I'm not mutating anything. Unfortunately, I *am*
             // mutating with this client (via push and merge). To make matters worse, it matters
@@ -117,7 +117,7 @@ private constructor(
             // that the tests can choose which user to push and merge with, or I need to
             // come up with a more predictable way to choose the token that will be used for pushes
             // and merges in the tests.
-            // Note that the mechanism the external process test uses to land on a github token to
+            // Note that the mechanism the external process test uses to land on a GitHub token to
             // use is entirely different. It basically uses whichever one is in the home directory
             // of the user running the test.
             // This may be fixable too, but it's less important because the point of the external
@@ -309,9 +309,8 @@ private constructor(
             val existingPrsByTitle = gitHub.getPullRequestsById().associateBy(PullRequest::title)
             val commitsByTitle =
                 testCase.repository.collectAllCommits().associateBy(CommitData::title)
-            for (pr in prs) {
+            prs.forEach { pr ->
                 val gitHubClient = (ghClientsByUserKey[pr.userKey] ?: gitHub)
-                @Suppress("GrazieInspection")
                 val newPullRequest =
                     PullRequest(
                         id = null,

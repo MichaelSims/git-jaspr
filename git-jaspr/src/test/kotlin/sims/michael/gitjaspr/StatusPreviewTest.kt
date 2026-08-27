@@ -1,6 +1,7 @@
 package sims.michael.gitjaspr
 
 import java.io.File
+import kotlin.time.Duration.Companion.milliseconds
 import kotlinx.coroutines.delay
 import org.junit.jupiter.api.BeforeAll
 import org.junit.jupiter.api.MethodOrderer.OrderAnnotation
@@ -280,7 +281,7 @@ class StatusPreviewTest {
             )
             gitJaspr.push(stackName = "preview-stack")
 
-            delay(1200)
+            delay(1200.milliseconds)
 
             createCommitsFrom(
                 testCase {
@@ -333,7 +334,7 @@ class StatusPreviewTest {
                 }
             )
 
-            delay(1200)
+            delay(1200.milliseconds)
 
             createCommitsFrom(
                 testCase {
@@ -553,7 +554,7 @@ class StatusPreviewTest {
             // Sleep past the second boundary so the amended commit has a strictly later commit
             // date than the original; without this the renderer can't pick a "newer" side and
             // falls through to DIVERGED_EQUAL_DATE, suppressing the bold/asterisk/dim styling.
-            delay(1200)
+            delay(1200.milliseconds)
 
             // Local rewrite: reorder (three swapped with two) and amend the moved "two" commit.
             // Result: local stack = [one, three, two_amended_locally]; remote stack = [one, two,

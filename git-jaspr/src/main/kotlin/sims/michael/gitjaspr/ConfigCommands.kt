@@ -324,12 +324,12 @@ object ConfigFileEditor {
     // similar values contain `\b`, which would be mangled on read without escaping the backslash.
     private fun escape(value: String) = buildString {
         for ((index, ch) in value.withIndex()) {
-            when {
-                ch == '\\' -> append("\\\\")
-                ch == '\n' -> append("\\n")
-                ch == '\r' -> append("\\r")
-                ch == '\t' -> append("\\t")
-                ch == ' ' && index == 0 -> append("\\ ")
+            when (ch) {
+                '\\' -> append("\\\\")
+                '\n' -> append("\\n")
+                '\r' -> append("\\r")
+                '\t' -> append("\\t")
+                ' ' if index == 0 -> append("\\ ")
                 else -> append(ch)
             }
         }
@@ -469,17 +469,17 @@ class ConfigList : ConfigSubcommand(name = "list") {
 
     override suspend fun run() {
         val resolver = resolver()
-        for (spec in CONFIG_KEYS) {
-            val resolved = resolver.resolve(spec.key)
+        for ((key, _, _, secret) in CONFIG_KEYS) {
+            val resolved = resolver.resolve(key)
             renderer.info {
                 val shown =
                     when {
                         resolved.value == null -> muted("(unset)")
-                        spec.secret -> muted("***")
+                        secret -> muted("***")
                         else -> value(resolved.value)
                     }
                 val marker = if (resolved.source in DERIVED_SOURCES) "" else " *"
-                "${spec.key} = $shown ${muted("[${sourceLabel(resolved.source)}]")}$marker"
+                "$key = $shown ${muted("[${sourceLabel(resolved.source)}]")}$marker"
             }
         }
         val themeKeys = resolver.presentThemeKeys()

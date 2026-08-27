@@ -41,7 +41,7 @@ class GitHubStubClient(
         return synchronized(prs) {
             autoClosePrs()
             prs.openPullRequests().filter { pr ->
-                if (commitFilter != null) pr.commitId in commitFilter else true
+                commitFilter == null || pr.commitId in commitFilter
             }
         }
     }
@@ -76,6 +76,7 @@ class GitHubStubClient(
     fun seedPullRequest(pullRequest: PullRequest): PullRequest {
         val commitId = getCommitIdFromRemoteRef(pullRequest.headRefName, remoteBranchPrefix)
         val number = prNumberIterator.nextInt()
+        @Suppress("HttpUrlsUsage")
         return pullRequest
             .copy(
                 // Assign a unique id and the next PR number... simulates what GitHub would do
@@ -153,8 +154,8 @@ class GitHubStubClient(
         logger.trace("autoClosePrs")
         val remoteBranchesById = localGit.getRemoteBranchesById(remoteName)
         synchronized(prs) {
-            for (i in 0 until prs.size) {
-                val pr = prs[i].pullRequest
+            for ((i, element) in prs.withIndex()) {
+                val pr = element.pullRequest
                 val commitId = pr.commitId ?: continue // Commit missing ID
                 val remoteBranch =
                     remoteBranchesById[commitId] ?: continue // No remote branch for commit
@@ -162,8 +163,8 @@ class GitHubStubClient(
                     localGit.logRange("$remoteName/${DEFAULT_TARGET_REF}", remoteBranch.commit.hash)
                 // Close it if it's already been merged
                 if (range.isEmpty()) {
-                    logger.trace("autoClosePrs closing {}", prs[i])
-                    prs[i] = prs[i].copy(open = false)
+                    logger.trace("autoClosePrs closing {}", element)
+                    prs[i] = element.copy(open = false)
                 }
             }
         }
