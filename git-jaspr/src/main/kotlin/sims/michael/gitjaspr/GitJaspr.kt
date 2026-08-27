@@ -154,6 +154,10 @@ class GitJaspr(
         try {
             if (existingStack != null) {
                 val existingPrs = existingStack.pullRequestNumbers
+                if (orderedPrNumbers == existingPrs) {
+                    logger.debug("GitHub stack #{} already matches, skipping", existingStack.number)
+                    return
+                }
                 if (
                     orderedPrNumbers.size > existingPrs.size &&
                         orderedPrNumbers.subList(0, existingPrs.size) == existingPrs

@@ -10918,6 +10918,32 @@ interface GitJasprTest {
 
     @GhStacks
     @Test
+    fun `repush with no changes does not create a duplicate stack`() {
+        withTestSetup(useFakeRemote) {
+            createCommitsFrom(
+                testCase {
+                    repository {
+                        commit { title = "A" }
+                        commit {
+                            title = "B"
+                            localRefs += "main"
+                        }
+                    }
+                }
+            )
+
+            pushWithStacks()
+            val firstStack = stacksStub.allStacks.single { it.open }
+
+            pushWithStacks()
+            val openStacks = stacksStub.allStacks.filter { it.open }
+            assertEquals(1, openStacks.size, "No duplicate stack should be created")
+            assertEquals(firstStack.number, openStacks.single().number, "Same stack number")
+        }
+    }
+
+    @GhStacks
+    @Test
     fun `push registers a GitHub stack when stacks are available`() {
         withTestSetup(useFakeRemote) {
             createCommitsFrom(
