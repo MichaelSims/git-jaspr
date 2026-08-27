@@ -941,8 +941,7 @@ class GitJaspr(
     private fun probeCherryPickQueue(commits: List<Commit>, startingTreeIsh: String) {
         var currentTreeIsh = startingTreeIsh
         for ((hash, shortMessage) in commits) {
-            val result =
-                gitClient.mergeTreeWriteTree("$hash^", currentTreeIsh, hash)
+            val result = gitClient.mergeTreeWriteTree("$hash^", currentTreeIsh, hash)
             when (result) {
                 is MergeTreeResult.Conflict ->
                     throw GitJasprException(
@@ -3582,6 +3581,7 @@ class GitJaspr(
      */
     fun drop(n: Int, targetRef: String? = null) {
         requireForUser(n > 0) { "Must drop at least 1 commit." }
+        requireCleanWorkingTree()
 
         val state = readNavState()
         if (state != null && gitClient.isHeadDetached()) {
