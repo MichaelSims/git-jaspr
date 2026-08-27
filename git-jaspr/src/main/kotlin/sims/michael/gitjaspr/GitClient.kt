@@ -97,9 +97,11 @@ interface GitClient {
     ): Commit
 
     /**
-     * Cherry-picks [commit] onto HEAD. When [useTheirs] is true, content-level conflicts are
-     * auto-resolved using the `-X theirs` strategy option (the cherry-picked commit wins). Other
-     * conflict types (modify/delete, rename/rename, etc.) still surface as failures.
+     * Cherry-picks [commit] onto HEAD. Returns the new commit, or null if the cherry-pick produced
+     * no changes because the commit's content is already present at HEAD. When [useTheirs] is true,
+     * content-level conflicts are auto-resolved using the `-X theirs` strategy option (the
+     * cherry-picked commit wins). Other conflict types (modify/delete, rename/rename, etc.) still
+     * surface as failures.
      */
     fun cherryPick(
         commit: Commit,
@@ -107,7 +109,7 @@ interface GitClient {
         author: Ident? = null,
         useTheirs: Boolean = false,
         reflogMessage: String? = null,
-    ): Commit
+    ): Commit?
 
     /**
      * Like [cherryPick], but returns [CherryPickResult.LeftInProgress] instead of throwing when the
@@ -333,6 +335,13 @@ sealed class CherryPickResult {
      * tree contains conflict markers.
      */
     data object LeftInProgress : CherryPickResult()
+
+    /**
+     * Cherry-pick produced no changes because the commit's content is already present at HEAD (e.g.
+     * the commit was already merged to the target branch). The in-progress cherry-pick has been
+     * skipped and `.git/CHERRY_PICK_HEAD` is cleared.
+     */
+    data object AlreadyApplied : CherryPickResult()
 }
 
 /**

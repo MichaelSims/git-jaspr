@@ -1083,6 +1083,43 @@ interface GitJasprTest {
 
     @Nav
     @Test
+    fun `top succeeds when a commit in the replay is already applied`() {
+        withTestSetup(useFakeRemote) {
+            createCommitsFrom(
+                testCase {
+                    repository {
+                        commit { title = "A" }
+                        commit { title = "B" }
+                        commit {
+                            title = "C"
+                            localRefs += "development"
+                        }
+                    }
+                    checkout = "development"
+                }
+            )
+
+            gitJaspr.navigateToBottom(DEFAULT_TARGET_REF)
+
+            // Amend A to include B's file content, making B's cherry-pick empty
+            localRepo.resolve("B.txt").writeText("Title: B\n")
+            localGit.add("B.txt")
+            localGit.commit("A", footerLines = mapOf(COMMIT_ID_LABEL to "A"), amend = true)
+
+            val result = gitJaspr.navigateToTop(DEFAULT_TARGET_REF)
+            assertIs<NavMoveResult.ReachedTop>(result)
+
+            // Session ended, branch restored
+            assertNull(gitJaspr.readNavState())
+            assertFalse(localGit.isHeadDetached())
+
+            // C's content is present (it was replayed successfully even though B was skipped)
+            assertTrue(localRepo.resolve("C.txt").exists())
+        }
+    }
+
+    @Nav
+    @Test
     fun `drop during nav session removes commit from stack`() {
         withTestSetup(useFakeRemote) {
             // Stack: A -> B -> C -> D on "development"

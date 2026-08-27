@@ -1242,6 +1242,74 @@ class CliGitClientTest : GitClientTest {
     }
 
     @Test
+    fun `cherryPick returns null for already-applied commit`() {
+        withTestSetup {
+            createCommitsFrom(
+                testCase {
+                    repository {
+                        commit {
+                            title = "base"
+                            localRefs += "main"
+                        }
+                    }
+                }
+            )
+            val git = CliGitClient(localGit.workingDirectory)
+            val shared = localRepo.resolve("shared.txt")
+
+            shared.writeText("hello\n")
+            git.add("shared.txt")
+            val commitA = git.commit("add shared", footerLines = mapOf(COMMIT_ID_LABEL to "a"))
+
+            git.reset("main")
+            shared.writeText("hello\n")
+            git.add("shared.txt")
+            git.commit("duplicate of shared", footerLines = mapOf(COMMIT_ID_LABEL to "b"))
+
+            val result = git.cherryPick(commitA)
+            assertNull(result, "cherry-pick of an already-applied commit should return null")
+            assertFalse(
+                git.isCherryPickInProgress(),
+                "CHERRY_PICK_HEAD should be cleared after skipping",
+            )
+        }
+    }
+
+    @Test
+    fun `tryCherryPick returns AlreadyApplied for already-applied commit`() {
+        withTestSetup {
+            createCommitsFrom(
+                testCase {
+                    repository {
+                        commit {
+                            title = "base"
+                            localRefs += "main"
+                        }
+                    }
+                }
+            )
+            val git = CliGitClient(localGit.workingDirectory)
+            val shared = localRepo.resolve("shared.txt")
+
+            shared.writeText("hello\n")
+            git.add("shared.txt")
+            val commitA = git.commit("add shared", footerLines = mapOf(COMMIT_ID_LABEL to "a"))
+
+            git.reset("main")
+            shared.writeText("hello\n")
+            git.add("shared.txt")
+            git.commit("duplicate of shared", footerLines = mapOf(COMMIT_ID_LABEL to "b"))
+
+            val result = git.tryCherryPick(commitA)
+            assertEquals(CherryPickResult.AlreadyApplied, result)
+            assertFalse(
+                git.isCherryPickInProgress(),
+                "CHERRY_PICK_HEAD should be cleared after skipping",
+            )
+        }
+    }
+
+    @Test
     fun `compare gitCommonDir`() {
         withTestSetup {
             val cliGit = CliGitClient(localGit.workingDirectory)

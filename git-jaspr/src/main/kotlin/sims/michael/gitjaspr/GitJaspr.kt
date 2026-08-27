@@ -866,36 +866,56 @@ class GitJaspr(
                     plan.remoteTipSha,
                     reflogMessage = "jaspr pull: reset to remote tip",
                 )
+                var skipped = 0
                 for (commit in plan.commits) {
-                    gitClient.cherryPick(
-                        commit,
-                        reflogMessage = "jaspr pull: cherry-pick of ${commit.shortMessage}",
-                    )
+                    val result =
+                        gitClient.cherryPick(
+                            commit,
+                            reflogMessage = "jaspr pull: cherry-pick of ${commit.shortMessage}",
+                        )
+                    if (result == null) skipped++
                 }
-                val n = plan.commits.size
+                val applied = plan.commits.size - skipped
                 appendLine(
                     theme.success(
                         "Adopted remote's version of the shared portion of your stack and " +
-                            "replayed $n local ${commitOrCommits(n)} on top."
+                            "replayed $applied local ${commitOrCommits(applied)} on top."
                     )
                 )
+                if (skipped > 0) {
+                    appendLine(
+                        theme.muted(
+                            "Skipped $skipped ${commitOrCommits(skipped)} already in the target."
+                        )
+                    )
+                }
             }
             is PullPlan.CherryPickRoOntoLocalHead -> {
                 val headSha = gitClient.log(GitClient.HEAD, 1).single().hash
                 probeCherryPickQueue(plan.commits, headSha)
+                var skipped = 0
                 for (commit in plan.commits) {
-                    gitClient.cherryPick(
-                        commit,
-                        reflogMessage = "jaspr pull: cherry-pick of ${commit.shortMessage}",
-                    )
+                    val result =
+                        gitClient.cherryPick(
+                            commit,
+                            reflogMessage = "jaspr pull: cherry-pick of ${commit.shortMessage}",
+                        )
+                    if (result == null) skipped++
                 }
-                val n = plan.commits.size
+                val applied = plan.commits.size - skipped
                 appendLine(
                     theme.success(
-                        "Pulled $n ${commitOrCommits(n)} onto your local stack. " +
+                        "Pulled $applied ${commitOrCommits(applied)} onto your local stack. " +
                             "Your stack base is ahead of remote's; push to bring remote in sync."
                     )
                 )
+                if (skipped > 0) {
+                    appendLine(
+                        theme.muted(
+                            "Skipped $skipped ${commitOrCommits(skipped)} already in the target."
+                        )
+                    )
+                }
             }
         }
     }
@@ -2429,7 +2449,9 @@ class GitJaspr(
         val refName = "${missing.first().hash}^"
         gitClient.reset(refName)
         for (commit in missing) {
-            gitClient.cherryPick(commit, commitIdentOverride)
+            checkNotNull(gitClient.cherryPick(commit, commitIdentOverride)) {
+                "Cherry-pick of ${commit.shortMessage} produced no changes while adding commit IDs"
+            }
             if (commit.id == null) {
                 val commitId = newUuid()
                 gitClient.setCommitId(commitId, commitIdentOverride)
@@ -3238,6 +3260,7 @@ class GitJaspr(
         reflogCommand: String,
     ): List<StackEntry> {
         val result = stack.toMutableList()
+        val indicesToRemove = mutableListOf<Int>()
         for (i in range) {
             val entry = result[i]
             val entryCommit = gitClient.log(entry.sha, 1).single()
@@ -3256,8 +3279,19 @@ class GitJaspr(
                         reflogMessage =
                             "jaspr $reflogCommand: cherry-pick of ${entryCommit.shortMessage}",
                     )
-                result[i] = entry.copy(sha = newCommit.hash)
+                if (newCommit != null) {
+                    result[i] = entry.copy(sha = newCommit.hash)
+                } else {
+                    logger.info(
+                        "replayEntries: skipping {} (already applied)",
+                        entryCommit.shortMessage,
+                    )
+                    indicesToRemove += i
+                }
             }
+        }
+        for (i in indicesToRemove.sortedDescending()) {
+            result.removeAt(i)
         }
         return result
     }
@@ -3703,7 +3737,11 @@ class GitJaspr(
                     )
                 }
             }
-            is CherryPickResult.LeftInProgress ->
+            CherryPickResult.AlreadyApplied -> {
+                val headCommit = gitClient.log(GitClient.HEAD, 1).single()
+                UnsplitOutcome.Restored(headCommit)
+            }
+            CherryPickResult.LeftInProgress ->
                 UnsplitOutcome.LeftInProgress(
                     originalCommit = originalCommit,
                     backupRef = backupRef,
@@ -3797,8 +3835,11 @@ class GitJaspr(
         val aboveCommit = gitClient.log(aboveEntry.sha, 1).single()
         val reflogMessage = "jaspr fold up into ${aboveCommit.shortMessage}"
 
-        // Cherry-pick the above commit onto the current position
-        gitClient.cherryPick(aboveCommit, commitIdentOverride, reflogMessage = reflogMessage)
+        checkNotNull(
+            gitClient.cherryPick(aboveCommit, commitIdentOverride, reflogMessage = reflogMessage)
+        ) {
+            "Cherry-pick of ${aboveCommit.shortMessage} produced no changes during fold up"
+        }
 
         // Now HEAD has: ...parent -> current -> above'
         // Soft reset 2 to collapse both into staged changes on top of parent
@@ -4051,14 +4092,12 @@ class GitJaspr(
                 )
             } catch (e: CherryPickConflictException) {
                 logger.debug("cherryPick failed during rebase of $branch", e)
-                // Abort the cherry-pick and bail
                 worktreeClient.cherryPickAbort()
                 renderer.warn {
                     "Conflict rebasing ${entity(branch)} at commit ${entity(commit.hash.take(7))} (${commit.shortMessage})"
                 }
                 return SyncBranchResult(branch, false, "Conflict at ${commit.hash.take(7)}")
             }
-            // Record the mapping: old hash -> new hash in worktree
             val newHash = worktreeClient.log(GitClient.HEAD, 1).single().hash
             commitMap[commit.hash] = newHash
         }

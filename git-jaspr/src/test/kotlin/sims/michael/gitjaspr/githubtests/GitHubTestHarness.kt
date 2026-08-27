@@ -226,9 +226,11 @@ private constructor(
                             localGit.checkout(existingHash)
                             localGit.log(existingHash, maxCount = 1).single()
                         } else {
-                            localGit.cherryPick(
-                                localGit.log(existingHash, maxCount = 1).single(),
-                                commitData.committer.toIdent(),
+                            checkNotNull(
+                                localGit.cherryPick(
+                                    localGit.log(existingHash, maxCount = 1).single(),
+                                    commitData.committer.toIdent(),
+                                )
                             )
                         }
                     } else {

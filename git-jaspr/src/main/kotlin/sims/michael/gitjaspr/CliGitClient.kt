@@ -363,12 +363,10 @@ class CliGitClient(
         author: Ident?,
         useTheirs: Boolean,
         reflogMessage: String?,
-    ): Commit =
-        // Delegate to tryCherryPick and convert its conflict outcome into a specific exception, so
-        // callers can distinguish merge conflicts from unrelated failures. A conflict leaves the
-        // cherry-pick in progress; the caller aborts via cherryPickAbort.
+    ): Commit? =
         when (val result = tryCherryPick(commit, committer, author, useTheirs, reflogMessage)) {
             is CherryPickResult.Success -> result.commit
+            CherryPickResult.AlreadyApplied -> null
             CherryPickResult.LeftInProgress ->
                 throw CherryPickConflictException(
                     "cherry-pick of ${commit.hash} (${commit.shortMessage}) hit a conflict"
@@ -748,6 +746,11 @@ class CliGitClient(
         executeCommand(listOf("git", "cherry-pick", "--abort"))
     }
 
+    private fun cherryPickSkip() {
+        logger.trace("cherryPickSkip")
+        executeCommand(listOf("git", "cherry-pick", "--skip"))
+    }
+
     override fun tryCherryPick(
         commit: Commit,
         committer: Ident?,
@@ -780,6 +783,11 @@ class CliGitClient(
                 }
                 CherryPickResult.Success(log("HEAD", 1).single())
             }
+            isCherryPickInProgress() && !hasUncommittedChangesToTrackedFiles() ->
+                CherryPickResult.AlreadyApplied.also {
+                    logger.debug("tryCherryPick: cherry-pick is empty (already applied), skipping")
+                    cherryPickSkip()
+                }
             isCherryPickInProgress() -> CherryPickResult.LeftInProgress
             else ->
                 error(

@@ -141,13 +141,15 @@ class DivergenceClassifier(jasprDir: File, private val gitClient: GitClient) : A
             logger.debug("reset --hard failed in probe worktree", e)
             return Result.DIVERGENT
         }
-        try {
-            worktreeClient.cherryPick(worktreeClient.log(bSha, 1).single())
-        } catch (e: CherryPickConflictException) {
-            logger.debug("cherry-pick failed in probe worktree", e)
-            worktreeClient.cherryPickAbort()
-            return Result.DIVERGENT
-        }
+        val picked =
+            try {
+                worktreeClient.cherryPick(worktreeClient.log(bSha, 1).single())
+            } catch (e: CherryPickConflictException) {
+                logger.debug("cherry-pick failed in probe worktree", e)
+                worktreeClient.cherryPickAbort()
+                return Result.DIVERGENT
+            }
+        if (picked == null) return Result.IDENTICAL
         val resultTree = worktreeClient.getTree(GitClient.HEAD)
         val expectedTree = gitClient.getTree(aSha)
         return if (resultTree == expectedTree) Result.IDENTICAL else Result.DIVERGENT

@@ -142,7 +142,7 @@ interface GitClientTest {
 
             // Test 1: No idents
             git.reset("main")
-            val cherryPicked1 = git.cherryPick(originalCommit)
+            val cherryPicked1 = checkNotNull(git.cherryPick(originalCommit))
             assertEquals(
                 originalCommit.author,
                 cherryPicked1.author,
@@ -151,7 +151,8 @@ interface GitClientTest {
 
             // Test 2: Committer only
             git.reset("main")
-            val cherryPicked2 = git.cherryPick(originalCommit, committer = customCommitter)
+            val cherryPicked2 =
+                checkNotNull(git.cherryPick(originalCommit, committer = customCommitter))
             assertEquals(customCommitter, cherryPicked2.committer)
             assertEquals(
                 originalCommit.author,
@@ -161,13 +162,19 @@ interface GitClientTest {
 
             // Test 3: Author only
             git.reset("main")
-            val cherryPicked3 = git.cherryPick(originalCommit, author = customAuthor)
+            val cherryPicked3 = checkNotNull(git.cherryPick(originalCommit, author = customAuthor))
             assertEquals(customAuthor, cherryPicked3.author)
 
             // Test 4: Both committer and author
             git.reset("main")
             val cherryPicked4 =
-                git.cherryPick(originalCommit, committer = customCommitter, author = customAuthor)
+                checkNotNull(
+                    git.cherryPick(
+                        originalCommit,
+                        committer = customCommitter,
+                        author = customAuthor,
+                    )
+                )
             assertEquals(customCommitter, cherryPicked4.committer)
             assertEquals(customAuthor, cherryPicked4.author)
         }
