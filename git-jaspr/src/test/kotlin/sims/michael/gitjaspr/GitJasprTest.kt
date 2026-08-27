@@ -1103,8 +1103,8 @@ interface GitJasprTest {
             gitJaspr.navigateToBottom(DEFAULT_TARGET_REF)
 
             // Amend A to include B's file content, making B's cherry-pick empty
-            localRepo.resolve("B.txt").writeText("Title: B\n")
-            localGit.add("B.txt")
+            localRepo.resolve("b.txt").writeText("Title: B\n")
+            localGit.add("b.txt")
             localGit.commit("A", footerLines = mapOf(COMMIT_ID_LABEL to "A"), amend = true)
 
             val result = gitJaspr.navigateToTop(DEFAULT_TARGET_REF)
@@ -1115,7 +1115,7 @@ interface GitJasprTest {
             assertFalse(localGit.isHeadDetached())
 
             // C's content is present (it was replayed successfully even though B was skipped)
-            assertTrue(localRepo.resolve("C.txt").exists())
+            assertTrue(localRepo.resolve("c.txt").exists())
         }
     }
 
@@ -1690,7 +1690,7 @@ interface GitJasprTest {
             assertNotNull(gitJaspr.readSplitState())
 
             // B's file should still be in the working tree
-            assertTrue(localRepo.resolve("B.txt").exists())
+            assertTrue(localRepo.resolve("b.txt").exists())
         }
     }
 
@@ -1761,7 +1761,7 @@ interface GitJasprTest {
             gitJaspr.split()
 
             // Create two new commits from the split
-            localGit.add("B.txt")
+            localGit.add("b.txt")
             localGit.commit("B-part1", footerLines = mapOf(COMMIT_ID_LABEL to "B-part1"))
             localRepo.resolve("extra.txt").writeText("extra\n")
             localGit.add("extra.txt")
@@ -1870,7 +1870,7 @@ interface GitJasprTest {
             gitJaspr.split()
 
             // Modify the working tree — remove B's file, add a new one
-            localRepo.resolve("B.txt").delete()
+            localRepo.resolve("b.txt").delete()
             localRepo.resolve("new_file.txt").writeText("new content\n")
 
             // Unsplit: absorb changes back into B
@@ -1883,7 +1883,7 @@ interface GitJasprTest {
             assertNotEquals(originalB, head.hash)
 
             // The working tree should reflect the modifications
-            assertFalse(localRepo.resolve("B.txt").exists())
+            assertFalse(localRepo.resolve("b.txt").exists())
             assertTrue(localRepo.resolve("new_file.txt").exists())
         }
     }
@@ -2670,7 +2670,7 @@ interface GitJasprTest {
             assertEquals("A", head.id)
 
             // A should contain B's file
-            assertTrue(localRepo.resolve("B.txt").exists())
+            assertTrue(localRepo.resolve("b.txt").exists())
 
             // Nav state: B removed, cursor at 0 (A)
             val state = gitJaspr.readNavState()
@@ -2705,7 +2705,7 @@ interface GitJasprTest {
             assertFalse(localGit.isHeadDetached())
 
             // A should contain B's file
-            assertTrue(localRepo.resolve("B.txt").exists())
+            assertTrue(localRepo.resolve("b.txt").exists())
         }
     }
 
@@ -2742,7 +2742,7 @@ interface GitJasprTest {
             assertEquals("C", head.id)
 
             // C should contain B's file
-            assertTrue(localRepo.resolve("B.txt").exists())
+            assertTrue(localRepo.resolve("b.txt").exists())
 
             // Nav state: B removed, C at cursor position
             val state = gitJaspr.readNavState()
