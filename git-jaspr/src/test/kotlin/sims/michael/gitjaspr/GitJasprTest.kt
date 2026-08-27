@@ -10945,25 +10945,8 @@ interface GitJasprTest {
 
     @GhStacks
     @Test
-    fun `push dissolves and re-registers stack on subsequent push`() {
+    fun `push dissolves and re-registers stack when commits are removed`() {
         withTestSetup(useFakeRemote) {
-            createCommitsFrom(
-                testCase {
-                    repository {
-                        commit { title = "A" }
-                        commit {
-                            title = "B"
-                            localRefs += "main"
-                        }
-                    }
-                }
-            )
-
-            pushWithStacks()
-
-            val firstStack = stacksStub.allStacks.single { it.open }
-            assertEquals(2, firstStack.pullRequestNumbers.size)
-
             createCommitsFrom(
                 testCase {
                     repository {
@@ -10979,10 +10962,31 @@ interface GitJasprTest {
 
             pushWithStacks()
 
+            val firstStack = stacksStub.allStacks.single { it.open }
+            assertEquals(3, firstStack.pullRequestNumbers.size)
+
+            createCommitsFrom(
+                testCase {
+                    repository {
+                        commit { title = "A" }
+                        commit {
+                            title = "C"
+                            localRefs += "main"
+                        }
+                    }
+                }
+            )
+
+            pushWithStacks()
+
             val openStacks = stacksStub.allStacks.filter { it.open }
             assertEquals(1, openStacks.size, "Exactly one open stack after re-push")
-            assertEquals(3, openStacks.single().pullRequestNumbers.size, "New stack has 3 PRs")
-            assertNotEquals(firstStack.number, openStacks.single().number, "Stack number changed")
+            assertEquals(2, openStacks.single().pullRequestNumbers.size, "Stack has 2 PRs")
+            assertNotEquals(
+                firstStack.number,
+                openStacks.single().number,
+                "Stack number changed when commits removed",
+            )
         }
     }
 
@@ -11031,6 +11035,146 @@ interface GitJasprTest {
 
             val openStacks = stacksStub.allStacks.filter { stackInfo -> stackInfo.open }
             assertTrue(openStacks.isEmpty(), "A single-PR stack should not be registered")
+        }
+    }
+
+    @GhStacks
+    @Test
+    fun `appending commits to top preserves stack number`() {
+        withTestSetup(useFakeRemote) {
+            createCommitsFrom(
+                testCase {
+                    repository {
+                        commit { title = "A" }
+                        commit {
+                            title = "B"
+                            localRefs += "main"
+                        }
+                    }
+                }
+            )
+
+            pushWithStacks()
+
+            val firstStack = stacksStub.allStacks.single { it.open }
+            assertEquals(2, firstStack.pullRequestNumbers.size)
+
+            createCommitsFrom(
+                testCase {
+                    repository {
+                        commit { title = "A" }
+                        commit { title = "B" }
+                        commit {
+                            title = "C"
+                            localRefs += "main"
+                        }
+                    }
+                }
+            )
+
+            pushWithStacks()
+
+            val openStacks = stacksStub.allStacks.filter { it.open }
+            assertEquals(1, openStacks.size, "Exactly one open stack")
+            val updatedStack = openStacks.single()
+            assertEquals(3, updatedStack.pullRequestNumbers.size, "Stack should have 3 PRs")
+            assertEquals(
+                firstStack.number,
+                updatedStack.number,
+                "Stack number should be preserved for append-only pushes",
+            )
+        }
+    }
+
+    @GhStacks
+    @Test
+    fun `reordering commits creates a new stack number`() {
+        withTestSetup(useFakeRemote) {
+            createCommitsFrom(
+                testCase {
+                    repository {
+                        commit { title = "A" }
+                        commit {
+                            title = "B"
+                            localRefs += "main"
+                        }
+                    }
+                }
+            )
+
+            pushWithStacks()
+
+            val firstStack = stacksStub.allStacks.single { it.open }
+
+            createCommitsFrom(
+                testCase {
+                    repository {
+                        commit { title = "B" }
+                        commit {
+                            title = "A"
+                            localRefs += "main"
+                        }
+                    }
+                }
+            )
+
+            pushWithStacks()
+
+            val openStacks = stacksStub.allStacks.filter { it.open }
+            assertEquals(1, openStacks.size, "Exactly one open stack")
+            assertNotEquals(
+                firstStack.number,
+                openStacks.single().number,
+                "Stack number should change on reorder",
+            )
+        }
+    }
+
+    @GhStacks
+    @Test
+    fun `config override off disables stacks even when available`() {
+        withTestSetup(useFakeRemote) {
+            createCommitsFrom(
+                testCase {
+                    repository {
+                        commit { title = "A" }
+                        commit {
+                            title = "B"
+                            localRefs += "main"
+                        }
+                    }
+                }
+            )
+
+            gitJasprWithStacks("off").push(stackName = "test-stack")
+
+            assertTrue(
+                stacksStub.allStacks.isEmpty(),
+                "No stacks should be registered when config is off",
+            )
+        }
+    }
+
+    @GhStacks
+    @Test
+    fun `config override on enables stacks without probing`() {
+        withTestSetup(useFakeRemote) {
+            createCommitsFrom(
+                testCase {
+                    repository {
+                        commit { title = "A" }
+                        commit {
+                            title = "B"
+                            localRefs += "main"
+                        }
+                    }
+                }
+            )
+
+            gitJasprWithStacks("on").push(stackName = "test-stack")
+
+            val openStacks = stacksStub.allStacks.filter { it.open }
+            assertEquals(1, openStacks.size, "Stack should be registered when config is on")
         }
     }
 

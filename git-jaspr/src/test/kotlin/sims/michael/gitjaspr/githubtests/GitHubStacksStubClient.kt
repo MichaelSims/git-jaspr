@@ -32,6 +32,20 @@ class GitHubStacksStubClient : GitHubStacksClient {
         return info
     }
 
+    override suspend fun addToStack(stackNumber: Int, prNumbers: List<Int>): StackInfo {
+        logger.trace("addToStack {} {}", stackNumber, prNumbers)
+        synchronized(stacks) {
+            val index = stacks.indexOfFirst { it.number == stackNumber }
+            require(index >= 0) { "Stack $stackNumber not found" }
+            val updated =
+                stacks[index].copy(
+                    pullRequestNumbers = stacks[index].pullRequestNumbers + prNumbers
+                )
+            stacks[index] = updated
+            return updated
+        }
+    }
+
     override suspend fun unstack(stackNumber: Int) {
         logger.trace("unstack {}", stackNumber)
         synchronized(stacks) {

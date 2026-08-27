@@ -22,6 +22,8 @@ interface GitHubStacksClient {
 
     suspend fun createStack(prNumbers: List<Int>): StackInfo
 
+    suspend fun addToStack(stackNumber: Int, prNumbers: List<Int>): StackInfo
+
     suspend fun unstack(stackNumber: Int)
 }
 
@@ -88,6 +90,31 @@ class GitHubStacksClientImpl(
         return json.decodeFromString<StackResponse>(body).toStackInfo()
     }
 
+    override suspend fun addToStack(stackNumber: Int, prNumbers: List<Int>): StackInfo {
+        logger.debug("Adding PRs {} to GitHub stack {}", prNumbers, stackNumber)
+        val requestBody =
+            json.encodeToString(CreateStackRequest.serializer(), CreateStackRequest(prNumbers))
+        val response =
+            httpClient.post("$baseUrl/stacks/$stackNumber/add") {
+                accept(ContentType.Application.Json)
+                header("X-GitHub-Api-Version", API_VERSION)
+                contentType(ContentType.Application.Json)
+                setBody(requestBody)
+            }
+        if (!response.status.isSuccess()) {
+            val errorBody = response.bodyAsText()
+            logger.warn(
+                "Failed to add to GitHub stack {}: {} {}",
+                stackNumber,
+                response.status,
+                errorBody,
+            )
+            throw GitJasprException("Failed to add to GitHub stack: ${response.status}")
+        }
+        val body = response.bodyAsText()
+        return json.decodeFromString<StackResponse>(body).toStackInfo()
+    }
+
     override suspend fun unstack(stackNumber: Int) {
         logger.debug("Dissolving GitHub stack {}", stackNumber)
         val response =
@@ -142,6 +169,9 @@ class NoOpGitHubStacksClient : GitHubStacksClient {
     override suspend fun findStackByPr(prNumber: Int): StackInfo? = null
 
     override suspend fun createStack(prNumbers: List<Int>) =
+        throw UnsupportedOperationException("GitHub Stacks not available")
+
+    override suspend fun addToStack(stackNumber: Int, prNumbers: List<Int>) =
         throw UnsupportedOperationException("GitHub Stacks not available")
 
     override suspend fun unstack(stackNumber: Int) {}

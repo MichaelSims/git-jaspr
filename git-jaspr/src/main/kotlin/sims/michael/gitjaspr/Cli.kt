@@ -157,6 +157,11 @@ applicable.
     private val showTips by
         option().flag("--no-show-tips", default = true).help { "Show tips after commands" }
 
+    private val githubStacks by
+        option("--github-stacks").default("auto").help {
+            "GitHub Stacks API integration (auto, on, off)"
+        }
+
     private val remoteName by
         option(
                 "-r",
@@ -281,6 +286,7 @@ applicable.
                 logsDirectory.takeIf { logToFiles },
                 dontPushRegex,
                 showTips,
+                githubStacks,
             )
         return DefaultAppWiring(
             githubToken = token,

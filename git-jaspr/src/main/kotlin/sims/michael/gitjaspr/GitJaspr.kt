@@ -114,38 +114,62 @@ class GitJaspr(
     private var stacksAvailable: Boolean? = null
 
     private suspend fun areStacksAvailable(): Boolean {
-        return stacksAvailable == true ||
-            try {
-                stacksClient.isAvailable().also { available ->
-                    stacksAvailable = available
-                    if (available) {
-                        logger.debug("GitHub Stacks API is available")
-                    } else {
-                        logger.debug("GitHub Stacks API is not available")
-                    }
-                }
-            } catch (e: Exception) {
-                logger.debug("GitHub Stacks API probe failed: {}", e.message)
-                false.also {
-                    stacksAvailable = false
+        if (stacksAvailable == true) {
+            return true
+        }
+        when (config.githubStacks.lowercase()) {
+            "on" -> return true.also { stacksAvailable = it }
+            "off" -> return false.also { stacksAvailable = it }
+        }
+        return try {
+            stacksClient.isAvailable().also { available ->
+                stacksAvailable = available
+                if (available) {
+                    logger.debug("GitHub Stacks API is available")
+                } else {
+                    logger.debug("GitHub Stacks API is not available")
                 }
             }
-    }
-
-    private suspend fun dissolveExistingStack(prNumbers: List<Int>) {
-        if (prNumbers.isEmpty()) return
-        val existing = stacksClient.findStackByPr(prNumbers.first())
-        if (existing != null && existing.open) {
-            logger.debug("Dissolving existing stack {}", existing.number)
-            stacksClient.unstack(existing.number)
+        } catch (e: Exception) {
+            logger.debug("GitHub Stacks API probe failed: {}", e.message)
+            false.also { stacksAvailable = false }
         }
     }
 
-    private suspend fun registerStack(prNumbers: List<Int>) {
-        if (prNumbers.size < 2) return
+    private suspend fun findExistingStack(prNumbers: List<Int>): StackInfo? {
+        if (prNumbers.isEmpty()) return null
+        return stacksClient.findStackByPr(prNumbers.first())?.takeIf { it.open }
+    }
+
+    private suspend fun dissolveStack(stack: StackInfo) {
+        logger.debug("Dissolving existing stack {}", stack.number)
+        stacksClient.unstack(stack.number)
+    }
+
+    private suspend fun registerOrAppendStack(
+        orderedPrNumbers: List<Int>,
+        existingStack: StackInfo?,
+    ) {
+        if (orderedPrNumbers.size < 2) return
         try {
-            val stack = stacksClient.createStack(prNumbers)
-            renderer.info { "Registered GitHub stack #${stack.number} (${prNumbers.size} PRs)" }
+            if (existingStack != null) {
+                val existingPrs = existingStack.pullRequestNumbers
+                if (
+                    orderedPrNumbers.size > existingPrs.size &&
+                        orderedPrNumbers.subList(0, existingPrs.size) == existingPrs
+                ) {
+                    val newPrs = orderedPrNumbers.subList(existingPrs.size, orderedPrNumbers.size)
+                    val updated = stacksClient.addToStack(existingStack.number, newPrs)
+                    renderer.info {
+                        "Added ${newPrs.size} PR(s) to GitHub stack #${updated.number}"
+                    }
+                    return
+                }
+            }
+            val stack = stacksClient.createStack(orderedPrNumbers)
+            renderer.info {
+                "Registered GitHub stack #${stack.number} (${orderedPrNumbers.size} PRs)"
+            }
         } catch (e: Exception) {
             logger.warn("Failed to register GitHub stack: {}", e.message)
         }
@@ -1203,10 +1227,22 @@ class GitJaspr(
                 ghClient.getPullRequests(stack).filterByMatchingTargetRef()
             )
 
-        if (areStacksAvailable()) {
-            val existingPrNumbers = pullRequests.mapNotNull(PullRequest::number)
-            dissolveExistingStack(existingPrNumbers)
-        }
+        val existingGhStack =
+            if (areStacksAvailable()) {
+                val existingPrNumbers = pullRequests.mapNotNull(PullRequest::number)
+                val existing = findExistingStack(existingPrNumbers)
+                if (
+                    existing != null &&
+                        pullRequests.willRetargetBases(stack, filteredRefSpec.remoteRef)
+                ) {
+                    dissolveStack(existing)
+                    null
+                } else {
+                    existing
+                }
+            } else {
+                null
+            }
 
         val pullRequestsRebased =
             pullRequests.updateBaseRefForReorderedPrsIfAny(stack, filteredRefSpec.remoteRef)
@@ -1371,7 +1407,7 @@ class GitJaspr(
                         stack.indexOfFirst { commit -> commit.id == pr.commitId }
                     }
                     .mapNotNull(PullRequest::number)
-            registerStack(orderedPrNumbers)
+            registerOrAppendStack(orderedPrNumbers, existingGhStack)
         }
 
         print(getStatusString(refSpec, remoteBranchesAfterPush, theme))
@@ -2551,6 +2587,24 @@ class GitJaspr(
             }
         }
         return true
+    }
+
+    /**
+     * Returns true if [updateBaseRefForReorderedPrsIfAny] would change any PR bases. Used to decide
+     * whether a GitHub stack must be dissolved before pushing.
+     */
+    private fun List<PullRequest>.willRetargetBases(
+        commitStack: List<Commit>,
+        remoteRef: String,
+    ): Boolean {
+        val commitMap =
+            commitStack.windowedPairs().associateBy { (_, commit) -> checkNotNull(commit.id) }
+        return any { pr ->
+            val commitPair = commitMap[pr.commitId] ?: return@any false
+            val (prevCommit, _) = commitPair
+            val newBaseRef = prevCommit?.toRemoteRefName() ?: remoteRef
+            pr.baseRefName != newBaseRef
+        }
     }
 
     /**

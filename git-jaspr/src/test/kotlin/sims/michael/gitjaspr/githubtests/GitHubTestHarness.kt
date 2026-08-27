@@ -145,11 +145,19 @@ private constructor(
             commitIdentOverride = DEFAULT_COMMITTER,
         )
 
-    val gitJasprWithStacks =
+    val gitJasprWithStacks = gitJasprWithStacks()
+
+    fun gitJasprWithStacks(githubStacks: String = "auto") =
         GitJaspr(
             ghClient = gitHub,
             localGit,
-            Config(localRepo, remoteName, gitHubInfo, remoteBranchPrefix = remoteBranchPrefix),
+            Config(
+                localRepo,
+                remoteName,
+                gitHubInfo,
+                remoteBranchPrefix = remoteBranchPrefix,
+                githubStacks = githubStacks,
+            ),
             ids::next,
             commitIdentOverride = DEFAULT_COMMITTER,
             stacksClient = stacksStub,

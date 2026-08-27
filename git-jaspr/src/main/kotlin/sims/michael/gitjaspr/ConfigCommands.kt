@@ -49,6 +49,15 @@ private fun regexValue(value: String) =
         "is not a valid regular expression: ${e.message}"
     }
 
+private val GITHUB_STACKS_VALUES = listOf("auto", "on", "off")
+
+private fun validateGithubStacksValue(value: String) =
+    if (value.lowercase() in GITHUB_STACKS_VALUES) {
+        null
+    } else {
+        "must be one of ${GITHUB_STACKS_VALUES.joinToString(", ")}"
+    }
+
 private fun noSlashValue(value: String) =
     if ("/" in value) "must not contain a forward slash (one is appended automatically)" else null
 
@@ -170,6 +179,14 @@ val CONFIG_KEYS: List<ConfigKeySpec> = buildList {
             default = "true",
             description = "Periodically check whether a newer jaspr is available",
             validate = ::booleanValue,
+        )
+    )
+    add(
+        ConfigKeySpec(
+            "github-stacks",
+            default = "auto",
+            description = "GitHub Stacks API integration (auto, on, off)",
+            validate = ::validateGithubStacksValue,
         )
     )
 }
