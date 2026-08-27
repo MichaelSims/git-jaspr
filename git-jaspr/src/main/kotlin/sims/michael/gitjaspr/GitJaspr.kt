@@ -767,10 +767,7 @@ class GitJaspr(
                 ?: throw GitJasprException("Could not resolve local base for --theirs resolution.")
         probeCherryPickQueue(resolvedQueue, localBase)
 
-        val currentHead = gitClient.log(GitClient.HEAD, 1).single().hash
-        val backupRef = "refs/jaspr-backup/pre-pull-${System.currentTimeMillis() / 1000}"
-        gitClient.updateRef(backupRef, currentHead)
-
+        val backupRef = createPullBackupRef()
         val rollbackMessage = "jaspr pull --theirs: rollback to $backupRef"
         try {
             gitClient.reset(localBase, reflogMessage = "jaspr pull --theirs: reset to base")
@@ -781,7 +778,7 @@ class GitJaspr(
                 )
             }
         } catch (e: Exception) {
-            gitClient.reset(backupRef, reflogMessage = rollbackMessage)
+            rollbackPull(backupRef, rollbackMessage)
             throw e
         }
 
@@ -792,7 +789,7 @@ class GitJaspr(
             getPullPlan(newLocalStack, remoteStack, newRemoteTipSha, baseRelation, emptySet())
 
         if (newPlan is PullPlan.Punt) {
-            gitClient.reset(backupRef, reflogMessage = rollbackMessage)
+            rollbackPull(backupRef, rollbackMessage)
             throw GitJasprException(
                 "Resolved divergence with --theirs, but pull still can't complete: " +
                     puntMessage(newPlan.reason) +
@@ -804,7 +801,7 @@ class GitJaspr(
             try {
                 executePullPlan(newPlan, theme)
             } catch (e: Exception) {
-                gitClient.reset(backupRef, reflogMessage = rollbackMessage)
+                rollbackPull(backupRef, rollbackMessage)
                 throw e
             }
 
@@ -862,18 +859,25 @@ class GitJaspr(
             is PullPlan.CherryPickLoOntoRemoteTip -> {
                 requireCleanWorkingTree()
                 probeCherryPickQueue(plan.commits, plan.remoteTipSha)
-                gitClient.reset(
-                    plan.remoteTipSha,
-                    reflogMessage = "jaspr pull: reset to remote tip",
-                )
+                val backupRef = createPullBackupRef()
+                val rollbackMessage = "jaspr pull: rollback to $backupRef"
                 var skipped = 0
-                for (commit in plan.commits) {
-                    val result =
-                        gitClient.cherryPick(
-                            commit,
-                            reflogMessage = "jaspr pull: cherry-pick of ${commit.shortMessage}",
-                        )
-                    if (result == null) skipped++
+                try {
+                    gitClient.reset(
+                        plan.remoteTipSha,
+                        reflogMessage = "jaspr pull: reset to remote tip",
+                    )
+                    for (commit in plan.commits) {
+                        val result =
+                            gitClient.cherryPick(
+                                commit,
+                                reflogMessage = "jaspr pull: cherry-pick of ${commit.shortMessage}",
+                            )
+                        if (result == null) skipped++
+                    }
+                } catch (e: Exception) {
+                    rollbackPull(backupRef, rollbackMessage)
+                    throw e
                 }
                 val applied = plan.commits.size - skipped
                 appendLine(
@@ -891,16 +895,24 @@ class GitJaspr(
                 }
             }
             is PullPlan.CherryPickRoOntoLocalHead -> {
+                requireCleanWorkingTree()
                 val headSha = gitClient.log(GitClient.HEAD, 1).single().hash
                 probeCherryPickQueue(plan.commits, headSha)
+                val backupRef = createPullBackupRef()
+                val rollbackMessage = "jaspr pull: rollback to $backupRef"
                 var skipped = 0
-                for (commit in plan.commits) {
-                    val result =
-                        gitClient.cherryPick(
-                            commit,
-                            reflogMessage = "jaspr pull: cherry-pick of ${commit.shortMessage}",
-                        )
-                    if (result == null) skipped++
+                try {
+                    for (commit in plan.commits) {
+                        val result =
+                            gitClient.cherryPick(
+                                commit,
+                                reflogMessage = "jaspr pull: cherry-pick of ${commit.shortMessage}",
+                            )
+                        if (result == null) skipped++
+                    }
+                } catch (e: Exception) {
+                    rollbackPull(backupRef, rollbackMessage)
+                    throw e
                 }
                 val applied = plan.commits.size - skipped
                 appendLine(
@@ -950,6 +962,20 @@ class GitJaspr(
                     "Please commit or stash them and re-run the command."
             )
         }
+    }
+
+    private fun createPullBackupRef(): String {
+        val currentHead = gitClient.log(GitClient.HEAD, 1).single().hash
+        val backupRef = "refs/jaspr-backup/pre-pull-${System.currentTimeMillis() / 1000}"
+        gitClient.updateRef(backupRef, currentHead)
+        return backupRef
+    }
+
+    private fun rollbackPull(backupRef: String, reflogMessage: String) {
+        if (gitClient.isCherryPickInProgress()) {
+            gitClient.cherryPickAbort()
+        }
+        gitClient.reset(backupRef, reflogMessage = reflogMessage)
     }
 
     /**
