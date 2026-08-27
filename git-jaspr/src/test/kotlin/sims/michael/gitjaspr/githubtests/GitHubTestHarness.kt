@@ -134,6 +134,8 @@ private constructor(
 
     private val ids = uuidIterator()
 
+    val stacksStub = GitHubStacksStubClient()
+
     val gitJaspr =
         GitJaspr(
             ghClient = gitHub,
@@ -141,6 +143,16 @@ private constructor(
             Config(localRepo, remoteName, gitHubInfo, remoteBranchPrefix = remoteBranchPrefix),
             ids::next,
             commitIdentOverride = DEFAULT_COMMITTER,
+        )
+
+    val gitJasprWithStacks =
+        GitJaspr(
+            ghClient = gitHub,
+            localGit,
+            Config(localRepo, remoteName, gitHubInfo, remoteBranchPrefix = remoteBranchPrefix),
+            ids::next,
+            commitIdentOverride = DEFAULT_COMMITTER,
+            stacksClient = stacksStub,
         )
 
     /**

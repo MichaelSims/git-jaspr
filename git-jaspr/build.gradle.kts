@@ -227,7 +227,8 @@ tasks.named<Test>("nativeImageMetadata") {
 // The easiest way to run these test groups in IDEA is to go to, f.e., GitJasprDefaultTest and click
 // the run button in the gutter. When prompted to choose tasks, choose the `test*` task(s) you want
 // to run.
-val testGroups = listOf("status", "push", "prBody", "merge", "clean", "dontPush", "nav", "sync")
+val testGroups =
+    listOf("status", "push", "prBody", "merge", "clean", "dontPush", "nav", "sync", "ghStacks")
 
 for (testTag in testGroups) {
     val taskName = "test" + testTag.replaceFirstChar { char -> char.uppercase() }

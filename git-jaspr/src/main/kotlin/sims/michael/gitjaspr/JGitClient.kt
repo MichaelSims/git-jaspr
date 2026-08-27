@@ -514,8 +514,7 @@ class JGitClient(
             val objectId =
                 checkNotNull(repo.resolve(sha)) { "Cannot resolve $sha when updating $refName" }
             val refUpdate = repo.updateRef(refName)
-            @Suppress("UsePropertyAccessSyntax")
-            refUpdate.setNewObjectId(objectId)
+            @Suppress("UsePropertyAccessSyntax") refUpdate.setNewObjectId(objectId)
             refUpdate.isForceUpdate = true
             val result = refUpdate.update()
             check(result in REF_UPDATE_SUCCESS_RESULTS) {

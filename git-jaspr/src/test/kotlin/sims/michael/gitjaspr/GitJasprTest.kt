@@ -29,6 +29,7 @@ import sims.michael.gitjaspr.testing.Clean
 import sims.michael.gitjaspr.testing.Compare
 import sims.michael.gitjaspr.testing.DEFAULT_COMMITTER
 import sims.michael.gitjaspr.testing.DontPush
+import sims.michael.gitjaspr.testing.GhStacks
 import sims.michael.gitjaspr.testing.Graph
 import sims.michael.gitjaspr.testing.Merge
 import sims.michael.gitjaspr.testing.Nav
@@ -10903,6 +10904,133 @@ interface GitJasprTest {
             // Current branch should still exist but upstream should be unset
             assertEquals("my-stack", localGit.getCurrentBranchName())
             assertNull(localGit.getUpstreamBranchName("my-stack", remoteName))
+        }
+    }
+
+    // endregion
+
+    // region GitHub Stacks
+
+    suspend fun GitHubTestHarness.pushWithStacks(
+        stackName: String? = "test-stack",
+        count: Int? = null,
+    ) = gitJasprWithStacks.push(stackName = stackName, count = count)
+
+    @GhStacks
+    @Test
+    fun `push registers a GitHub stack when stacks are available`() {
+        withTestSetup(useFakeRemote) {
+            createCommitsFrom(
+                testCase {
+                    repository {
+                        commit { title = "A" }
+                        commit { title = "B" }
+                        commit {
+                            title = "C"
+                            localRefs += "main"
+                        }
+                    }
+                }
+            )
+
+            pushWithStacks()
+
+            val stacks = stacksStub.allStacks
+            assertEquals(1, stacks.size, "Expected exactly one stack to be registered")
+            val stack = stacks.single()
+            assertTrue(stack.open, "Stack should be open")
+            assertEquals(3, stack.pullRequestNumbers.size, "Stack should contain 3 PRs")
+        }
+    }
+
+    @GhStacks
+    @Test
+    fun `push dissolves and re-registers stack on subsequent push`() {
+        withTestSetup(useFakeRemote) {
+            createCommitsFrom(
+                testCase {
+                    repository {
+                        commit { title = "A" }
+                        commit {
+                            title = "B"
+                            localRefs += "main"
+                        }
+                    }
+                }
+            )
+
+            pushWithStacks()
+
+            val firstStack = stacksStub.allStacks.single { it.open }
+            assertEquals(2, firstStack.pullRequestNumbers.size)
+
+            createCommitsFrom(
+                testCase {
+                    repository {
+                        commit { title = "A" }
+                        commit { title = "B" }
+                        commit {
+                            title = "C"
+                            localRefs += "main"
+                        }
+                    }
+                }
+            )
+
+            pushWithStacks()
+
+            val openStacks = stacksStub.allStacks.filter { it.open }
+            assertEquals(1, openStacks.size, "Exactly one open stack after re-push")
+            assertEquals(3, openStacks.single().pullRequestNumbers.size, "New stack has 3 PRs")
+            assertNotEquals(firstStack.number, openStacks.single().number, "Stack number changed")
+        }
+    }
+
+    @GhStacks
+    @Test
+    fun `push without stacks available does not register a stack`() {
+        withTestSetup(useFakeRemote) {
+            createCommitsFrom(
+                testCase {
+                    repository {
+                        commit { title = "A" }
+                        commit {
+                            title = "B"
+                            localRefs += "main"
+                        }
+                    }
+                }
+            )
+
+            push()
+
+            val stacks = stacksStub.allStacks
+            assertTrue(
+                stacks.isEmpty(),
+                "No stacks should be registered when stacks are unavailable",
+            )
+        }
+    }
+
+    @GhStacks
+    @Test
+    fun `single commit push does not register a stack`() {
+        withTestSetup(useFakeRemote) {
+            createCommitsFrom(
+                testCase {
+                    repository {
+                        commit {
+                            title = "Solo"
+                            localRefs += "main"
+                        }
+                    }
+                }
+            )
+
+            pushWithStacks()
+
+            val openStacks = stacksStub.allStacks.filter { stackInfo -> stackInfo.open }
+            assertTrue(openStacks.isEmpty(), "A single-PR stack should not be registered")
         }
     }
 

@@ -67,6 +67,11 @@ annotation class Nav
 @Tag("sync")
 annotation class Sync
 
+@Target(AnnotationTarget.FUNCTION)
+@Retention(AnnotationRetention.RUNTIME)
+@Tag("ghStacks")
+annotation class GhStacks
+
 @Target(AnnotationTarget.CLASS)
 @Retention(AnnotationRetention.RUNTIME)
 @Tag("functional")

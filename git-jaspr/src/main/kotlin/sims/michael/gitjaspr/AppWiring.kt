@@ -42,10 +42,19 @@ class DefaultAppWiring(
     val gitHubClient: GitHubClient
         get() = gitHubClientWiring.gitHubClient
 
+    val gitHubStacksClient: GitHubStacksClient
+        get() = gitHubClientWiring.gitHubStacksClient
+
     override val json: Json = Json { prettyPrint = true }
 
     override val gitJaspr: GitJaspr by lazy {
-        GitJaspr(gitHubClient, gitClient, config, renderer = renderer)
+        GitJaspr(
+            gitHubClient,
+            gitClient,
+            config,
+            renderer = renderer,
+            stacksClient = gitHubStacksClient,
+        )
     }
 
     private val releaseFetcherLazy: Lazy<KtorReleaseFetcher> = lazy { KtorReleaseFetcher() }
@@ -99,6 +108,10 @@ class GitHubClientWiring(
 
     val gitHubClient: GitHubClient by lazy {
         GitHubClientImpl(apolloClient, gitClient, config, remoteBranchPrefix)
+    }
+
+    val gitHubStacksClient: GitHubStacksClient by lazy {
+        GitHubStacksClientImpl(httpClient, config)
     }
 
     override fun close() {

@@ -106,9 +106,50 @@ class GitJaspr(
     private val commitIdentOverride: Ident? = null,
     private val renderer: Renderer = NoOpRenderer,
     private val json: Json = Json { prettyPrint = true },
+    private val stacksClient: GitHubStacksClient = NoOpGitHubStacksClient(),
 ) {
 
     private val logger = LoggerFactory.getLogger(GitJaspr::class.java)
+
+    private var stacksAvailable: Boolean? = null
+
+    private suspend fun areStacksAvailable(): Boolean {
+        return stacksAvailable == true ||
+            try {
+                stacksClient.isAvailable().also { available ->
+                    stacksAvailable = available
+                    if (available) {
+                        logger.debug("GitHub Stacks API is available")
+                    } else {
+                        logger.debug("GitHub Stacks API is not available")
+                    }
+                }
+            } catch (e: Exception) {
+                logger.debug("GitHub Stacks API probe failed: {}", e.message)
+                false.also {
+                    stacksAvailable = false
+                }
+            }
+    }
+
+    private suspend fun dissolveExistingStack(prNumbers: List<Int>) {
+        if (prNumbers.isEmpty()) return
+        val existing = stacksClient.findStackByPr(prNumbers.first())
+        if (existing != null && existing.open) {
+            logger.debug("Dissolving existing stack {}", existing.number)
+            stacksClient.unstack(existing.number)
+        }
+    }
+
+    private suspend fun registerStack(prNumbers: List<Int>) {
+        if (prNumbers.size < 2) return
+        try {
+            val stack = stacksClient.createStack(prNumbers)
+            renderer.info { "Registered GitHub stack #${stack.number} (${prNumbers.size} PRs)" }
+        } catch (e: Exception) {
+            logger.warn("Failed to register GitHub stack: {}", e.message)
+        }
+    }
 
     /**
      * Abstracts external interactions needed by [getStatusString] so the rendering can be driven by
@@ -1161,6 +1202,12 @@ class GitJaspr(
             checkSinglePullRequestPerCommit(
                 ghClient.getPullRequests(stack).filterByMatchingTargetRef()
             )
+
+        if (areStacksAvailable()) {
+            val existingPrNumbers = pullRequests.mapNotNull(PullRequest::number)
+            dissolveExistingStack(existingPrNumbers)
+        }
+
         val pullRequestsRebased =
             pullRequests.updateBaseRefForReorderedPrsIfAny(stack, filteredRefSpec.remoteRef)
 
@@ -1318,6 +1365,15 @@ class GitJaspr(
             "Updated descriptions for ${prsToMutate.size} pull ${requestOrRequests(prsToMutate.size)}"
         }
 
+        if (areStacksAvailable()) {
+            val orderedPrNumbers =
+                prs.sortedBy { pr ->
+                        stack.indexOfFirst { commit -> commit.id == pr.commitId }
+                    }
+                    .mapNotNull(PullRequest::number)
+            registerStack(orderedPrNumbers)
+        }
+
         print(getStatusString(refSpec, remoteBranchesAfterPush, theme))
     }
 
@@ -1398,7 +1454,15 @@ class GitJaspr(
         val lastPr = checkNotNull(lastStatus.pullRequest)
         if (lastPr.baseRefName != refSpec.remoteRef) {
             logger.trace("Rebase {} onto {} in prep for merge", lastPr, refSpec.remoteRef)
-            ghClient.updatePullRequest(lastPr.copy(baseRefName = refSpec.remoteRef))
+            try {
+                ghClient.updatePullRequest(lastPr.copy(baseRefName = refSpec.remoteRef))
+            } catch (e: GitJasprException) {
+                if (e.message.contains("part of a stack")) {
+                    logger.debug("Skipping base retarget (PR is in a GitHub stack)")
+                } else {
+                    throw e
+                }
+            }
         }
 
         val mergeRefSpecs = listOf(RefSpec(lastStatus.localCommit.hash, refSpec.remoteRef))
@@ -1419,7 +1483,15 @@ class GitJaspr(
             prsToRebase.map(PullRequest::title),
         )
         for (pr in prsToRebase) {
-            ghClient.updatePullRequest(pr)
+            try {
+                ghClient.updatePullRequest(pr)
+            } catch (e: GitJasprException) {
+                if (e.message.contains("part of a stack")) {
+                    logger.debug("Skipping base retarget for PR #{} (in a GitHub stack)", pr.number)
+                } else {
+                    throw e
+                }
+            }
         }
 
         val remainingStack =
