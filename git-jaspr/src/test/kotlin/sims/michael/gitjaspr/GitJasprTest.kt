@@ -3732,6 +3732,66 @@ interface GitJasprTest {
     }
 
     @Status
+    @Compare
+    @Test
+    fun `status and compare hide commits already merged into target`() {
+        withTestSetup(useFakeRemote) {
+            createCommitsFrom(
+                testCase {
+                    repository {
+                        commit { title = "one" }
+                        commit { title = "two" }
+                        commit { title = "three" }
+                        commit { title = "four" }
+                        commit {
+                            title = "five"
+                            localRefs += "development"
+                        }
+                    }
+                }
+            )
+
+            push()
+
+            // Simulate squash-merging the bottom 3 PRs into main by cherry-picking them onto
+            // main. Cherry-picks have the same patch-id as the originals, so git cherry detects
+            // them as already applied.
+            val stackCommits = localGit.logRange("$remoteName/main", "development")
+            val bottomThree = stackCommits.take(3)
+
+            localGit.checkout("$remoteName/main")
+            for (commit in bottomThree) {
+                localGit.cherryPick(commit)
+            }
+            localGit.push(listOf(RefSpec("+HEAD", "main")), remoteName)
+            localGit.checkout("development")
+            localGit.fetch(remoteName)
+
+            // Status should show only the 2 unmerged commits
+            val status = getAndPrintStatusString()
+            val statusRows = status.lines().filter { it.startsWith("[") }
+            assertEquals(2, statusRows.size, "Expected 2 commit rows in status, got:\n$status")
+            assertContains(status, ": five")
+            assertContains(status, ": four")
+            assertContains(status, "3 commits already merged into main (not shown)")
+            assertContains(status, "3 commits behind main")
+
+            // Compare should also show only the 2 unmerged commits
+            val compare = getAndPrintCompareString()
+            val compareLines = compare.lines().filter { it.contains("five") || it.contains("four") }
+            assertEquals(
+                2,
+                compareLines.size,
+                "Expected 2 rows in compare for four and five, got:\n$compare",
+            )
+            assertFalse(compare.contains(": one"), "Should not show merged commit 'one'")
+            assertFalse(compare.contains(": two"), "Should not show merged commit 'two'")
+            assertFalse(compare.contains(": three"), "Should not show merged commit 'three'")
+            assertContains(compare, "3 commits already merged into main (not shown)")
+        }
+    }
+
+    @Status
     @Test
     fun `status stack check all mergeable`() {
         withTestSetup(useFakeRemote) {

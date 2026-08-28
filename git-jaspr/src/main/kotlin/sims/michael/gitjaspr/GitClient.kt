@@ -292,6 +292,13 @@ interface GitClient {
     fun patchId(sha: String): String?
 
     /**
+     * Returns full SHAs of commits reachable from [head] whose patches are already present in
+     * [upstream] (equivalent to the `-` lines in `git cherry <upstream> <head>`). Used to detect
+     * commits that have been squash-merged or cherry-picked into the target branch.
+     */
+    fun getAlreadyAppliedShas(upstream: String, head: String): Set<String> = emptySet()
+
+    /**
      * Returns the tree SHA for [ref] (equivalent to `git rev-parse <ref>^{tree}`). Throws if [ref]
      * doesn't resolve to a commit. Useful for comparing tree contents across refs without walking
      * files individually.

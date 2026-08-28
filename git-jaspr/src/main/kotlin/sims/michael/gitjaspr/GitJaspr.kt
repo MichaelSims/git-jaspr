@@ -252,8 +252,27 @@ class GitJaspr(
             if (navState != null) refSpec.copy(localRef = navState.headBeforeDetach) else refSpec
 
         val remoteBranches = queries.getRemoteBranches()
-        val stack = queries.getCommitStack(effectiveRefSpec.localRef, effectiveRefSpec.remoteRef)
-        if (stack.isEmpty()) return theme.muted("Stack is empty.") + "\n"
+        val rawStack = queries.getCommitStack(effectiveRefSpec.localRef, effectiveRefSpec.remoteRef)
+        if (rawStack.isEmpty()) {
+            return theme.muted("Stack is empty.") + "\n"
+        }
+
+        val upstream = "$remoteName/${effectiveRefSpec.remoteRef}"
+        val stack = filterAlreadyApplied(rawStack, upstream, effectiveRefSpec.localRef)
+        val numAlreadyMerged = rawStack.size - stack.size
+
+        if (stack.isEmpty()) {
+            val mergedDescription =
+                if (numAlreadyMerged == 1) {
+                    "The commit in your stack has"
+                } else {
+                    "All $numAlreadyMerged commits in your stack have"
+                }
+            return theme.warning(
+                "$mergedDescription been merged into ${effectiveRefSpec.remoteRef}. " +
+                    "Run `jaspr rebase` to clean up."
+            ) + "\n"
+        }
 
         val statuses = getRemoteCommitStatuses(stack, remoteBranches, queries)
         val commitsWithDuplicateIds =
@@ -271,6 +290,7 @@ class GitJaspr(
             statuses,
             commitsWithDuplicateIds,
             numCommitsBehindBase,
+            numAlreadyMerged,
             effectiveRefSpec,
             stack,
             remoteBranches,
@@ -284,6 +304,7 @@ class GitJaspr(
         statuses: List<RemoteCommitStatus>,
         commitsWithDuplicateIds: Map<String, List<RemoteCommitStatus>>,
         numCommitsBehindBase: Int,
+        numAlreadyMerged: Int,
         refSpec: RefSpec,
         stack: List<Commit>,
         remoteBranches: List<RemoteBranch>,
@@ -344,6 +365,16 @@ class GitJaspr(
 
         appendNamedStackInfo(stack, remoteBranches, theme, queries)
 
+        if (numAlreadyMerged > 0) {
+            appendLine()
+            appendLine(
+                theme.warning(
+                    "$numAlreadyMerged ${commitOrCommits(numAlreadyMerged)} already merged " +
+                        "into ${refSpec.remoteRef} (not shown). " +
+                        "Run `jaspr rebase` to clean up."
+                )
+            )
+        }
         if (numCommitsBehindBase > 0) {
             appendLine()
             appendLine(
@@ -460,14 +491,17 @@ class GitJaspr(
         val targetRef =
             RemoteNamedStackRef.parse(stackName, config.remoteNamedStackBranchPrefix)?.targetRef
                 ?: return
+        val upstream = "$remoteName/$targetRef"
         val remoteStack =
             try {
-                queries.getCommitStack("$remoteName/$stackName", targetRef)
+                val raw = queries.getCommitStack("$remoteName/$stackName", targetRef)
+                filterAlreadyApplied(raw, upstream, "$remoteName/$stackName")
             } catch (e: Exception) {
                 logger.debug("Failed to walk remote stack '{}': {}", stackName, e.message)
                 return
             }
-        val localIds = localStack.mapNotNull(Commit::id).toSet()
+        val filteredLocal = filterAlreadyApplied(localStack, upstream, localStack.last().hash)
+        val localIds = filteredLocal.mapNotNull(Commit::id).toSet()
         val remoteIds = remoteStack.mapNotNull(Commit::id).toSet()
         val remoteOnly = (remoteIds - localIds).size
         val localOnly = (localIds - remoteIds).size
@@ -668,11 +702,14 @@ class GitJaspr(
         val effectiveLocalRef = navState?.headBeforeDetach ?: refSpec.localRef
         val cursorSha = navState?.stack?.getOrNull(navState.cursorIndex)?.sha
 
-        val localStack = gitClient.getCommitStack(remoteName, effectiveLocalRef, refSpec.remoteRef)
-        if (localStack.isEmpty()) return theme.muted("Stack is empty.") + "\n"
+        val rawLocalStack =
+            gitClient.getCommitStack(remoteName, effectiveLocalRef, refSpec.remoteRef)
+        if (rawLocalStack.isEmpty()) {
+            return theme.muted("Stack is empty.") + "\n"
+        }
 
         val stackName =
-            when (val result = getExistingStackName(localStack, remoteBranches)) {
+            when (val result = getExistingStackName(rawLocalStack, remoteBranches)) {
                 is Found -> result.name
                 is MultipleStacksContainCommit ->
                     throw GitJasprException(
@@ -686,14 +723,51 @@ class GitJaspr(
             }
         val namedStackRef =
             checkNotNull(RemoteNamedStackRef.parse(stackName, config.remoteNamedStackBranchPrefix))
-        val remoteStack =
-            gitClient.getCommitStack(remoteName, "$remoteName/$stackName", namedStackRef.targetRef)
+        val upstream = "$remoteName/${namedStackRef.targetRef}"
+        val rawRemoteStack =
+            gitClient.getCommitStack(
+                remoteName,
+                "$remoteName/$stackName",
+                namedStackRef.targetRef,
+            )
+        val localStack = filterAlreadyApplied(rawLocalStack, upstream, effectiveLocalRef)
+        val remoteStack = filterAlreadyApplied(rawRemoteStack, upstream, "$remoteName/$stackName")
+
+        val mergedLocalIds =
+            rawLocalStack.mapNotNull(Commit::id).toSet() - localStack.mapNotNull(Commit::id).toSet()
+        val mergedRemoteIds =
+            rawRemoteStack.mapNotNull(Commit::id).toSet() -
+                remoteStack.mapNotNull(Commit::id).toSet()
+        val numAlreadyMerged = (mergedLocalIds + mergedRemoteIds).size
+
+        if (localStack.isEmpty() && remoteStack.isEmpty() && numAlreadyMerged > 0) {
+            val mergedDescription =
+                if (numAlreadyMerged == 1) {
+                    "The commit has"
+                } else {
+                    "All $numAlreadyMerged commits have"
+                }
+            return theme.warning(
+                "$mergedDescription been merged into ${namedStackRef.targetRef}. " +
+                    "Nothing to compare. Run `jaspr rebase` to clean up."
+            ) + "\n"
+        }
 
         return DivergenceClassifier(getJasprDir(), gitClient).use { classifier ->
             val rows = alignStacks(localStack, remoteStack, classifier)
             buildString {
                 if (navState != null) appendLine(navBanner(navState, theme))
                 append(renderCompare(rows, "$remoteName/$stackName", theme, cursorSha = cursorSha))
+                if (numAlreadyMerged > 0) {
+                    appendLine()
+                    appendLine(
+                        theme.warning(
+                            "$numAlreadyMerged ${commitOrCommits(numAlreadyMerged)} already " +
+                                "merged into ${namedStackRef.targetRef} (not shown). " +
+                                "Run `jaspr rebase` to clean up."
+                        )
+                    )
+                }
             }
         }
     }
@@ -2774,6 +2848,23 @@ class GitJaspr(
     private fun branchOrBranches(count: Int) = if (count == 1) "branch" else "branches"
 
     private fun commitOrCommits(count: Int) = if (count == 1) "commit" else "commits"
+
+    /**
+     * Removes commits from [commits] whose patches are already present in [upstream], as determined
+     * by `git cherry`. Full SHAs from `git cherry` are matched against abbreviated [Commit.hash]
+     * values via prefix comparison.
+     */
+    private fun filterAlreadyApplied(
+        commits: List<Commit>,
+        upstream: String,
+        head: String,
+    ): List<Commit> {
+        val appliedShas = gitClient.getAlreadyAppliedShas(upstream, head)
+        if (appliedShas.isEmpty()) return commits
+        return commits.filter { commit ->
+            appliedShas.none { sha -> sha.startsWith(commit.hash) }
+        }
+    }
 
     private fun prOrPrs(count: Int) = if (count == 1) "pr" else "prs"
 
