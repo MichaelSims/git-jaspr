@@ -875,6 +875,21 @@ class CliGitClient(
         }
     }
 
+    override fun getAlreadyAppliedShas(upstream: String, head: String): Set<String> {
+        logger.trace("getAlreadyAppliedShas {} {}", upstream, head)
+        return try {
+            executeCommand(listOf("git", "cherry", upstream, head))
+                .output
+                .lines
+                .filter { it.startsWith("- ") }
+                .map { it.removePrefix("- ").trim() }
+                .toSet()
+        } catch (e: Exception) {
+            logger.debug("Failed to run git cherry {} {}", upstream, head, e)
+            emptySet()
+        }
+    }
+
     override fun mergeTreeWriteTree(
         base: String,
         ours: String,
