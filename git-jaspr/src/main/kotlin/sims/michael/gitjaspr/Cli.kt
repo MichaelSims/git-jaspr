@@ -1245,6 +1245,8 @@ class Rebase : GitJasprSubcommand() {
 
                 val rebaseArgs = buildList {
                     add("git")
+                    add("-c")
+                    add("advice.skippedCherryPicks=false")
                     add("rebase")
                     add("--autosquash")
                     if (!gitSupportsNonInteractiveAutosquash(workingDirectory)) {
