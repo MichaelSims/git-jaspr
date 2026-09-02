@@ -136,40 +136,19 @@ class GitJaspr(
         }
     }
 
-    private suspend fun findExistingStack(prNumbers: List<Int>): StackInfo? {
-        if (prNumbers.isEmpty()) return null
-        return stacksClient.findStackByPr(prNumbers.first())?.takeIf { it.open }
-    }
+    private suspend fun findExistingStack(prNumbers: List<Int>): StackInfo? =
+        prNumbers.firstNotNullOfOrNull {
+            stacksClient.findStackByPr(it)?.takeIf(StackInfo::open)
+        }
 
     private suspend fun dissolveStack(stack: StackInfo) {
         logger.debug("Dissolving existing stack {}", stack.number)
         stacksClient.unstack(stack.number)
     }
 
-    private suspend fun registerOrAppendStack(
-        orderedPrNumbers: List<Int>,
-        existingStack: StackInfo?,
-    ) {
+    private suspend fun registerStack(orderedPrNumbers: List<Int>) {
         if (orderedPrNumbers.size < 2) return
         try {
-            if (existingStack != null) {
-                val existingPrs = existingStack.pullRequestNumbers
-                if (orderedPrNumbers == existingPrs) {
-                    logger.debug("GitHub stack #{} already matches, skipping", existingStack.number)
-                    return
-                }
-                if (
-                    orderedPrNumbers.size > existingPrs.size &&
-                        orderedPrNumbers.subList(0, existingPrs.size) == existingPrs
-                ) {
-                    val newPrs = orderedPrNumbers.subList(existingPrs.size, orderedPrNumbers.size)
-                    val updated = stacksClient.addToStack(existingStack.number, newPrs)
-                    renderer.info {
-                        "Added ${newPrs.size} PR(s) to GitHub stack #${updated.number}"
-                    }
-                    return
-                }
-            }
             val stack = stacksClient.createStack(orderedPrNumbers)
             renderer.info {
                 "Registered GitHub stack #${stack.number} (${orderedPrNumbers.size} PRs)"
@@ -1305,22 +1284,16 @@ class GitJaspr(
                 ghClient.getPullRequests(stack).filterByMatchingTargetRef()
             )
 
-        val existingGhStack =
-            if (areStacksAvailable()) {
-                val existingPrNumbers = pullRequests.mapNotNull(PullRequest::number)
-                val existing = findExistingStack(existingPrNumbers)
-                if (
-                    existing != null &&
-                        pullRequests.willRetargetBases(stack, filteredRefSpec.remoteRef)
-                ) {
-                    dissolveStack(existing)
-                    null
-                } else {
-                    existing
-                }
-            } else {
-                null
+        // Dissolve any existing GitHub stack before updating PRs. The updatePullRequest
+        // mutation includes baseRefName, and GitHub rejects that field on stacked PRs. Dissolving
+        // first avoids the rejection; registerStack re-creates the stack after the push.
+        if (areStacksAvailable()) {
+            val existingPrNumbers = pullRequests.mapNotNull(PullRequest::number)
+            val existing = findExistingStack(existingPrNumbers)
+            if (existing != null) {
+                dissolveStack(existing)
             }
+        }
 
         val pullRequestsRebased =
             pullRequests.updateBaseRefForReorderedPrsIfAny(stack, filteredRefSpec.remoteRef)
@@ -1485,7 +1458,7 @@ class GitJaspr(
                         stack.indexOfFirst { commit -> commit.id == pr.commitId }
                     }
                     .mapNotNull(PullRequest::number)
-            registerOrAppendStack(orderedPrNumbers, existingGhStack)
+            registerStack(orderedPrNumbers)
         }
 
         print(getStatusString(refSpec, remoteBranchesAfterPush, theme))
@@ -2665,24 +2638,6 @@ class GitJaspr(
             }
         }
         return true
-    }
-
-    /**
-     * Returns true if [updateBaseRefForReorderedPrsIfAny] would change any PR bases. Used to decide
-     * whether a GitHub stack must be dissolved before pushing.
-     */
-    private fun List<PullRequest>.willRetargetBases(
-        commitStack: List<Commit>,
-        remoteRef: String,
-    ): Boolean {
-        val commitMap =
-            commitStack.windowedPairs().associateBy { (_, commit) -> checkNotNull(commit.id) }
-        return any { pr ->
-            val commitPair = commitMap[pr.commitId] ?: return@any false
-            val (prevCommit, _) = commitPair
-            val newBaseRef = prevCommit?.toRemoteRefName() ?: remoteRef
-            pr.baseRefName != newBaseRef
-        }
     }
 
     /**

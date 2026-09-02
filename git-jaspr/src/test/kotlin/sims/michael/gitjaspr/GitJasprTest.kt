@@ -10978,32 +10978,6 @@ interface GitJasprTest {
 
     @GhStacks
     @Test
-    fun `repush with no changes does not create a duplicate stack`() {
-        withTestSetup(useFakeRemote) {
-            createCommitsFrom(
-                testCase {
-                    repository {
-                        commit { title = "A" }
-                        commit {
-                            title = "B"
-                            localRefs += "main"
-                        }
-                    }
-                }
-            )
-
-            pushWithStacks()
-            val firstStack = stacksStub.allStacks.single { it.open }
-
-            pushWithStacks()
-            val openStacks = stacksStub.allStacks.filter { it.open }
-            assertEquals(1, openStacks.size, "No duplicate stack should be created")
-            assertEquals(firstStack.number, openStacks.single().number, "Same stack number")
-        }
-    }
-
-    @GhStacks
-    @Test
     fun `push registers a GitHub stack when stacks are available`() {
         withTestSetup(useFakeRemote) {
             createCommitsFrom(
@@ -11126,7 +11100,7 @@ interface GitJasprTest {
 
     @GhStacks
     @Test
-    fun `appending commits to top preserves stack number`() {
+    fun `appending commits to top recreates stack with all PRs`() {
         withTestSetup(useFakeRemote) {
             createCommitsFrom(
                 testCase {
@@ -11142,8 +11116,7 @@ interface GitJasprTest {
 
             pushWithStacks()
 
-            val firstStack = stacksStub.allStacks.single { it.open }
-            assertEquals(2, firstStack.pullRequestNumbers.size)
+            assertEquals(2, stacksStub.allStacks.single { it.open }.pullRequestNumbers.size)
 
             createCommitsFrom(
                 testCase {
@@ -11162,13 +11135,7 @@ interface GitJasprTest {
 
             val openStacks = stacksStub.allStacks.filter { it.open }
             assertEquals(1, openStacks.size, "Exactly one open stack")
-            val updatedStack = openStacks.single()
-            assertEquals(3, updatedStack.pullRequestNumbers.size, "Stack should have 3 PRs")
-            assertEquals(
-                firstStack.number,
-                updatedStack.number,
-                "Stack number should be preserved for append-only pushes",
-            )
+            assertEquals(3, openStacks.single().pullRequestNumbers.size, "Stack should have 3 PRs")
         }
     }
 
