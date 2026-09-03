@@ -150,9 +150,11 @@ class GitJaspr(
         if (orderedPrNumbers.size < 2) return
         try {
             val stack = stacksClient.createStack(orderedPrNumbers)
-            renderer.info {
-                "Registered GitHub stack #${stack.number} (${orderedPrNumbers.size} PRs)"
-            }
+            logger.debug(
+                "Registered GitHub stack #{} ({} PRs)",
+                stack.number,
+                orderedPrNumbers.size,
+            )
         } catch (e: Exception) {
             logger.warn("Failed to register GitHub stack: {}", e.message)
         }
