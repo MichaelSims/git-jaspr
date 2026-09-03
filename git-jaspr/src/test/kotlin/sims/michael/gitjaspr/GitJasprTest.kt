@@ -10976,6 +10976,12 @@ interface GitJasprTest {
         count: Int? = null,
     ) = gitJasprWithStacks.push(stackName = stackName, count = count)
 
+    suspend fun GitHubTestHarness.mergeWithStacks(
+        refSpec: RefSpec,
+        count: Int? = null,
+        ref: String? = null,
+    ) = gitJasprWithStacks.merge(refSpec, count = count, ref = ref)
+
     @GhStacks
     @Test
     fun `push registers a GitHub stack when stacks are available`() {
@@ -11204,6 +11210,74 @@ interface GitJasprTest {
             assertTrue(
                 stacksStub.allStacks.isEmpty(),
                 "No stacks should be registered when config is off",
+            )
+        }
+    }
+
+    @GhStacks
+    @Test
+    fun `merge dissolves and re-registers stack for remaining PRs`() {
+        withTestSetup(useFakeRemote) {
+            createCommitsFrom(
+                testCase {
+                    repository {
+                        commit {
+                            title = "one"
+                            willPassVerification = true
+                            remoteRefs += buildRemoteRef("one")
+                        }
+                        commit {
+                            title = "two"
+                            willPassVerification = true
+                            remoteRefs += buildRemoteRef("two")
+                        }
+                        commit {
+                            title = "three"
+                            willPassVerification = true
+                            remoteRefs += buildRemoteRef("three")
+                            localRefs += "dev"
+                        }
+                    }
+                    pullRequest {
+                        headRef = buildRemoteRef("one")
+                        baseRef = "main"
+                        title = "one"
+                        willBeApprovedByUserKey = "michael"
+                    }
+                    pullRequest {
+                        headRef = buildRemoteRef("two")
+                        baseRef = buildRemoteRef("one")
+                        title = "two"
+                        willBeApprovedByUserKey = "michael"
+                    }
+                    pullRequest {
+                        headRef = buildRemoteRef("three")
+                        baseRef = buildRemoteRef("two")
+                        title = "three"
+                        willBeApprovedByUserKey = "michael"
+                    }
+                }
+            )
+
+            pushWithStacks()
+
+            val initialStack = stacksStub.allStacks.single { it.open }
+            assertEquals(3, initialStack.pullRequestNumbers.size)
+
+            waitForChecksToConclude("one", "two", "three")
+            mergeWithStacks(RefSpec("dev", "main"), count = 1)
+
+            val openStacks = stacksStub.allStacks.filter { it.open }
+            assertEquals(1, openStacks.size, "One open stack should remain for the unmerged PRs")
+            assertEquals(
+                2,
+                openStacks.single().pullRequestNumbers.size,
+                "Remaining stack should have 2 PRs",
+            )
+            assertNotEquals(
+                initialStack.number,
+                openStacks.single().number,
+                "Stack number should change (dissolved and re-registered)",
             )
         }
     }

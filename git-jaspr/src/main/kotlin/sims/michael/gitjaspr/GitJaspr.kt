@@ -1537,19 +1537,21 @@ class GitJaspr(
         // unnamed pushes resolve to null and are left alone.
         val ownedNamedStack = (getExistingStackName(stack) as? Found)?.name
 
+        // Dissolve any existing GitHub stack before updating PRs. The updatePullRequest
+        // mutation includes baseRefName, and GitHub rejects that field on stacked PRs.
+        if (areStacksAvailable()) {
+            val existingPrNumbers = prs.mapNotNull(PullRequest::number)
+            val existingStack = findExistingStack(existingPrNumbers)
+            if (existingStack != null) {
+                dissolveStack(existingStack)
+            }
+        }
+
         val lastStatus = statuses.last()
         val lastPr = checkNotNull(lastStatus.pullRequest)
         if (lastPr.baseRefName != refSpec.remoteRef) {
             logger.trace("Rebase {} onto {} in prep for merge", lastPr, refSpec.remoteRef)
-            try {
-                ghClient.updatePullRequest(lastPr.copy(baseRefName = refSpec.remoteRef))
-            } catch (e: GitJasprException) {
-                if (e.message.contains("part of a stack")) {
-                    logger.debug("Skipping base retarget (PR is in a GitHub stack)")
-                } else {
-                    throw e
-                }
-            }
+            ghClient.updatePullRequest(lastPr.copy(baseRefName = refSpec.remoteRef))
         }
 
         val mergeRefSpecs = listOf(RefSpec(lastStatus.localCommit.hash, refSpec.remoteRef))
@@ -1570,15 +1572,7 @@ class GitJaspr(
             prsToRebase.map(PullRequest::title),
         )
         for (pr in prsToRebase) {
-            try {
-                ghClient.updatePullRequest(pr)
-            } catch (e: GitJasprException) {
-                if (e.message.contains("part of a stack")) {
-                    logger.debug("Skipping base retarget for PR #{} (in a GitHub stack)", pr.number)
-                } else {
-                    throw e
-                }
-            }
+            ghClient.updatePullRequest(pr)
         }
 
         val remainingStack =
@@ -1597,6 +1591,15 @@ class GitJaspr(
                 renderer.info {
                     "Updated descriptions for ${remainingPrs.size} remaining " +
                         "pull ${requestOrRequests(remainingPrs.size)}"
+                }
+                if (areStacksAvailable()) {
+                    val orderedPrNumbers =
+                        remainingPrs
+                            .sortedBy { pr ->
+                                remainingStack.indexOfFirst { commit -> commit.id == pr.commitId }
+                            }
+                            .mapNotNull(PullRequest::number)
+                    registerStack(orderedPrNumbers)
                 }
             }
         }
