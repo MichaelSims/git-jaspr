@@ -1830,7 +1830,8 @@ class GitJaspr(
                     gitClient.fetch(remoteName)
                     break
                 }
-                print(worktreeJaspr.getStatusString(autoMergeRefSpec, theme))
+                val statusRefSpec = refSpec.copy(localRef = currentRef)
+                print(worktreeJaspr.getStatusString(statusRefSpec, theme))
 
                 if (statuses.any { status -> status.checksPass == false }) {
                     renderer.warn { "Checks are failing. Aborting auto-merge." }
