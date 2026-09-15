@@ -1793,6 +1793,7 @@ class GitJaspr(
                     newUuid,
                     commitIdentOverride,
                     renderer,
+                    stacksClient = stacksClient,
                 )
 
             var attemptsMade = 0
