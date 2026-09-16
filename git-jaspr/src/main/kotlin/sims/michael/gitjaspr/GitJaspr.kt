@@ -1751,12 +1751,8 @@ class GitJaspr(
         // Filter the stack to exclude commits matching the dont-push pattern or draft commits
         val remoteName = config.remoteName
         gitClient.fetch(remoteName)
-        val fullStack =
-            resolveScope(
-                gitClient.getCommitStack(remoteName, refSpec.localRef, refSpec.remoteRef),
-                count,
-                ref,
-            )
+        val entireStack = gitClient.getCommitStack(remoteName, refSpec.localRef, refSpec.remoteRef)
+        val fullStack = resolveScope(entireStack, count, ref)
         val (filteredStack, excludedCommits) = filterStackByDontPushOrDraft(fullStack)
         showExcludedCommitsMessage(excludedCommits)
 
@@ -1825,6 +1821,27 @@ class GitJaspr(
                 val statuses = worktreeJaspr.getRemoteCommitStatuses(stack)
                 if (statuses.all(RemoteCommitStatus::isMergeable)) {
                     worktreeJaspr.merge(autoMergeRefSpec)
+
+                    // merge() dissolved the GitHub stack but can only re-register
+                    // commits it can see, which stops at autoMergeRefSpec.localRef.
+                    // Re-register the commits above the merge scope so the GitHub
+                    // stack UI stays intact for the rest of the stack.
+                    if (areStacksAvailable()) {
+                        val remainingStack = entireStack.drop(fullStack.size)
+                        if (remainingStack.isNotEmpty()) {
+                            val remainingPrs =
+                                ghClient.getPullRequests(remainingStack).filterByMatchingTargetRef()
+                            val orderedPrNumbers =
+                                remainingPrs
+                                    .sortedBy { pr ->
+                                        remainingStack.indexOfFirst { commit ->
+                                            commit.id == pr.commitId
+                                        }
+                                    }
+                                    .mapNotNull(PullRequest::number)
+                            registerStack(orderedPrNumbers)
+                        }
+                    }
 
                     // The merge happened in the worktree; the user's main checkout still has
                     // pre-merge tracking refs, so refresh them.
