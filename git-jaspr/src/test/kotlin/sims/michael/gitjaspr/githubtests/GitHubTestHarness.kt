@@ -125,7 +125,7 @@ private constructor(
             // much to verify behavior.
             ghClientsByUserKey.values.first()
         } else {
-            GitHubStubClient(remoteBranchPrefix, remoteName, localGit)
+            GitHubStubClient(remoteBranchPrefix, remoteName, localGit, stacksStub)
         }
     }
 

@@ -11295,6 +11295,81 @@ interface GitJasprTest {
         }
     }
 
+    /** Regression test for a bug */
+    @GhStacks
+    @Test
+    fun `merge dissolves only the stack being merged`() {
+        withTestSetup(useFakeRemote) {
+            createCommitsFrom(
+                testCase {
+                    repository {
+                        commit {
+                            title = "one"
+                            willPassVerification = true
+                            remoteRefs += buildRemoteRef("one")
+                            branch {
+                                commit {
+                                    title = "decoy_a"
+                                    remoteRefs += buildRemoteRef("decoy_a")
+                                }
+                                commit {
+                                    title = "decoy_b"
+                                    remoteRefs += buildRemoteRef("decoy_b")
+                                }
+                            }
+                        }
+                        commit {
+                            title = "two"
+                            willPassVerification = true
+                            remoteRefs += buildRemoteRef("two")
+                            localRefs += "dev"
+                        }
+                    }
+                    // Declared first so the decoy PRs precede ours in the unfiltered PR list
+                    pullRequest {
+                        headRef = buildRemoteRef("decoy_a")
+                        baseRef = "main"
+                        title = "decoy_a"
+                    }
+                    pullRequest {
+                        headRef = buildRemoteRef("decoy_b")
+                        baseRef = buildRemoteRef("decoy_a")
+                        title = "decoy_b"
+                    }
+                    pullRequest {
+                        headRef = buildRemoteRef("one")
+                        baseRef = "main"
+                        title = "one"
+                        willBeApprovedByUserKey = "michael"
+                    }
+                    pullRequest {
+                        headRef = buildRemoteRef("two")
+                        baseRef = buildRemoteRef("one")
+                        title = "two"
+                        willBeApprovedByUserKey = "michael"
+                    }
+                }
+            )
+
+            val decoyPrNumbers =
+                gitHub
+                    .getPullRequests()
+                    .filter { pr -> pr.title.startsWith("decoy") }
+                    .mapNotNull(PullRequest::number)
+            val decoyStack = stacksStub.createStack(decoyPrNumbers)
+
+            pushWithStacks()
+
+            waitForChecksToConclude("one", "two")
+            mergeWithStacks(RefSpec("dev", "main"))
+
+            assertTrue(
+                stacksStub.allStacks.single { it.number == decoyStack.number }.open,
+                "Merging our stack should not dissolve an unrelated stack",
+            )
+        }
+    }
+
     @GhStacks
     @Test
     fun `scoped auto-merge re-registers remaining PRs in GitHub stack`() {

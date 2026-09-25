@@ -13,6 +13,10 @@ class GitHubStacksStubClient : GitHubStacksClient {
     val allStacks: List<StackInfo>
         get() = synchronized(stacks) { stacks.toList() }
 
+    /** Non-suspending lookup so [GitHubStubClient] can enforce GitHub's stacked-PR rules. */
+    fun isStacked(prNumber: Int) =
+        synchronized(stacks) { stacks.any { it.open && prNumber in it.pullRequestNumbers } }
+
     override suspend fun isAvailable() = true
 
     override suspend fun findStackByPr(prNumber: Int): StackInfo? =

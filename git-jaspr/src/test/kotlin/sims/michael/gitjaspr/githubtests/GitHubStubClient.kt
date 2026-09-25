@@ -10,6 +10,7 @@ class GitHubStubClient(
     private val remoteBranchPrefix: String,
     private val remoteName: String,
     private val localGit: GitClient,
+    private val stacksClient: GitHubStacksStubClient? = null,
 ) : GitHubClient {
 
     private val logger = LoggerFactory.getLogger(GitHubStubClient::class.java)
@@ -115,6 +116,7 @@ class GitHubStubClient(
             require(i > -1) { "PR with ID ${pullRequest.id} was not found" }
             val oldPr = prs[i].pullRequest
             if (oldPr.baseRefName != pullRequest.baseRefName) {
+                validateNotStacked(pullRequest)
                 validateHeadHasNewCommits(pullRequest)
             }
             prs[i] =
@@ -126,6 +128,16 @@ class GitHubStubClient(
                                     ?: oldPr.unresolvedReviewThreadCount
                         )
                 )
+        }
+    }
+
+    /** Mimics GitHub's rejection of a base ref update on a PR that belongs to an open stack. */
+    private fun validateNotStacked(pullRequest: PullRequest) {
+        val number = pullRequest.number ?: return
+        if (stacksClient?.isStacked(number) == true) {
+            throw GitJasprException(
+                "Cannot change the base branch because the pull request is part of a stack."
+            )
         }
     }
 

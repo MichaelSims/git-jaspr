@@ -146,6 +146,18 @@ class GitJaspr(
         stacksClient.unstack(stack.number)
     }
 
+    private suspend fun dissolveStacksContaining(prNumbers: List<Int>) {
+        val stacks =
+            prNumbers
+                .mapNotNull { prNumber ->
+                    stacksClient.findStackByPr(prNumber)?.takeIf(StackInfo::open)
+                }
+                .distinctBy(StackInfo::number)
+        for (stack in stacks) {
+            dissolveStack(stack)
+        }
+    }
+
     private suspend fun registerStack(orderedPrNumbers: List<Int>) {
         if (orderedPrNumbers.size < 2) return
         try {
@@ -1539,18 +1551,23 @@ class GitJaspr(
         // unnamed pushes resolve to null and are left alone.
         val ownedNamedStack = (getExistingStackName(stack) as? Found)?.name
 
-        // Dissolve any existing GitHub stack before updating PRs. The updatePullRequest
-        // mutation includes baseRefName, and GitHub rejects that field on stacked PRs.
-        if (areStacksAvailable()) {
-            val existingPrNumbers = prs.mapNotNull(PullRequest::number)
-            val existingStack = findExistingStack(existingPrNumbers)
-            if (existingStack != null) {
-                dissolveStack(existingStack)
-            }
-        }
-
         val lastStatus = statuses.last()
         val lastPr = checkNotNull(lastStatus.pullRequest)
+        val mergedRefs = stack.map { commit -> commit.toRemoteRefName() }.toSet()
+        val prsToRebase =
+            prs.filter { it.baseRefName in mergedRefs && it.headRefName !in mergedRefs }
+                .map { it.copy(baseRefName = refSpec.remoteRef) }
+
+        // Dissolve the GitHub stacks holding the PRs whose base we're about to change. The
+        // updatePullRequest mutation includes baseRefName, and GitHub rejects that field on stacked
+        // PRs. Scope this to those PRs only: `prs` is every open PR in the repo, so searching it
+        // would dissolve whichever stack it hit first, possibly someone else's.
+        if (areStacksAvailable()) {
+            dissolveStacksContaining(
+                listOfNotNull(lastPr.number) + prsToRebase.mapNotNull(PullRequest::number)
+            )
+        }
+
         if (lastPr.baseRefName != refSpec.remoteRef) {
             logger.trace("Rebase {} onto {} in prep for merge", lastPr, refSpec.remoteRef)
             ghClient.updatePullRequest(lastPr.copy(baseRefName = refSpec.remoteRef))
@@ -1562,10 +1579,6 @@ class GitJaspr(
             "Merged ${stack.size} ${refOrRefs(stack.size)} to ${entity(refSpec.remoteRef)}"
         }
 
-        val mergedRefs = stack.map { commit -> commit.toRemoteRefName() }.toSet()
-        val prsToRebase =
-            prs.filter { it.baseRefName in mergedRefs && it.headRefName !in mergedRefs }
-                .map { it.copy(baseRefName = refSpec.remoteRef) }
         logger.trace(
             "Rebasing {} {} to {}: {}",
             prsToRebase.size,
