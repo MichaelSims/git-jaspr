@@ -4,7 +4,8 @@ Date: 2026-08-27
 
 ## Status
 
-Accepted
+Shelved (2026-09-24). The integration was removed from `development` and lives only on the
+`github-stacks` branch. See "Why this was shelved" below.
 
 ## Context
 
@@ -64,3 +65,32 @@ A git config override (`jaspr.githubStacks`) allows forcing the feature on or of
 - The Stacks API is in public preview and may change. The integration is isolated behind a
   dedicated client interface, so changes to the API surface can be absorbed without touching
   the core push/merge logic.
+
+## Why this was shelved
+
+GitHub allows a pull request to belong to only one stack, and stacks must be linear. jaspr
+supports stacks that share commits, e.g. `[A B C D]` and `[A B E F]` where A and B are common
+to both. GitHub can't represent that.
+
+Probing the API on 2026-09-24 confirmed this:
+
+- Creating `[A B E F]` while `[A B C D]` is registered fails with 422: "Pull requests #A, #B
+  are already part of a stack".
+- A stack can sit on another stack's branch (`[E F]` with base `B` is accepted), but it can't
+  fork: adding `E` to `[A B C D]` fails with "Pull requests must form a stack, where each PR's
+  base ref is the previous PR's head ref".
+- Changing the base of a stacked PR fails with "Cannot change the base branch because the pull
+  request is part of a stack."
+
+GitHub's docs say stacks "can't include forks or branching structures". They don't state the
+one-stack-per-PR rule outright, but the data model (`PullRequest.stack` is singular) and
+GitHub's own `gh stack` CLI ("A PR can only belong to one stack") both assume it.
+
+With overlapping jaspr stacks, each push would dissolve the other stack's GitHub stack and
+register its own, so the two would keep undoing each other. We considered registering a GitHub
+stack only when a jaspr stack has no overlap. That leaves the feature off in exactly the
+workflow where it would be most useful, one person with several stacks sharing a base, so it
+wasn't worth keeping.
+
+The feature is also still in public preview. It's worth revisiting if GitHub lets a pull
+request belong to more than one stack.
