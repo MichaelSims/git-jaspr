@@ -311,6 +311,42 @@ interface GitClient {
     /** Returns full Commit objects for multiple refs in a single operation. */
     fun getCommits(refs: List<String>): Map<String, Commit?>
 
+    /**
+     * Returns the rendered diff from [from] to [to], each a commit or tree (equivalent to `git diff
+     * --src-prefix=<srcPrefix> --dst-prefix=<dstPrefix> <from> <to>`). The user's diff config
+     * (algorithm, context lines, etc.) applies; [color] forces ANSI color on or off. Returns an
+     * empty string when the two are identical.
+     */
+    fun diff(from: String, to: String, srcPrefix: String, dstPrefix: String, color: Boolean): String
+
+    /**
+     * Returns the rendered diff between two arbitrary texts, labeled [oldLabel] and [newLabel] in
+     * the diff header (equivalent to `git diff --no-index` on two files with those paths). Returns
+     * an empty string when the texts are identical.
+     */
+    fun diffText(
+        oldText: String,
+        newText: String,
+        oldLabel: String,
+        newLabel: String,
+        color: Boolean,
+    ): String
+
+    /**
+     * Returns the rendered range-diff between two commit ranges (equivalent to `git range-diff
+     * <oldRange> <newRange>`), which compares the ranges' patches regardless of their bases.
+     *
+     * @param creationFactor how willing git is to pair commits whose patches differ a lot (git's
+     *   default is 60). Callers that already know the two ranges correspond one-to-one should pass
+     *   a high value so git never reports them as unrelated.
+     */
+    fun rangeDiff(
+        oldRange: String,
+        newRange: String,
+        color: Boolean,
+        creationFactor: Int? = null,
+    ): String
+
     companion object {
         const val HEAD = Constants.HEAD
         const val R_HEADS = Constants.R_HEADS

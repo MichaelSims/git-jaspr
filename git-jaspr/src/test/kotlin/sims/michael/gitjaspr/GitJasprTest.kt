@@ -67,6 +67,15 @@ interface GitJasprTest {
         refSpec: RefSpec = RefSpec(DEFAULT_LOCAL_OBJECT, DEFAULT_TARGET_REF)
     ) = gitJaspr.getCompareString(refSpec).also(::print)
 
+    suspend fun GitHubTestHarness.getAndPrintCommitCompareString(
+        selector: String,
+        reverse: Boolean = false,
+        refSpec: RefSpec = RefSpec(DEFAULT_LOCAL_OBJECT, DEFAULT_TARGET_REF),
+    ) =
+        gitJaspr
+            .getCommitCompareString(refSpec, selector = selector, reverse = reverse)
+            .also(::print)
+
     fun GitHubTestHarness.pull(
         refSpec: RefSpec = RefSpec(DEFAULT_LOCAL_OBJECT, DEFAULT_TARGET_REF),
         theirs: Boolean = false,
@@ -4731,6 +4740,208 @@ interface GitJasprTest {
                 "Expected 'no remote stack' message:\n${thrown.message}",
             )
         }
+    }
+
+    @Compare
+    @Test
+    fun `commit compare removes changes from rebasing onto an updated target`() {
+        withTestSetup(useFakeRemote) {
+            createCommitsFrom(
+                testCase {
+                    repository {
+                        commit { title = "one" }
+                        commit {
+                            title = "two"
+                            localRefs += "development"
+                        }
+                    }
+                }
+            )
+            push()
+            advanceRemoteMainAndRebaseDevelopment()
+
+            delay(1200.milliseconds)
+            localRepo.resolve("two.txt").appendText("second line\n")
+            localGit.add("two.txt").commit("two", mapOf(COMMIT_ID_LABEL to "two"), amend = true)
+
+            val actual = getAndPrintCommitCompareString("1")
+            assertContains(actual, "+++ local/two.txt")
+            assertContains(actual, "+second line")
+            assertContains(actual, "(newer)")
+            assertFalse(actual.contains("upstream.txt"), "Rebase changes leaked into:\n$actual")
+            assertFalse(actual.contains(COMMIT_MESSAGE_LABEL), "Unexpected message diff:\n$actual")
+        }
+    }
+
+    @Compare
+    @Test
+    fun `commit compare by ref shows message diff before code diff`() {
+        withTestSetup(useFakeRemote) {
+            pushThenAmendTwoLocally()
+
+            val actual = getAndPrintCommitCompareString("HEAD")
+            val messageHeader = "+++ local/$COMMIT_MESSAGE_LABEL"
+            assertContains(actual, messageHeader)
+            assertContains(actual, "+two_amended_locally")
+            assertContains(actual, "+++ local/two_amended_locally.txt")
+            assertTrue(
+                actual.indexOf(messageHeader) < actual.indexOf("local/two_amended_locally.txt"),
+                "Expected message diff before code diff:\n$actual",
+            )
+        }
+    }
+
+    @Compare
+    @Test
+    fun `commit compare with reverse puts the older version on the new side`() {
+        withTestSetup(useFakeRemote) {
+            pushThenAmendTwoLocally()
+
+            val actual = getAndPrintCommitCompareString("1", reverse = true)
+            assertContains(actual, "--- local/$COMMIT_MESSAGE_LABEL")
+            assertContains(actual, "+++ remote/$COMMIT_MESSAGE_LABEL")
+        }
+    }
+
+    @Compare
+    @Test
+    fun `commit compare reports identical versions`() {
+        withTestSetup(useFakeRemote) {
+            createCommitsFrom(
+                testCase {
+                    repository {
+                        commit { title = "one" }
+                        commit {
+                            title = "two"
+                            localRefs += "development"
+                        }
+                    }
+                }
+            )
+            push()
+
+            val actual = getAndPrintCommitCompareString("2")
+            assertContains(actual, "identical")
+        }
+    }
+
+    @Compare
+    @Test
+    fun `commit compare falls back to range-diff when the rebase conflicts with the commit`() {
+        withTestSetup(useFakeRemote) {
+            createCommitsFrom(
+                testCase {
+                    repository {
+                        commit { title = "one" }
+                        commit {
+                            title = "two"
+                            localRefs += "development"
+                        }
+                    }
+                }
+            )
+            push()
+
+            // Target gains its own two.txt, so replaying the remote "two" (which adds two.txt)
+            // onto the rebased base is an add/add conflict.
+            val stack = localGit.logRange("$remoteName/main", "development")
+            localGit.checkout("$remoteName/main")
+            localRepo.resolve("two.txt").writeText("upstream\n")
+            localGit.add("two.txt").commit("upstream")
+            localGit.push(listOf(RefSpec("+HEAD", "main")), remoteName)
+            localGit.fetch(remoteName)
+            localGit.cherryPick(stack.first())
+            delay(1200.milliseconds)
+            localRepo.resolve("two.txt").writeText("upstream\nTitle: two\n")
+            localGit.add("two.txt").commit("two", mapOf(COMMIT_ID_LABEL to "two"))
+            localGit.branch("development", force = true)
+            localGit.checkout("development")
+
+            val actual = getAndPrintCommitCompareString("1")
+            assertContains(actual, "Showing `git range-diff` instead")
+            assertContains(actual, Regex("""1: +\w+ ! 1: +\w+ two"""))
+        }
+    }
+
+    @Compare
+    @Test
+    fun `commit compare refuses a commit that exists on only one side`() {
+        withTestSetup(useFakeRemote) {
+            createCommitsFrom(
+                testCase {
+                    repository {
+                        commit {
+                            title = "one"
+                            localRefs += "development"
+                        }
+                    }
+                }
+            )
+            push()
+            createCommitsFrom(
+                testCase {
+                    repository {
+                        commit { title = "one" }
+                        commit {
+                            title = "two"
+                            localRefs += "development"
+                        }
+                    }
+                }
+            )
+
+            val thrown =
+                assertFailsWith<GitJasprException> {
+                    gitJaspr.getCommitCompareString(selector = "1")
+                }
+            assertContains(thrown.message, "exists only in the local stack")
+        }
+    }
+
+    private suspend fun GitHubTestHarness.pushThenAmendTwoLocally() {
+        createCommitsFrom(
+            testCase {
+                repository {
+                    commit { title = "one" }
+                    commit {
+                        title = "two"
+                        localRefs += "development"
+                    }
+                }
+            }
+        )
+        push()
+        delay(1200.milliseconds)
+        createCommitsFrom(
+            testCase {
+                repository {
+                    commit { title = "one" }
+                    commit {
+                        title = "two_amended_locally"
+                        id = "two"
+                        localRefs += "development"
+                    }
+                }
+            }
+        )
+    }
+
+    /**
+     * Adds an `upstream.txt` commit to the remote target, then replays the local stack onto it so
+     * the local and remote versions of every commit sit on different bases.
+     */
+    private fun GitHubTestHarness.advanceRemoteMainAndRebaseDevelopment() {
+        val stack = localGit.logRange("$remoteName/main", "development")
+        localGit.checkout("$remoteName/main")
+        localRepo.resolve("upstream.txt").writeText("upstream\n")
+        localGit.add("upstream.txt").commit("upstream")
+        localGit.push(listOf(RefSpec("+HEAD", "main")), remoteName)
+        localGit.fetch(remoteName)
+        for (commit in stack) {
+            localGit.cherryPick(commit)
+        }
+        localGit.branch("development", force = true)
+        localGit.checkout("development")
     }
 
     // endregion

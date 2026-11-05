@@ -36,6 +36,7 @@ import com.github.ajalt.clikt.sources.PropertiesValueSource
 import com.github.ajalt.clikt.sources.ValueSource.Companion.getKey
 import com.github.ajalt.mordant.terminal.prompt
 import java.io.File
+import java.io.IOException
 import java.lang.reflect.Proxy
 import java.time.ZonedDateTime
 import java.util.Properties
@@ -610,10 +611,11 @@ class Compare : GitJasprSubcommand() {
     // language=Markdown
     override fun help(context: Context) =
         """
-        Compare your local stack to the remote named stack side-by-side.
+        Compare your local stack to the remote named stack side-by-side, or diff one
+        commit's local and remote versions.
 
-        Each commit pair appears on one row. The marker column shows whether they're
-        content-identical (`==`), diverged (`~~`), or one-sided (blank).
+        With no argument, each commit pair appears on one row. The marker column shows
+        whether they're content-identical (`==`), diverged (`~~`), or one-sided (blank).
 
         On diverged rows, the newer side is bold with a leading `*`; the older side is
         dimmed. Direction of "newer" is determined by commit date.
@@ -621,13 +623,49 @@ class Compare : GitJasprSubcommand() {
         Shared row index `[N]` lets the eye connect reordered commits that appear at
         different positions on the two sides.
 
+        With a row index or a ref (either side's SHA works), shows how that commit's two
+        versions differ, with changes caused only by rebasing removed. The commit message
+        diff comes first, then the code diff. The newer version is the new side of the
+        diff (`+` lines); file headers say which side is `local/` and which is `remote/`.
+
+            jaspr compare 3
+            jaspr compare HEAD~1
+            jaspr compare 3 --reverse
+
         """
             .trimIndent()
 
     private val targetRef by TargetRefOptions()
 
+    private val selector by
+        argument(name = "REF_OR_INDEX")
+            .optional()
+            .help("Row index from `jaspr compare`, or a ref to a commit on either side")
+
+    private val reverse by
+        option("--reverse").flag().help {
+            "With REF_OR_INDEX, put the older version on the new side of the diff"
+        }
+
     override suspend fun doRun() {
-        print(appWiring.gitJaspr.getCompareString(targetRef.refSpec, theme))
+        val selector = selector
+        if (selector == null) {
+            if (reverse) throw UsageError("--reverse requires REF_OR_INDEX")
+            print(appWiring.gitJaspr.getCompareString(targetRef.refSpec, theme))
+        } else {
+            val workingDirectory = appWiring.config.workingDirectory
+            withContext(Dispatchers.IO) {
+                val output =
+                    appWiring.gitJaspr.getCommitCompareString(
+                        targetRef.refSpec,
+                        selector,
+                        reverse,
+                        theme,
+                        color = isGitDiffColorEnabled(workingDirectory),
+                    )
+                printWithGitPager(output, workingDirectory)
+            }
+        }
     }
 }
 
@@ -2432,6 +2470,78 @@ private fun <T> fzfSelect(
     } catch (_: Exception) {
         FzfResult.NotAvailable
     }
+}
+
+/**
+ * True if git would color diff output written to this process's stdout, honoring `color.diff` and
+ * `color.ui` (equivalent to `git config --get-colorbool color.diff <stdout-is-tty>`).
+ */
+private fun isGitDiffColorEnabled(workingDirectory: File): Boolean {
+    val stdoutIsTerminal = System.console() != null
+    return try {
+        val process =
+            ProcessBuilder(
+                    "git",
+                    "config",
+                    "--get-colorbool",
+                    "color.diff",
+                    stdoutIsTerminal.toString(),
+                )
+                .directory(workingDirectory)
+                .start()
+        val output = process.inputStream.bufferedReader().readText().trim()
+        process.waitFor()
+        output == "true"
+    } catch (_: IOException) {
+        stdoutIsTerminal
+    }
+}
+
+/**
+ * Prints [text] through git's configured pager (`git var GIT_PAGER`, which honors `$GIT_PAGER`,
+ * `core.pager`, and `$PAGER`), so diff pagers like `delta` apply. Prints directly when stdout isn't
+ * a terminal or the pager is `cat`.
+ */
+private fun printWithGitPager(text: String, workingDirectory: File) {
+    val pager =
+        if (System.console() == null) {
+            null
+        } else {
+            try {
+                val process =
+                    ProcessBuilder("git", "var", "GIT_PAGER").directory(workingDirectory).start()
+                process.inputStream.bufferedReader().readText().trim().also { process.waitFor() }
+            } catch (_: IOException) {
+                "less"
+            }
+        }
+    if (pager.isNullOrEmpty() || pager == "cat") {
+        print(text)
+        return
+    }
+    val process =
+        try {
+            // Run through the shell like git does, since core.pager may contain arguments or pipes.
+            ProcessBuilder("sh", "-c", pager)
+                .directory(workingDirectory)
+                .redirectOutput(ProcessBuilder.Redirect.INHERIT)
+                .redirectError(ProcessBuilder.Redirect.INHERIT)
+                .apply {
+                    // Same defaults git sets for its pager: quit if one screen, keep color.
+                    environment().putIfAbsent("LESS", "FRX")
+                    environment().putIfAbsent("LV", "-c")
+                }
+                .start()
+        } catch (_: IOException) {
+            print(text)
+            return
+        }
+    try {
+        process.outputStream.bufferedWriter().use { writer -> writer.write(text) }
+    } catch (_: IOException) {
+        // The user quit the pager before reading everything.
+    }
+    process.waitFor()
 }
 
 /** Pipes [lines] through the user's pager (`$PAGER`, defaulting to `less -RF`). */

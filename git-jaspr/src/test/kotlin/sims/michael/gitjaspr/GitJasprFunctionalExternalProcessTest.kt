@@ -126,6 +126,29 @@ class GitJasprFunctionalExternalProcessTest : GitJasprTest {
         )
     }
 
+    override suspend fun GitHubTestHarness.getAndPrintCommitCompareString(
+        selector: String,
+        reverse: Boolean,
+        refSpec: RefSpec,
+    ): String {
+        return executeCli(
+            scratchDir = scratchDir,
+            remoteUri = remoteUri,
+            remoteName = remoteName,
+            extraCliArgs = emptyList(),
+            homeDirConfig = buildHomeDirConfig(),
+            repoDirConfig = emptyMap(),
+            strings =
+                buildList {
+                    addAll(listOf("--remote-name", remoteName, "compare", selector))
+                    if (reverse) add("--reverse")
+                    addAll(listOf("--target", refSpec.remoteRef, "--local", refSpec.localRef))
+                },
+            invokeLocation = localRepo,
+            javaOptions = javaOptions,
+        )
+    }
+
     override fun GitHubTestHarness.pull(refSpec: RefSpec, theirs: Boolean): String {
         return executeCli(
             scratchDir = scratchDir,

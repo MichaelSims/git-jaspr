@@ -623,20 +623,182 @@ class GitJaspr(
         theme: Theme = MonoTheme,
     ): String {
         logger.trace("getCompareString {}", refSpec)
+        val stacks =
+            when (val loaded = loadCompareStacks(refSpec, theme)) {
+                is CompareStacks.NothingToCompare -> return loaded.message
+                is CompareStacks.Loaded -> loaded
+            }
+        val navState = stacks.navState
+        val cursorSha = navState?.stack?.getOrNull(navState.cursorIndex)?.sha
+
+        return DivergenceClassifier(getJasprDir(), gitClient).use { classifier ->
+            val rows = alignStacks(stacks.localStack, stacks.remoteStack, classifier)
+            buildString {
+                if (navState != null) appendLine(navBanner(navState, theme))
+                append(renderCompare(rows, stacks.remoteStackRef, theme, cursorSha = cursorSha))
+                if (stacks.numAlreadyMerged > 0) {
+                    appendLine()
+                    appendLine(
+                        theme.warning(
+                            "${stacks.numAlreadyMerged} " +
+                                "${commitOrCommits(stacks.numAlreadyMerged)} already " +
+                                "merged into ${stacks.targetRef} (not shown). " +
+                                "Run `jaspr rebase` to clean up."
+                        )
+                    )
+                }
+            }
+        }
+    }
+
+    /**
+     * Diffs one commit's local and remote versions with rebase-only changes removed, for `jaspr
+     * compare <ref-or-index>`. [selector] is a row index from `jaspr compare` or any ref that
+     * resolves to a commit on either side.
+     *
+     * The older version's patch is replayed onto the newer version's parent with an in-memory
+     * three-way merge, and the result is diffed against the newer version, so only the changes made
+     * to the commit itself remain. When that merge conflicts (the rebase touched the same lines as
+     * the commit), the output falls back to `git range-diff`. A commit message diff, when the
+     * messages differ, comes first.
+     *
+     * [color] forces ANSI color in git's diff output; [theme] styles jaspr's own lines.
+     */
+    fun getCommitCompareString(
+        refSpec: RefSpec = RefSpec(DEFAULT_LOCAL_OBJECT, DEFAULT_TARGET_REF),
+        selector: String,
+        reverse: Boolean = false,
+        theme: Theme = MonoTheme,
+        color: Boolean = false,
+    ): String {
+        logger.trace("getCommitCompareString {} {} reverse={}", refSpec, selector, reverse)
+        val stacks =
+            when (val loaded = loadCompareStacks(refSpec, theme)) {
+                is CompareStacks.NothingToCompare -> return loaded.message
+                is CompareStacks.Loaded -> loaded
+            }
+        val rows =
+            DivergenceClassifier(getJasprDir(), gitClient).use { classifier ->
+                alignStacks(stacks.localStack, stacks.remoteStack, classifier)
+            }
+        val index = resolveCompareIndex(rows, selector, ::resolveCommitShaOrNull)
+        return when (val comparison = buildCommitComparison(rows, index, reverse)) {
+            is CommitComparison.OneSided ->
+                throw GitJasprException(
+                    "[${comparison.index}] ${comparison.commit.shortMessage} exists only in the " +
+                        "${comparison.side.label} stack, so there's nothing to compare it to."
+                )
+            is CommitComparison.Identical ->
+                theme.muted(
+                    "[${comparison.index}] ${comparison.local.shortMessage}: local and remote " +
+                        "versions are identical (ignoring rebases)."
+                ) + "\n"
+            is CommitComparison.Diverged -> renderDivergedCommit(comparison, theme, color)
+        }
+    }
+
+    private fun renderDivergedCommit(
+        comparison: CommitComparison.Diverged,
+        theme: Theme,
+        color: Boolean,
+    ): String = buildString {
+        val left = comparison.left
+        val right = comparison.right
+        fun describe(sideCommit: SideCommit): String {
+            val newerSuffix = if (sideCommit.side == comparison.newerSide) " (newer)" else ""
+            return "${sideCommit.side.label} ${sideCommit.commit.hash.take(7)}$newerSuffix"
+        }
+        appendLine(theme.heading("[${comparison.index}] ${right.commit.shortMessage}"))
+        appendLine("${describe(left)} → ${describe(right)}")
+        if (comparison.newerSide == null) {
+            appendLine(theme.muted("Both versions have the same commit date."))
+        }
+        appendLine()
+
+        val leftMessage = left.commit.fullMessage.trimEnd() + "\n"
+        val rightMessage = right.commit.fullMessage.trimEnd() + "\n"
+        if (leftMessage != rightMessage) {
+            append(
+                gitClient.diffText(
+                    leftMessage,
+                    rightMessage,
+                    "${left.side.label}/$COMMIT_MESSAGE_LABEL",
+                    "${right.side.label}/$COMMIT_MESSAGE_LABEL",
+                    color,
+                )
+            )
+        }
+
+        val leftHash = left.commit.hash
+        val rightHash = right.commit.hash
+        val normalized =
+            gitClient.mergeTreeWriteTree(
+                base = "$leftHash^",
+                ours = "$rightHash^",
+                theirs = leftHash,
+            )
+        when (normalized) {
+            is MergeTreeResult.Clean -> {
+                val codeDiff =
+                    gitClient.diff(
+                        normalized.treeSha,
+                        rightHash,
+                        srcPrefix = "${left.side.label}/",
+                        dstPrefix = "${right.side.label}/",
+                        color = color,
+                    )
+                if (codeDiff.isEmpty() && leftMessage == rightMessage) {
+                    appendLine(theme.muted("No differences after removing rebase changes."))
+                }
+                append(codeDiff)
+            }
+            is MergeTreeResult.Conflict -> {
+                appendLine(
+                    theme.warning(
+                        "Couldn't remove rebase changes from the code diff (the rebase touched " +
+                            "the same lines as this commit). Showing `git range-diff` instead:"
+                    )
+                )
+                appendLine()
+                append(
+                    gitClient.rangeDiff(
+                        "$leftHash^..$leftHash",
+                        "$rightHash^..$rightHash",
+                        color,
+                        // Each range is one commit and we already know they pair, so make the
+                        // factor high enough that git never reports them as unrelated.
+                        creationFactor = 1000,
+                    )
+                )
+            }
+        }
+    }
+
+    private fun resolveCommitShaOrNull(ref: String): String? =
+        try {
+            gitClient.log(ref, 1).firstOrNull()?.hash
+        } catch (e: Exception) {
+            logger.debug("Couldn't resolve {} to a commit", ref, e)
+            null
+        }
+
+    /**
+     * Loads and filters the local and remote stacks shared by both forms of `jaspr compare`. During
+     * a nav session HEAD is detached at the cursor, which would collapse the local stack to just
+     * the cursor's prefix, so the local stack is walked from the pre-nav branch instead.
+     */
+    private fun loadCompareStacks(refSpec: RefSpec, theme: Theme): CompareStacks {
         val remoteName = config.remoteName
         gitClient.fetch(remoteName)
         val remoteBranches = gitClient.getRemoteBranches(remoteName)
 
-        // During a nav session HEAD is detached at the cursor, which would collapse the LOCAL
-        // column to just the cursor's prefix. Walk from the pre-nav branch instead.
         val navState = if (isNavSessionActive()) readNavState() else null
         val effectiveLocalRef = navState?.headBeforeDetach ?: refSpec.localRef
-        val cursorSha = navState?.stack?.getOrNull(navState.cursorIndex)?.sha
 
         val rawLocalStack =
             gitClient.getCommitStack(remoteName, effectiveLocalRef, refSpec.remoteRef)
         if (rawLocalStack.isEmpty()) {
-            return theme.muted("Stack is empty.") + "\n"
+            return CompareStacks.NothingToCompare(theme.muted("Stack is empty.") + "\n")
         }
 
         val stackName =
@@ -678,29 +840,36 @@ class GitJaspr(
                 } else {
                     "All $numAlreadyMerged commits have"
                 }
-            return theme.warning(
-                "$mergedDescription been merged into ${namedStackRef.targetRef}. " +
-                    "Nothing to compare. Run `jaspr rebase` to clean up."
-            ) + "\n"
+            return CompareStacks.NothingToCompare(
+                theme.warning(
+                    "$mergedDescription been merged into ${namedStackRef.targetRef}. " +
+                        "Nothing to compare. Run `jaspr rebase` to clean up."
+                ) + "\n"
+            )
         }
 
-        return DivergenceClassifier(getJasprDir(), gitClient).use { classifier ->
-            val rows = alignStacks(localStack, remoteStack, classifier)
-            buildString {
-                if (navState != null) appendLine(navBanner(navState, theme))
-                append(renderCompare(rows, "$remoteName/$stackName", theme, cursorSha = cursorSha))
-                if (numAlreadyMerged > 0) {
-                    appendLine()
-                    appendLine(
-                        theme.warning(
-                            "$numAlreadyMerged ${commitOrCommits(numAlreadyMerged)} already " +
-                                "merged into ${namedStackRef.targetRef} (not shown). " +
-                                "Run `jaspr rebase` to clean up."
-                        )
-                    )
-                }
-            }
-        }
+        return CompareStacks.Loaded(
+            localStack = localStack,
+            remoteStack = remoteStack,
+            remoteStackRef = "$remoteName/$stackName",
+            targetRef = namedStackRef.targetRef,
+            numAlreadyMerged = numAlreadyMerged,
+            navState = navState,
+        )
+    }
+
+    private sealed interface CompareStacks {
+        /** [message] is already themed and newline-terminated. */
+        data class NothingToCompare(val message: String) : CompareStacks
+
+        data class Loaded(
+            val localStack: List<Commit>,
+            val remoteStack: List<Commit>,
+            val remoteStackRef: String,
+            val targetRef: String,
+            val numAlreadyMerged: Int,
+            val navState: NavState?,
+        ) : CompareStacks
     }
 
     /**

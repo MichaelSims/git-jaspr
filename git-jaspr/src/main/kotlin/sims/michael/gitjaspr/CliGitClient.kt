@@ -2,6 +2,7 @@ package sims.michael.gitjaspr
 
 import java.io.File
 import java.util.concurrent.TimeUnit
+import kotlin.io.path.createTempDirectory
 import org.eclipse.jgit.lib.Constants
 import org.slf4j.LoggerFactory
 import org.zeroturnaround.exec.ProcessExecutor
@@ -947,6 +948,89 @@ class CliGitClient(
                 )
         }
     }
+
+    override fun diff(
+        from: String,
+        to: String,
+        srcPrefix: String,
+        dstPrefix: String,
+        color: Boolean,
+    ): String {
+        logger.trace("diff {} {}", from, to)
+        return executeCommand(
+                listOf(
+                    "git",
+                    "diff",
+                    "--no-ext-diff",
+                    colorFlag(color),
+                    "--src-prefix=$srcPrefix",
+                    "--dst-prefix=$dstPrefix",
+                    from,
+                    to,
+                )
+            )
+            .output
+            .string
+    }
+
+    override fun diffText(
+        oldText: String,
+        newText: String,
+        oldLabel: String,
+        newLabel: String,
+        color: Boolean,
+    ): String {
+        logger.trace("diffText {} {}", oldLabel, newLabel)
+        val tempDir = createTempDirectory("jaspr-diff-text").toFile()
+        try {
+            for ((label, text) in listOf(oldLabel to oldText, newLabel to newText)) {
+                tempDir.resolve(label).apply { parentFile.mkdirs() }.writeText(text)
+            }
+            // Run from the temp dir with relative paths and --no-prefix so the header shows the
+            // labels verbatim instead of absolute temp paths. --no-index exits 1 when the files
+            // differ, which is the expected case here.
+            return ProcessExecutor()
+                .directory(tempDir)
+                .command(
+                    "git",
+                    "diff",
+                    "--no-index",
+                    "--no-ext-diff",
+                    "--no-prefix",
+                    colorFlag(color),
+                    oldLabel,
+                    newLabel,
+                )
+                .destroyOnExit()
+                .readOutput(true)
+                .exitValues(0, 1)
+                .execute()
+                .output
+                .string
+        } finally {
+            tempDir.deleteRecursively()
+        }
+    }
+
+    override fun rangeDiff(
+        oldRange: String,
+        newRange: String,
+        color: Boolean,
+        creationFactor: Int?,
+    ): String {
+        logger.trace("rangeDiff {} {}", oldRange, newRange)
+        val command = buildList {
+            add("git")
+            add("range-diff")
+            add(colorFlag(color))
+            if (creationFactor != null) add("--creation-factor=$creationFactor")
+            add(oldRange)
+            add(newRange)
+        }
+        return executeCommand(command).output.string
+    }
+
+    private fun colorFlag(color: Boolean) = if (color) "--color=always" else "--color=never"
 
     private fun executeCommand(
         command: List<String>,
