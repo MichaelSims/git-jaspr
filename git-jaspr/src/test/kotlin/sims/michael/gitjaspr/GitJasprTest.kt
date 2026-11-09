@@ -68,13 +68,18 @@ interface GitJasprTest {
     ) = gitJaspr.getCompareString(refSpec).also(::print)
 
     suspend fun GitHubTestHarness.getAndPrintCommitCompareString(
-        selector: String,
+        vararg selectors: String,
         reverse: Boolean = false,
         refSpec: RefSpec = RefSpec(DEFAULT_LOCAL_OBJECT, DEFAULT_TARGET_REF),
     ) =
         gitJaspr
-            .getCommitCompareString(refSpec, selector = selector, reverse = reverse)
+            .getCommitCompareString(refSpec, selectors = selectors.toList(), reverse = reverse)
             .also(::print)
+
+    suspend fun GitHubTestHarness.getAndPrintComparePatchString(
+        reverse: Boolean = false,
+        refSpec: RefSpec = RefSpec(DEFAULT_LOCAL_OBJECT, DEFAULT_TARGET_REF),
+    ) = gitJaspr.getCompareString(refSpec, patch = true, reverse = reverse).also(::print)
 
     fun GitHubTestHarness.pull(
         refSpec: RefSpec = RefSpec(DEFAULT_LOCAL_OBJECT, DEFAULT_TARGET_REF),
@@ -4865,7 +4870,7 @@ interface GitJasprTest {
 
     @Compare
     @Test
-    fun `commit compare refuses a commit that exists on only one side`() {
+    fun `commit compare shows a commit that exists on only one side with its own patch`() {
         withTestSetup(useFakeRemote) {
             createCommitsFrom(
                 testCase {
@@ -4890,12 +4895,94 @@ interface GitJasprTest {
                 }
             )
 
-            val thrown =
-                assertFailsWith<GitJasprException> {
-                    gitJaspr.getCommitCompareString(selector = "1")
-                }
-            assertContains(thrown.message, "exists only in the local stack")
+            val actual = getAndPrintCommitCompareString("1")
+            assertContains(actual, "(local-only)")
+            assertContains(actual, "+++ b/two.txt")
+            assertContains(actual, "+Title: two")
         }
+    }
+
+    @Compare
+    @Test
+    fun `commit compare with several selectors shows each in the given order without overview`() {
+        withTestSetup(useFakeRemote) {
+            pushThenDivergeStack()
+
+            val actual = getAndPrintCommitCompareString("3", "1")
+            assertFalse(actual.contains("LOCAL"), "Did not expect the overview:\n$actual")
+            val twoHeader = actual.indexOf("[3] two_amended")
+            val fourHeader = actual.indexOf("[1] four")
+            assertTrue(twoHeader >= 0 && fourHeader > twoHeader, "Wrong sections:\n$actual")
+        }
+    }
+
+    @Compare
+    @Test
+    fun `commit compare shows a commit selected twice once`() {
+        withTestSetup(useFakeRemote) {
+            pushThenAmendTwoLocally()
+
+            val actual = getAndPrintCommitCompareString("1", "HEAD")
+            assertEquals(1, Regex("""\+\+\+ local/$COMMIT_MESSAGE_LABEL""").findAll(actual).count())
+        }
+    }
+
+    @Compare
+    @Test
+    fun `compare with patch shows overview then every non-identical row in overview order`() {
+        withTestSetup(useFakeRemote) {
+            pushThenDivergeStack()
+
+            val actual = getAndPrintComparePatchString()
+            val overview = actual.indexOf("LOCAL")
+            val sections =
+                listOf("[1] four", "[2] three_amended", "[3] two_amended").map(actual::indexOf)
+            assertTrue(overview >= 0, "Expected the overview first:\n$actual")
+            assertEquals(sections.sorted(), sections, "Sections out of order:\n$actual")
+            assertTrue(sections.first() > overview, "Expected sections after overview:\n$actual")
+            assertContains(actual, "+Title: four")
+            assertFalse(actual.contains("\n[4] one"), "Identical row got a section:\n$actual")
+        }
+    }
+
+    /**
+     * Pushes one, two, three, then replaces the local stack with one, two_amended, three_amended,
+     * and a local-only four. Compare rows (tip first): [1] four, [2] three, [3] two, [4] one.
+     */
+    private suspend fun GitHubTestHarness.pushThenDivergeStack() {
+        createCommitsFrom(
+            testCase {
+                repository {
+                    commit { title = "one" }
+                    commit { title = "two" }
+                    commit {
+                        title = "three"
+                        localRefs += "development"
+                    }
+                }
+            }
+        )
+        push()
+        delay(1200.milliseconds)
+        createCommitsFrom(
+            testCase {
+                repository {
+                    commit { title = "one" }
+                    commit {
+                        title = "two_amended"
+                        id = "two"
+                    }
+                    commit {
+                        title = "three_amended"
+                        id = "three"
+                    }
+                    commit {
+                        title = "four"
+                        localRefs += "development"
+                    }
+                }
+            }
+        )
     }
 
     private suspend fun GitHubTestHarness.pushThenAmendTwoLocally() {

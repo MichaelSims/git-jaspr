@@ -618,11 +618,19 @@ class GitJaspr(
         }
     }
 
+    /**
+     * Renders the side-by-side view for `jaspr compare`. With [patch] (`jaspr compare -p`), the
+     * view is followed by a per-commit section for every row that isn't identical, in row order,
+     * rendered as in [getCommitCompareString]. [reverse] and [color] apply only to those sections.
+     */
     fun getCompareString(
         refSpec: RefSpec = RefSpec(DEFAULT_LOCAL_OBJECT, DEFAULT_TARGET_REF),
         theme: Theme = MonoTheme,
+        patch: Boolean = false,
+        reverse: Boolean = false,
+        color: Boolean = false,
     ): String {
-        logger.trace("getCompareString {}", refSpec)
+        logger.trace("getCompareString {} patch={} reverse={}", refSpec, patch, reverse)
         val stacks =
             when (val loaded = loadCompareStacks(refSpec, theme)) {
                 is CompareStacks.NothingToCompare -> return loaded.message
@@ -647,31 +655,40 @@ class GitJaspr(
                         )
                     )
                 }
+                if (patch) {
+                    for (index in differingIndexes(rows)) {
+                        appendLine()
+                        append(renderCommitComparison(rows, index, reverse, theme, color))
+                    }
+                }
             }
         }
     }
 
     /**
-     * Diffs one commit's local and remote versions with rebase-only changes removed, for `jaspr
-     * compare <ref-or-index>`. [selector] is a row index from `jaspr compare` or any ref that
-     * resolves to a commit on either side.
+     * Diffs commits' local and remote versions with rebase-only changes removed, for `jaspr compare
+     * <ref-or-index>...`. Each of [selectors] is a row index from `jaspr compare` or any ref that
+     * resolves to a commit on either side. Sections appear in the order given, and a commit
+     * selected more than once (by index and by SHA, say) appears once.
      *
-     * The older version's patch is replayed onto the newer version's parent with an in-memory
-     * three-way merge, and the result is diffed against the newer version, so only the changes made
-     * to the commit itself remain. When that merge conflicts (the rebase touched the same lines as
-     * the commit), the output falls back to `git range-diff`. A commit message diff, when the
-     * messages differ, comes first.
+     * For a diverged commit, the older version's patch is replayed onto the newer version's parent
+     * with an in-memory three-way merge, and the result is diffed against the newer version, so
+     * only the changes made to the commit itself remain. When that merge conflicts (the rebase
+     * touched the same lines as the commit), the output falls back to `git range-diff`. A commit
+     * message diff, when the messages differ, comes first. A commit that exists on only one side is
+     * shown with its message and its own patch.
      *
      * [color] forces ANSI color in git's diff output; [theme] styles jaspr's own lines.
      */
     fun getCommitCompareString(
         refSpec: RefSpec = RefSpec(DEFAULT_LOCAL_OBJECT, DEFAULT_TARGET_REF),
-        selector: String,
+        selectors: List<String>,
         reverse: Boolean = false,
         theme: Theme = MonoTheme,
         color: Boolean = false,
     ): String {
-        logger.trace("getCommitCompareString {} {} reverse={}", refSpec, selector, reverse)
+        logger.trace("getCommitCompareString {} {} reverse={}", refSpec, selectors, reverse)
+        require(selectors.isNotEmpty()) { "At least one selector is required" }
         val stacks =
             when (val loaded = loadCompareStacks(refSpec, theme)) {
                 is CompareStacks.NothingToCompare -> return loaded.message
@@ -681,13 +698,23 @@ class GitJaspr(
             DivergenceClassifier(getJasprDir(), gitClient).use { classifier ->
                 alignStacks(stacks.localStack, stacks.remoteStack, classifier)
             }
-        val index = resolveCompareIndex(rows, selector, ::resolveCommitShaOrNull)
-        return when (val comparison = buildCommitComparison(rows, index, reverse)) {
-            is CommitComparison.OneSided ->
-                throw GitJasprException(
-                    "[${comparison.index}] ${comparison.commit.shortMessage} exists only in the " +
-                        "${comparison.side.label} stack, so there's nothing to compare it to."
-                )
+        return selectors
+            .map { selector -> resolveCompareIndex(rows, selector, ::resolveCommitShaOrNull) }
+            .distinct()
+            .joinToString("\n") { index ->
+                renderCommitComparison(rows, index, reverse, theme, color)
+            }
+    }
+
+    private fun renderCommitComparison(
+        rows: List<CompareRow>,
+        index: Int,
+        reverse: Boolean,
+        theme: Theme,
+        color: Boolean,
+    ): String =
+        when (val comparison = buildCommitComparison(rows, index, reverse)) {
+            is CommitComparison.OneSided -> renderOneSidedCommit(comparison, theme, color)
             is CommitComparison.Identical ->
                 theme.muted(
                     "[${comparison.index}] ${comparison.local.shortMessage}: local and remote " +
@@ -695,6 +722,23 @@ class GitJaspr(
                 ) + "\n"
             is CommitComparison.Diverged -> renderDivergedCommit(comparison, theme, color)
         }
+
+    private fun renderOneSidedCommit(
+        comparison: CommitComparison.OneSided,
+        theme: Theme,
+        color: Boolean,
+    ): String = buildString {
+        val commit = comparison.commit
+        appendLine(theme.heading("[${comparison.index}] ${commit.shortMessage}"))
+        appendLine(
+            "${comparison.side.label} ${commit.hash.take(7)} (${comparison.side.label}-only)"
+        )
+        appendLine()
+        for (line in commit.fullMessage.trimEnd().lines()) {
+            appendLine("    $line".trimEnd())
+        }
+        appendLine()
+        append(gitClient.diff("${commit.hash}^", commit.hash, "a/", "b/", color))
     }
 
     private fun renderDivergedCommit(

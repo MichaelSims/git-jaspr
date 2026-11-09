@@ -112,6 +112,19 @@ class CommitCompareTest {
     }
 
     @Test
+    fun `differing indexes skip identical rows and list a reordered pair once`() {
+        val rows =
+            listOf(
+                CompareRow(commit("l1", "a", newer), null, CompareRelation.LOCAL_ONLY, 1),
+                CompareRow(commit("l2", "b", newer), null, CompareRelation.DIVERGED_LOCAL_NEWER, 2),
+                row(3, CompareRelation.IDENTICAL),
+                CompareRow(null, commit("r2", "b", older), CompareRelation.DIVERGED_LOCAL_NEWER, 2),
+                CompareRow(null, commit("r4", "c", older), CompareRelation.REMOTE_ONLY, 4),
+            )
+        assertEquals(listOf(1, 2, 4), differingIndexes(rows))
+    }
+
+    @Test
     fun `identical row builds an identical comparison`() {
         val rows = listOf(row(1, CompareRelation.IDENTICAL))
         assertIs<CommitComparison.Identical>(buildCommitComparison(rows, 1))

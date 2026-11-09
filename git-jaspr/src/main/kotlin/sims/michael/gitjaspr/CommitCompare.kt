@@ -1,10 +1,11 @@
 package sims.michael.gitjaspr
 
-/**
- * Data model and selection logic for `jaspr compare <ref-or-index>`, which diffs one commit's local
- * and remote versions with rebase-only changes removed. Builds on the row alignment from
- * [alignStacks].
+/*
+ * Data model and selection logic for `jaspr compare <ref-or-index>...` and `jaspr compare -p`,
+ * which diff commits' local and remote versions with rebase-only changes removed. Builds on the
+ * row alignment from alignStacks.
  */
+
 /** File name the commit message diff is labeled with, under each side's prefix. */
 const val COMMIT_MESSAGE_LABEL = "COMMIT_MESSAGE"
 
@@ -66,6 +67,16 @@ fun resolveCompareIndex(
             "Commit ${sha.take(7)} isn't in the local stack or the remote named stack."
         )
 }
+
+/**
+ * Returns the index of every row that isn't [CompareRelation.IDENTICAL], in row order, for `jaspr
+ * compare -p`. A reordered commit's two rows share an index, so it appears once.
+ */
+fun differingIndexes(rows: List<CompareRow>): List<Int> =
+    rows
+        .filter { row -> row.relation != CompareRelation.IDENTICAL }
+        .map(CompareRow::index)
+        .distinct()
 
 /**
  * Builds the [CommitComparison] for the row(s) at [index]. A reordered commit appears in two rows

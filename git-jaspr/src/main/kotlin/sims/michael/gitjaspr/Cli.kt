@@ -611,8 +611,8 @@ class Compare : GitJasprSubcommand() {
     // language=Markdown
     override fun help(context: Context) =
         """
-        Compare your local stack to the remote named stack side-by-side, or diff one
-        commit's local and remote versions.
+        Compare your local stack to the remote named stack side-by-side, or diff
+        individual commits' local and remote versions.
 
         With no argument, each commit pair appears on one row. The marker column shows
         whether they're content-identical (`==`), diverged (`~~`), or one-sided (blank).
@@ -623,48 +623,72 @@ class Compare : GitJasprSubcommand() {
         Shared row index `[N]` lets the eye connect reordered commits that appear at
         different positions on the two sides.
 
-        With a row index or a ref (either side's SHA works), shows how that commit's two
+        With row indexes or refs (either side's SHA works), shows how each commit's two
         versions differ, with changes caused only by rebasing removed. The commit message
         diff comes first, then the code diff. The newer version is the new side of the
         diff (`+` lines); file headers say which side is `local/` and which is `remote/`.
+        A commit that exists on only one side is shown with its own patch.
+
+        With `-p`, shows the side-by-side view followed by the same diff for every row
+        that isn't `==`, in the order they appear.
 
             jaspr compare 3
-            jaspr compare HEAD~1
-            jaspr compare 3 --reverse
+            jaspr compare 19 18 16
+            jaspr compare HEAD~1 --reverse
+            jaspr compare -p
 
         """
             .trimIndent()
 
     private val targetRef by TargetRefOptions()
 
-    private val selector by
+    private val selectors by
         argument(name = "REF_OR_INDEX")
-            .optional()
-            .help("Row index from `jaspr compare`, or a ref to a commit on either side")
+            .multiple()
+            .help("Row indexes from `jaspr compare`, or refs to commits on either side")
+
+    private val patch by
+        option("-p", "--patch").flag().help {
+            "Show the side-by-side view, then how each commit that differs between the " +
+                "stacks differs"
+        }
 
     private val reverse by
         option("--reverse").flag().help {
-            "With REF_OR_INDEX, put the older version on the new side of the diff"
+            "With -p or REF_OR_INDEX, put the older version on the new side of each diff"
         }
 
     override suspend fun doRun() {
-        val selector = selector
-        if (selector == null) {
-            if (reverse) throw UsageError("--reverse requires REF_OR_INDEX")
+        if (patch && selectors.isNotEmpty()) {
+            throw UsageError("-p can't be combined with REF_OR_INDEX")
+        }
+        if (!patch && selectors.isEmpty()) {
+            if (reverse) throw UsageError("--reverse requires -p or REF_OR_INDEX")
             print(appWiring.gitJaspr.getCompareString(targetRef.refSpec, theme))
-        } else {
-            val workingDirectory = appWiring.config.workingDirectory
-            withContext(Dispatchers.IO) {
-                val output =
+            return
+        }
+        val workingDirectory = appWiring.config.workingDirectory
+        withContext(Dispatchers.IO) {
+            val color = isGitDiffColorEnabled(workingDirectory)
+            val output =
+                if (patch) {
+                    appWiring.gitJaspr.getCompareString(
+                        targetRef.refSpec,
+                        theme,
+                        patch = true,
+                        reverse = reverse,
+                        color = color,
+                    )
+                } else {
                     appWiring.gitJaspr.getCommitCompareString(
                         targetRef.refSpec,
-                        selector,
+                        selectors,
                         reverse,
                         theme,
-                        color = isGitDiffColorEnabled(workingDirectory),
+                        color,
                     )
-                printWithGitPager(output, workingDirectory)
-            }
+                }
+            printWithGitPager(output, workingDirectory)
         }
     }
 }

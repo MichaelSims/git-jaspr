@@ -127,7 +127,18 @@ class GitJasprFunctionalExternalProcessTest : GitJasprTest {
     }
 
     override suspend fun GitHubTestHarness.getAndPrintCommitCompareString(
-        selector: String,
+        vararg selectors: String,
+        reverse: Boolean,
+        refSpec: RefSpec,
+    ): String = executeCompareCli(selectors.toList(), reverse, refSpec)
+
+    override suspend fun GitHubTestHarness.getAndPrintComparePatchString(
+        reverse: Boolean,
+        refSpec: RefSpec,
+    ): String = executeCompareCli(listOf("-p"), reverse, refSpec)
+
+    private fun GitHubTestHarness.executeCompareCli(
+        compareArgs: List<String>,
         reverse: Boolean,
         refSpec: RefSpec,
     ): String {
@@ -140,7 +151,8 @@ class GitJasprFunctionalExternalProcessTest : GitJasprTest {
             repoDirConfig = emptyMap(),
             strings =
                 buildList {
-                    addAll(listOf("--remote-name", remoteName, "compare", selector))
+                    addAll(listOf("--remote-name", remoteName, "compare"))
+                    addAll(compareArgs)
                     if (reverse) add("--reverse")
                     addAll(listOf("--target", refSpec.remoteRef, "--local", refSpec.localRef))
                 },
