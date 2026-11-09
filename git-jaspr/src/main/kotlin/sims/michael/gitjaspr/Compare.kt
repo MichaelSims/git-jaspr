@@ -276,6 +276,38 @@ fun renderCompare(
             else rowLine
         )
     }
+    appendLine()
+    appendLine(theme.muted(summarizeCompare(rows)))
+}
+
+/**
+ * One-line tally of [rows] by relation, e.g. `21 identical, 0 diverged, 1 remote-only`. Counts
+ * commits rather than rows, so a reordered commit (two rows sharing an index) counts once, under
+ * identical or diverged, and also adds to the reordered count. Identical and diverged always
+ * appear; the other counts appear only when nonzero.
+ */
+fun summarizeCompare(rows: List<CompareRow>): String {
+    val commits = rows.groupBy(CompareRow::index).values
+    val relations = commits.map { group -> group.first().relation }
+    val diverged = relations.count { relation ->
+        relation == CompareRelation.DIVERGED_LOCAL_NEWER ||
+            relation == CompareRelation.DIVERGED_REMOTE_NEWER ||
+            relation == CompareRelation.DIVERGED_EQUAL_DATE
+    }
+    val optionalCounts =
+        listOf(
+            "local-only" to relations.count { it == CompareRelation.LOCAL_ONLY },
+            "remote-only" to relations.count { it == CompareRelation.REMOTE_ONLY },
+            "reordered" to commits.count { group -> group.size > 1 },
+        )
+    return buildList {
+            add("${relations.count { it == CompareRelation.IDENTICAL }} identical")
+            add("$diverged diverged")
+            for ((label, count) in optionalCounts) {
+                if (count > 0) add("$count $label")
+            }
+        }
+        .joinToString(", ")
 }
 
 /**
