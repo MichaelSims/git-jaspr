@@ -242,10 +242,19 @@ fun renderCompare(
     val reorderedByRow = rows.associateWith { row -> isReordered(row, localIds, remoteIds) }
 
     val markerWidth = 5
+    // Pad every index to the widest one so the SHA and subject columns stay aligned once the
+    // stack reaches two-digit indexes.
+    val indexWidth = rows.maxOfOrNull { row -> "[${row.index}]".length } ?: 0
     val leftWidth =
         rows
             .maxOfOrNull { row ->
-                formatCell(row, isLocal = true, maxSubjectLength, reorderedByRow.getValue(row))
+                formatCell(
+                        row,
+                        isLocal = true,
+                        maxSubjectLength,
+                        reorderedByRow.getValue(row),
+                        indexWidth,
+                    )
                     .length
             }
             ?.plus(2) ?: 0
@@ -253,8 +262,9 @@ fun renderCompare(
     appendLine(theme.heading("LOCAL".padEnd(leftWidth + markerWidth) + "REMOTE ($namedStackRef)"))
     for (row in rows) {
         val isReorderedRow = reorderedByRow.getValue(row)
-        val leftRaw = formatCell(row, isLocal = true, maxSubjectLength, isReorderedRow)
-        val rightRaw = formatCell(row, isLocal = false, maxSubjectLength, isReorderedRow)
+        val leftRaw = formatCell(row, isLocal = true, maxSubjectLength, isReorderedRow, indexWidth)
+        val rightRaw =
+            formatCell(row, isLocal = false, maxSubjectLength, isReorderedRow, indexWidth)
         val marker = computeMarker(row.relation, isReorderedRow)
 
         val leftStyled = styleCell(leftRaw.padEnd(leftWidth), row, isLocal = true, theme)
@@ -280,6 +290,7 @@ private fun formatCell(
     isLocal: Boolean,
     maxSubjectLength: Int,
     isReordered: Boolean,
+    indexWidth: Int,
 ): String {
     val commit = if (isLocal) row.local else row.remote
     if (commit == null) return ""
@@ -293,7 +304,8 @@ private fun formatCell(
     val newer = isNewerSide(row, isLocal)
     val asteriskCol = if (newer) "* " else "  "
     val subject = truncateSubject(commit.shortMessage, maxSubjectLength)
-    return "[${row.index}] $asteriskCol${commit.hash.take(7)} $subject$annotation"
+    val index = "[${row.index}]".padEnd(indexWidth)
+    return "$index $asteriskCol${commit.hash.take(7)} $subject$annotation"
 }
 
 private fun computeMarker(relation: CompareRelation, isReordered: Boolean): String =
