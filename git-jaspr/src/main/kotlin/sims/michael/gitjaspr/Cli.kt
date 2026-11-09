@@ -259,8 +259,10 @@ applicable.
                 "--theme",
                 completionCandidates = CompletionCandidates.Fixed(setOf("default", "mono")),
             )
-            .default("default")
-            .help { "Terminal theme (default, mono, or a custom name)" }
+            .help {
+                "Terminal theme (default, mono, or a custom name). When not set, uses mono if " +
+                    "$NO_COLOR_ENV_VAR is set or output isn't a terminal, otherwise default."
+            }
 
     private fun buildAppWiring(renderer: Renderer): AppWiring {
         val token =
@@ -367,8 +369,9 @@ applicable.
                 .forEach(::migrateOldConfigIfNeeded)
         }
         val themeProperties = loadThemeProperties()
-        logger.trace("Resolving theme '{}'", theme)
-        val resolvedTheme = resolveTheme(theme, themeProperties)
+        val themeName = theme ?: implicitThemeName()
+        logger.trace("Resolving theme '{}' (explicit: {})", themeName, theme != null)
+        val resolvedTheme = resolveTheme(themeName, themeProperties)
         logger.trace("Resolved theme: {}", resolvedTheme::class.simpleName)
         val renderer = ConsoleRenderer(resolvedTheme)
         if (showConfig) {
@@ -2309,12 +2312,12 @@ object Cli {
             } catch (e: GitJasprException) {
                 // Failures that surface before a subcommand's own handler runs land here: an
                 // invalid --theme value while the root command builds its theme, or a bad working
-                // directory resolved at startup. Render the clean message with the default theme
+                // directory resolved at startup. Render the clean message with a built-in theme
                 // (the custom theme may be the very thing that failed) rather than letting it
                 // escape as a raw stack trace. See GitJasprException for the convention. Genuinely
                 // unexpected exceptions are intentionally not caught here: this runs before file
                 // logging is set up, and a stack trace is the right signal for a real bug.
-                ConsoleRenderer(DefaultTheme).error { e.message }
+                ConsoleRenderer(implicitBuiltInTheme()).error { e.message }
                 exitProcess(255)
             }
         }
@@ -2498,9 +2501,12 @@ private fun <T> fzfSelect(
 
 /**
  * True if git would color diff output written to this process's stdout, honoring `color.diff` and
- * `color.ui` (equivalent to `git config --get-colorbool color.diff <stdout-is-tty>`).
+ * `color.ui` (equivalent to `git config --get-colorbool color.diff <stdout-is-tty>`) and
+ * [NO_COLOR_ENV_VAR].
  */
 private fun isGitDiffColorEnabled(workingDirectory: File): Boolean {
+    // git itself ignores NO_COLOR, so check it here.
+    if (isNoColorRequested()) return false
     val stdoutIsTerminal = System.console() != null
     return try {
         val process =

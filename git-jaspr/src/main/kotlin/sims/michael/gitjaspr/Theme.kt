@@ -85,6 +85,29 @@ val THEME_ROLES =
         "value",
     )
 
+/** Environment variable that turns off color across tools when set to a non-empty value. */
+const val NO_COLOR_ENV_VAR = "NO_COLOR"
+
+/**
+ * True when [noColorValue] (the value of [NO_COLOR_ENV_VAR]) asks for no color. Per no-color.org,
+ * any non-empty value counts.
+ */
+fun isNoColorRequested(noColorValue: String? = System.getenv(NO_COLOR_ENV_VAR)): Boolean =
+    !noColorValue.isNullOrEmpty()
+
+/**
+ * The theme to use when the user hasn't chosen one with `--theme` or a config file: `mono` when
+ * [NO_COLOR_ENV_VAR] is set or stdout isn't a terminal (so piped output and logs carry no escape
+ * codes), otherwise `default`.
+ */
+fun implicitThemeName(
+    noColorRequested: Boolean = isNoColorRequested(),
+    stdoutIsTerminal: Boolean = System.console() != null,
+): String = if (noColorRequested || !stdoutIsTerminal) "mono" else "default"
+
+/** The built-in theme matching [implicitThemeName], for paths that run before config is read. */
+fun implicitBuiltInTheme(): Theme = if (implicitThemeName() == "mono") MonoTheme else DefaultTheme
+
 /**
  * Resolves a [Theme] by name. Built-in names (`default`, `mono`) return singleton themes. Any other
  * name is treated as a custom scheme whose role overrides are read from [properties] using keys of
