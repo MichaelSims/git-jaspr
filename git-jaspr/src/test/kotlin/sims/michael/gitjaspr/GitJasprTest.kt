@@ -825,6 +825,36 @@ interface GitJasprTest {
 
     @Nav
     @Test
+    fun `goto with an all-digit ref outside the stack reports not in stack`() {
+        withTestSetup(useFakeRemote) {
+            createCommitsFrom(
+                testCase {
+                    repository {
+                        commit { title = "one" }
+                        commit {
+                            title = "two"
+                            localRefs += "development"
+                        }
+                    }
+                    checkout = "development"
+                }
+            )
+            localGit.fetch(remoteName)
+            // An all-digit name stands in for an abbreviated hash that happens to be all digits,
+            // which would otherwise be read as an out-of-range position.
+            val digitsRef = "1234567"
+            localGit.branch(digitsRef, startPoint = "$remoteName/$DEFAULT_TARGET_REF")
+
+            val exception =
+                assertThrows<GitJasprException> {
+                    gitJaspr.navigateToDestination(DEFAULT_TARGET_REF, digitsRef)
+                }
+            assertContains(exception.message, "not a commit in the current stack")
+        }
+    }
+
+    @Nav
+    @Test
     fun `goto current position is rejected`() {
         withTestSetup(useFakeRemote) {
             createCommitsFrom(

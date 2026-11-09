@@ -3472,16 +3472,21 @@ class GitJaspr(
         val inPositionRange = asInt != null && (asInt in 1..size || asInt in -size..-1)
 
         // A commit match wins only when the argument isn't already a valid in-range position, so
-        // ordinary positions (including "-1") are never handed to git for resolution.
-        if (!inPositionRange) {
-            val commitIndex = tryResolveStackIndex(state.stack, destination)
-            if (commitIndex != null) {
-                val sha = state.stack[commitIndex].sha.take(7)
-                return navigateToTarget(state, commitIndex, sha, "You are already on commit $sha.")
+        // ordinary positions (including "-1") are never handed to git for resolution. Negative
+        // numbers are never abbreviated hashes, and the CLI would read them as `git log -N`.
+        val resolvedHash =
+            if (inPositionRange || destination.startsWith("-")) null
+            else tryResolveCommitHash(destination)
+        if (resolvedHash != null) {
+            val commitIndex = state.stack.indexOfFirst { entry -> entry.sha == resolvedHash }
+            requireForUser(commitIndex >= 0) {
+                "'$destination' is not a commit in the current stack."
             }
+            val sha = state.stack[commitIndex].sha.take(7)
+            return navigateToTarget(state, commitIndex, sha, "You are already on commit $sha.")
         }
         return if (asInt != null) {
-            // Numeric but not a stack commit: position handling gives the range / zero error.
+            // Numeric and not a commit at all: position handling gives the range / zero error.
             navigateToPosition(state, asInt)
         } else {
             throw GitJasprException("'$destination' is not a commit in the current stack.")
@@ -3497,15 +3502,8 @@ class GitJaspr(
         }
     }
 
-    /**
-     * Resolve [commitish] to the index of the matching entry in [stack], or null when it doesn't
-     * resolve to a commit that is present in the stack.
-     */
-    private fun tryResolveStackIndex(stack: List<StackEntry>, commitish: String): Int? {
-        val resolvedHash =
-            runCatching { gitClient.log(commitish, 1).single().hash }.getOrNull() ?: return null
-        return stack.indexOfFirst { entry -> entry.sha == resolvedHash }.takeIf { it >= 0 }
-    }
+    private fun tryResolveCommitHash(commitish: String): String? =
+        runCatching { gitClient.log(commitish, 1).single().hash }.getOrNull()
 
     private fun navigateToPosition(state: NavState, position: Int): NavMoveResult {
         requireForUser(position != 0) {
