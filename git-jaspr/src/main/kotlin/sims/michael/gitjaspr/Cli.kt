@@ -665,9 +665,18 @@ class Compare : GitJasprSubcommand() {
         if (patch && selectors.isNotEmpty()) {
             throw UsageError("-p can't be combined with REF_OR_INDEX")
         }
+        val terminal = currentContext.terminal
+        // Only size to the terminal when output goes to one; piped output keeps the fixed cap.
+        val terminalWidth = terminal.size.width.takeIf { terminal.terminalInfo.outputInteractive }
         if (!patch && selectors.isEmpty()) {
             if (reverse) throw UsageError("--reverse requires -p or REF_OR_INDEX")
-            print(appWiring.gitJaspr.getCompareString(targetRef.refSpec, theme))
+            print(
+                appWiring.gitJaspr.getCompareString(
+                    targetRef.refSpec,
+                    theme,
+                    terminalWidth = terminalWidth,
+                )
+            )
             return
         }
         val workingDirectory = appWiring.config.workingDirectory
@@ -681,6 +690,7 @@ class Compare : GitJasprSubcommand() {
                         patch = true,
                         reverse = reverse,
                         color = color,
+                        terminalWidth = terminalWidth,
                     )
                 } else {
                     appWiring.gitJaspr.getCommitCompareString(

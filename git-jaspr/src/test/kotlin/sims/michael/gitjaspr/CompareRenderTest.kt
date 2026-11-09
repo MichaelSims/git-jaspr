@@ -2,6 +2,7 @@ package sims.michael.gitjaspr
 
 import java.time.ZonedDateTime
 import kotlin.test.assertEquals
+import kotlin.test.assertTrue
 import org.junit.jupiter.api.Test
 
 class CompareRenderTest {
@@ -10,10 +11,7 @@ class CompareRenderTest {
     fun `columns stay aligned when indexes reach two digits`() {
         val rows = (1..10).map(::identicalRow)
 
-        val lines =
-            renderCompare(rows, "origin/stack", MonoTheme).lines().filter { line ->
-                line.startsWith("[")
-            }
+        val lines = renderedRowLines(rows, DEFAULT_MAX_SUBJECT_LENGTH)
 
         for (prefix in listOf("a", "b")) {
             val columns = lines.map { line -> Regex("$prefix\\d{6}").find(line)?.range?.first }
@@ -54,17 +52,46 @@ class CompareRenderTest {
         )
     }
 
-    private fun identicalRow(index: Int) =
+    @Test
+    fun `fitted subject length keeps full subjects on a wide terminal`() {
+        val rows = listOf(identicalRow(1, subject = "x".repeat(70)))
+        assertEquals(70, fitSubjectLength(rows, width = 400))
+    }
+
+    @Test
+    fun `fitted subject length keeps every row within the terminal width`() {
+        val rows = (1..12).map { index -> identicalRow(index, subject = "s".repeat(70)) }
+        val width = 120
+        val subjectLength = fitSubjectLength(rows, width)
+        val fitted = renderedRowLines(rows, subjectLength)
+        assertTrue(subjectLength < 70, "Expected truncation at width $width")
+        assertTrue(fitted.all { line -> line.length <= width }, fitted.joinToString("\n"))
+        val oneMore = renderedRowLines(rows, subjectLength + 1)
+        assertTrue(oneMore.any { line -> line.length > width }, "Expected the longest fit")
+    }
+
+    @Test
+    fun `fitted subject length has a floor on very narrow terminals`() {
+        val rows = listOf(identicalRow(1, subject = "x".repeat(70)))
+        assertEquals(MIN_FITTED_SUBJECT_LENGTH, fitSubjectLength(rows, width = 10))
+    }
+
+    private fun renderedRowLines(rows: List<CompareRow>, maxSubjectLength: Int) =
+        renderCompare(rows, "origin/stack", MonoTheme, maxSubjectLength).lines().filter { line ->
+            line.startsWith("[")
+        }
+
+    private fun identicalRow(index: Int, subject: String = "subject") =
         CompareRow(
-            local = commit("a%06d".format(index)),
-            remote = commit("b%06d".format(index)),
+            local = commit("a%06d".format(index), subject),
+            remote = commit("b%06d".format(index), subject),
             relation = CompareRelation.IDENTICAL,
             index = index,
         )
 
-    private fun commit(hash: String): Commit {
+    private fun commit(hash: String, subject: String = "subject"): Commit {
         val ident = Ident("Test", "test@example.com")
         val date = ZonedDateTime.parse("2026-01-01T00:00:00Z")
-        return Commit(hash, "subject", "subject", hash, ident, ident, date, date)
+        return Commit(hash, subject, subject, hash, ident, ident, date, date)
     }
 }

@@ -237,40 +237,20 @@ fun renderCompare(
     maxSubjectLength: Int = DEFAULT_MAX_SUBJECT_LENGTH,
     cursorSha: String? = null,
 ): String = buildString {
-    val localIds = rows.mapNotNull { it.local?.id }.toSet()
-    val remoteIds = rows.mapNotNull { it.remote?.id }.toSet()
-    val reorderedByRow = rows.associateWith { row -> isReordered(row, localIds, remoteIds) }
+    val layout = CompareLayout(rows, maxSubjectLength)
 
-    val markerWidth = 5
-    // Pad every index to the widest one so the SHA and subject columns stay aligned once the
-    // stack reaches two-digit indexes.
-    val indexWidth = rows.maxOfOrNull { row -> "[${row.index}]".length } ?: 0
-    val leftWidth =
-        rows
-            .maxOfOrNull { row ->
-                formatCell(
-                        row,
-                        isLocal = true,
-                        maxSubjectLength,
-                        reorderedByRow.getValue(row),
-                        indexWidth,
-                    )
-                    .length
-            }
-            ?.plus(2) ?: 0
-
-    appendLine(theme.heading("LOCAL".padEnd(leftWidth + markerWidth) + "REMOTE ($namedStackRef)"))
+    appendLine(
+        theme.heading(
+            "LOCAL".padEnd(layout.leftWidth + COMPARE_MARKER_WIDTH) + "REMOTE ($namedStackRef)"
+        )
+    )
     for (row in rows) {
-        val isReorderedRow = reorderedByRow.getValue(row)
-        val leftRaw = formatCell(row, isLocal = true, maxSubjectLength, isReorderedRow, indexWidth)
-        val rightRaw =
-            formatCell(row, isLocal = false, maxSubjectLength, isReorderedRow, indexWidth)
-        val marker = computeMarker(row.relation, isReorderedRow)
+        val marker = computeMarker(row.relation, layout.isReordered(row))
+        val leftCell = layout.cell(row, isLocal = true).padEnd(layout.leftWidth)
+        val leftStyled = styleCell(leftCell, row, isLocal = true, theme)
+        val rightStyled = styleCell(layout.cell(row, isLocal = false), row, isLocal = false, theme)
 
-        val leftStyled = styleCell(leftRaw.padEnd(leftWidth), row, isLocal = true, theme)
-        val rightStyled = styleCell(rightRaw, row, isLocal = false, theme)
-
-        val rowLine = "$leftStyled${marker.padEnd(markerWidth)}$rightStyled"
+        val rowLine = "$leftStyled${marker.padEnd(COMPARE_MARKER_WIDTH)}$rightStyled"
         appendLine(
             if (cursorSha != null && row.local?.hash == cursorSha) theme.emphasis(rowLine)
             else rowLine
@@ -279,6 +259,59 @@ fun renderCompare(
     appendLine()
     appendLine(theme.muted(summarizeCompare(rows)))
 }
+
+/**
+ * Returns the longest subject length that keeps every row of [rows] within [width] columns, for
+ * sizing `jaspr compare` to the terminal. Never returns less than [MIN_FITTED_SUBJECT_LENGTH] (so
+ * rows wrap on very narrow terminals rather than losing their subjects), and never more than the
+ * longest subject in [rows].
+ */
+fun fitSubjectLength(rows: List<CompareRow>, width: Int): Int {
+    val longestSubject =
+        rows
+            .flatMap { row -> listOfNotNull(row.local, row.remote) }
+            .maxOfOrNull { commit -> commit.shortMessage.length } ?: 0
+    return (longestSubject downTo MIN_FITTED_SUBJECT_LENGTH).firstOrNull { subjectLength ->
+        CompareLayout(rows, subjectLength).totalWidth <= width
+    } ?: MIN_FITTED_SUBJECT_LENGTH
+}
+
+/**
+ * Column layout shared by [renderCompare] and [fitSubjectLength], so fitting measures exactly what
+ * gets rendered.
+ */
+private class CompareLayout(private val rows: List<CompareRow>, private val maxSubjectLength: Int) {
+    private val reorderedByRow: Map<CompareRow, Boolean>
+
+    init {
+        val localIds = rows.mapNotNull { row -> row.local?.id }.toSet()
+        val remoteIds = rows.mapNotNull { row -> row.remote?.id }.toSet()
+        reorderedByRow = rows.associateWith { row -> isReordered(row, localIds, remoteIds) }
+    }
+
+    // Pad every index to the widest one so the SHA and subject columns stay aligned once the
+    // stack reaches two-digit indexes.
+    private val indexWidth = rows.maxOfOrNull { row -> "[${row.index}]".length } ?: 0
+
+    /** Width of the left column, including the two spaces before the marker. */
+    val leftWidth = rows.maxOfOrNull { row -> cell(row, isLocal = true).length }?.plus(2) ?: 0
+
+    val totalWidth: Int
+        get() =
+            leftWidth +
+                COMPARE_MARKER_WIDTH +
+                (rows.maxOfOrNull { row -> cell(row, isLocal = false).length } ?: 0)
+
+    fun isReordered(row: CompareRow) = reorderedByRow.getValue(row)
+
+    fun cell(row: CompareRow, isLocal: Boolean) =
+        formatCell(row, isLocal, maxSubjectLength, isReordered(row), indexWidth)
+}
+
+private const val COMPARE_MARKER_WIDTH = 5
+
+/** Narrowest subject [fitSubjectLength] will choose, however narrow the terminal. */
+const val MIN_FITTED_SUBJECT_LENGTH = 20
 
 /**
  * One-line tally of [rows] by relation, e.g. `21 identical, 0 diverged, 1 remote-only`. Counts
@@ -311,9 +344,9 @@ fun summarizeCompare(rows: List<CompareRow>): String {
 }
 
 /**
- * Default cap on commit subject length in the compare renderer. Subjects longer than this are
- * truncated with `…`. Tunable: pass a different value via `renderCompare(..., maxSubjectLength =
- * ...)`.
+ * Default cap on commit subject length in the compare renderer when the terminal width is unknown
+ * (output piped or redirected). Subjects longer than this are truncated with `…`. On a terminal,
+ * [fitSubjectLength] picks the cap instead.
  */
 const val DEFAULT_MAX_SUBJECT_LENGTH = 50
 

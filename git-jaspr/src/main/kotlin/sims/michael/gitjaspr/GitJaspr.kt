@@ -622,6 +622,9 @@ class GitJaspr(
      * Renders the side-by-side view for `jaspr compare`. With [patch] (`jaspr compare -p`), the
      * view is followed by a per-commit section for every row that isn't identical, in row order,
      * rendered as in [getCommitCompareString]. [reverse] and [color] apply only to those sections.
+     *
+     * When [terminalWidth] is known, subjects are truncated only as much as needed to fit it (see
+     * [fitSubjectLength]); otherwise they're capped at [DEFAULT_MAX_SUBJECT_LENGTH].
      */
     fun getCompareString(
         refSpec: RefSpec = RefSpec(DEFAULT_LOCAL_OBJECT, DEFAULT_TARGET_REF),
@@ -629,6 +632,7 @@ class GitJaspr(
         patch: Boolean = false,
         reverse: Boolean = false,
         color: Boolean = false,
+        terminalWidth: Int? = null,
     ): String {
         logger.trace("getCompareString {} patch={} reverse={}", refSpec, patch, reverse)
         val stacks =
@@ -643,7 +647,18 @@ class GitJaspr(
             val rows = alignStacks(stacks.localStack, stacks.remoteStack, classifier)
             buildString {
                 if (navState != null) appendLine(navBanner(navState, theme))
-                append(renderCompare(rows, stacks.remoteStackRef, theme, cursorSha = cursorSha))
+                val maxSubjectLength =
+                    terminalWidth?.let { width -> fitSubjectLength(rows, width) }
+                        ?: DEFAULT_MAX_SUBJECT_LENGTH
+                append(
+                    renderCompare(
+                        rows,
+                        stacks.remoteStackRef,
+                        theme,
+                        maxSubjectLength,
+                        cursorSha = cursorSha,
+                    )
+                )
                 if (stacks.numAlreadyMerged > 0) {
                     appendLine()
                     appendLine(
